@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { getAdminAccessToken, adminAbsoluteFetch } from "@/lib/adminFetcher";
+import { getAdminAccessToken, adminAbsoluteFetch, adminFetch } from "@/lib/adminFetcher";
 import { createLogger } from "@/lib/logger";
 const log = createLogger("[rides]");
 import { PageHeader, StatCard } from "@/components/shared";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { io } from "socket.io-client";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import {
@@ -35,8 +35,9 @@ import {
   Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ChevronUp, ChevronDown, Layers, Loader2,
   GraduationCap, Bus, X, Users, RefreshCw, DollarSign, ArrowLeftRight,
   Eye, ChevronLeft, ChevronRight, ArrowUpDown, Radio, Shield, Save,
-  Filter, Info,
+  Filter, Info, BarChart2,
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useLanguage } from "@/lib/useLanguage";
 import { tDual, type TranslationKey } from "@workspace/i18n";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -108,7 +109,7 @@ function formatElapsed(seconds: number) {
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 
-type Tab = "rides" | "dispatch" | "settings" | "services" | "locations" | "school";
+type Tab = "rides" | "dispatch" | "settings" | "services" | "locations" | "school" | "analytics";
 
 function RideDetailModal({
   rideId, onClose,
@@ -1481,6 +1482,191 @@ function SchoolRoutesManager() {
   );
 }
 
+function FleetAnalyticsTab() {
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["admin-fleet-analytics", fromDate, toDate],
+    queryFn: () => adminFetch(`/fleet-analytics?from=${fromDate}&to=${toDate}`),
+    staleTime: 60_000,
+  });
+
+  const heatPoints: Array<{ lat: number; lng: number; weight: number }> = data?.heatmap ?? [];
+  const riderDistances: Array<{ userId: string; name: string; distanceKm: number }> = data?.riderDistances ?? [];
+  const peakZones: Array<{ lat: number; lng: number; pings: number }> = data?.peakZones ?? [];
+
+  const mapCenter: [number, number] = heatPoints.length > 0
+    ? [heatPoints[0].lat, heatPoints[0].lng]
+    : [33.7294, 73.0931];
+
+  return (
+    <div className="space-y-5">
+      {/* Date Range Controls */}
+      <Card className="p-4 rounded-2xl border-border/50 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">From</label>
+            <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+              max={toDate} className="text-sm w-36 rounded-xl" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">To</label>
+            <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+              min={fromDate} max={new Date().toISOString().slice(0, 10)} className="text-sm w-36 rounded-xl" />
+          </div>
+          <button onClick={() => refetch()} disabled={isLoading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+          {data && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              {data.from} → {data.to}
+            </span>
+          )}
+        </div>
+      </Card>
+
+      {/* Summary Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-5 rounded-2xl border-border/50 shadow-sm">
+          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Total GPS Pings</p>
+          <p className="text-3xl font-black text-foreground">
+            {isLoading ? <span className="text-muted-foreground text-xl animate-pulse">—</span> : (data?.totalPings ?? 0).toLocaleString()}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Rider location updates in period</p>
+        </Card>
+        <Card className="p-5 rounded-2xl border-border/50 shadow-sm">
+          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Avg Response Time</p>
+          <p className="text-3xl font-black text-foreground">
+            {isLoading ? <span className="text-muted-foreground text-xl animate-pulse">—</span>
+              : data?.avgResponseTimeMin != null ? `${data.avgResponseTimeMin}m` : "—"}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Ride request → acceptance</p>
+        </Card>
+        <Card className="p-5 rounded-2xl border-border/50 shadow-sm">
+          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Active Riders</p>
+          <p className="text-3xl font-black text-foreground">
+            {isLoading ? <span className="text-muted-foreground text-xl animate-pulse">—</span> : riderDistances.length}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">With tracked GPS distance</p>
+        </Card>
+      </div>
+
+      {/* Heatmap + Distance Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Activity Heatmap */}
+        <Card className="rounded-2xl border-border/50 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-border/40 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-orange-500" />
+            <h3 className="font-bold text-sm">Activity Heatmap</h3>
+            <span className="text-xs text-muted-foreground ml-1">({heatPoints.length.toLocaleString()} points)</span>
+          </div>
+          <div style={{ height: 350 }}>
+            {isLoading ? (
+              <div className="w-full h-full flex items-center justify-center bg-muted/20">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : heatPoints.length > 0 ? (
+              <MapContainer center={mapCenter} zoom={11} style={{ width: "100%", height: "100%" }}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />
+                {heatPoints.slice(0, 2000).map((pt, i) => (
+                  <Circle key={i} center={[pt.lat, pt.lng]} radius={120}
+                    pathOptions={{ color: "transparent", fillColor: "#f97316", fillOpacity: 0.18 }} />
+                ))}
+              </MapContainer>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-muted/10">
+                <p className="text-sm text-muted-foreground">No location data for selected period</p>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Rider Distance Bar Chart */}
+        <Card className="rounded-2xl border-border/50 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-border/40 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-blue-500" />
+            <h3 className="font-bold text-sm">Distance Covered</h3>
+            <span className="text-xs text-muted-foreground ml-1">(km · top 10 riders)</span>
+          </div>
+          <div className="p-4" style={{ height: 350 }}>
+            {isLoading ? (
+              <div className="w-full h-full flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : riderDistances.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={riderDistances.slice(0, 10)} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
+                  <XAxis type="number" tick={{ fontSize: 11 }} unit=" km" />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={96} />
+                  <Tooltip formatter={(v: any) => [`${v} km`, "Distance"]} />
+                  <Bar dataKey="distanceKm" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">No rider distance data</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Peak Activity Zones */}
+      {(isLoading || peakZones.length > 0) && (
+        <Card className="rounded-2xl border-border/50 shadow-sm">
+          <div className="p-4 border-b border-border/40 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-red-500" />
+            <h3 className="font-bold text-sm">Peak Activity Zones</h3>
+            {!isLoading && <span className="text-xs text-muted-foreground ml-1">(top {peakZones.length} clusters · ~500 m grid)</span>}
+          </div>
+          {isLoading ? (
+            <div className="p-8 flex justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="divide-y divide-border/40">
+              {peakZones.map((zone, i) => {
+                const maxPings = peakZones[0]?.pings ?? 1;
+                const pct = Math.round((zone.pings / maxPings) * 100);
+                return (
+                  <div key={i} className="flex items-center gap-4 px-4 py-3">
+                    <span className="text-lg font-black text-orange-500 w-7 shrink-0">#{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-medium text-foreground font-mono">
+                          {zone.lat.toFixed(4)}, {zone.lng.toFixed(4)}
+                        </p>
+                        <span className="text-sm font-bold text-foreground ml-3 shrink-0">
+                          {zone.pings.toLocaleString()} pings
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted/40 rounded-full h-1.5">
+                        <div className="h-1.5 rounded-full bg-orange-400 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                      <a href={`https://www.openstreetmap.org/?mlat=${zone.lat}&mlon=${zone.lng}&zoom=15`}
+                        target="_blank" rel="noreferrer"
+                        className="text-xs text-blue-500 hover:underline mt-0.5 inline-block">
+                        View on map ↗
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function Rides() {
   const { language } = useLanguage();
   const T = (key: TranslationKey) => tDual(key, language);
@@ -1622,6 +1808,7 @@ export default function Rides() {
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
         <TabBtn id="rides" icon={Car} label="All Rides" count={rides.length} />
         <TabBtn id="dispatch" icon={Radio} label="Dispatch Monitor" count={bargaining.length + searching.length} urgent />
+        <TabBtn id="analytics" icon={BarChart2} label="Fleet Analytics" />
         <TabBtn id="settings" icon={Settings2} label="Ride Settings" />
         <TabBtn id="services" icon={Layers} label="Services" />
         <TabBtn id="locations" icon={MapPin} label="Locations" />
@@ -1823,6 +2010,7 @@ export default function Rides() {
       )}
 
       {tab === "dispatch" && <DispatchMonitor />}
+      {tab === "analytics" && <FleetAnalyticsTab />}
       {tab === "settings" && <RideSettings />}
       {tab === "services" && <ServicesManager />}
       {tab === "locations" && <LocationsManager />}

@@ -1,0 +1,78 @@
+Good data. Now let me check the critical question — are the old "flat" route files (auth.ts, rides.ts, admin.ts, rider.ts, promotions.ts) dead since the index-based versions replaced them? Also check the suspected dead migration/demo files and ajkmart structure.
+
+
+9 actions
+Now I have a clear picture of the structure. Let me do targeted checks on the most suspicious files — the flat route files that may have been replaced by their subfolder equivalents, plus the adminSecretMigration which returned zero imports.
+
+
+10 actions
+Now let me use the grep tool (not bash grep) for precise import checks, and also read the key files to confirm dead status.
+
+
+7 actions
+The picture is now clear. Let me verify the last few uncertain files before making any deletions.
+
+
+4 actions
+All confirmed. Here's the exact dead file list:
+
+File	Why Dead
+routes/auth.ts (3519 lines)	routes/index.ts imports ./auth/index.js — this flat file is never imported
+routes/rides.ts (2125 lines)	routes/index.ts imports ./rides/index.js — never imported
+routes/rider.ts (2988 lines)	routes/index.ts imports ./rider/index.js — never imported
+routes/promotions.ts (1212 lines)	routes/index.ts imports ./promotions/index.js — never imported
+routes/admin/finance.ts (827 lines)	admin.ts imports ./admin/finance/wallets.js directly — never imported
+routes/admin/finance/index.ts (8 lines)	Nothing imports it — just a barrel nobody uses
+routes/admin/fleet/index.ts (10 lines)	admin.ts imports fleet/rides.js and fleet/zones.js directly — never imported
+routes/admin/system/conditions.ts (3 lines)	Re-export stub — nothing imports it
+services/adminSecretMigration.ts	Function exported but never called anywhere
+Deleting all 9 now.
+
+
+2 actions
+Good — all workflows still running. Let me now verify the API server is healthy after the deletions, and simultaneously scan the remaining areas I haven't checked yet: the admin/finance/ folder structure, any leftover empty directories, and more potential dead code across all artifacts.
+
+
+2 actions
+All 4 workflows are clean — no errors after the deletions. The API server booted fully with migrations passed and 126 tables verified.
+
+Now let me do the remaining broad scan: empty directories left behind, TODO/mock/debug artifacts, and potential dead code across all apps.
+
+
+9 actions
+The broad scan came back very clean. Let me check the three remaining suspects: the admin/system/index.ts (may be shadowed by the flat system.ts), the stub in communicationAI.ts, and a stale file path in a comment.
+
+
+6 actions
+Two more things to handle:
+
+routes/admin/system/index.ts — dead, since import "./admin/system.js" in admin.ts resolves to the flat admin/system.ts file (TypeScript prioritizes the flat .ts over folder/index.ts)
+The stale comment in admin-auth-v2.ts referencing a deleted file path
+
+6 actions
+All 4 workflows still running cleanly. The scan is complete. Here's the full report:
+
+artifacts/ Deep Scan — Complete
+Files Deleted (10 total, ~12,000 lines of dead code)
+API Server — Dead Route Files (replaced by subfolder versions):
+
+File	Lines	Why Dead
+routes/auth.ts	3,519	routes/index.ts uses auth/index.ts — this flat file was never imported
+routes/rides.ts	2,125	Replaced by rides/booking.ts + rides/dispatch.ts + rides/tracking.ts
+routes/rider.ts	2,988	Replaced by rider/index.ts
+routes/promotions.ts	1,212	Replaced by promotions/campaigns.ts + promotions/offers.ts etc.
+routes/admin/finance.ts	827	admin.ts imports finance/wallets.ts directly — this was skipped
+routes/admin/finance/index.ts	8	Barrel nobody imports
+routes/admin/fleet/index.ts	10	admin.ts imports fleet/rides.ts and fleet/zones.ts directly
+routes/admin/system/index.ts	13	Shadowed by flat admin/system.ts — TypeScript never reaches it
+routes/admin/system/conditions.ts	3	Tombstone re-export stub — nothing imports it
+services/adminSecretMigration.ts	58	Function defined but never called anywhere
+Comment Cleaned:
+
+routes/admin-auth-v2.ts — stale reference to a deleted file path (/workspaces/mart/artifacts/admin/admin-login-guide.md)
+Nothing Wrong Found In:
+Frontend console.debug — all gated behind import.meta.env.DEV or are console.debug (browser-silent in production) ✓
+services/communicationAI.ts — legitimate AI fallback service, stub is intentional when Gemini API is offline ✓
+Test files (api-server/tests/, rider-app/tests/) — real vitest integration tests ✓
+ajkmart components — all used across app pages ✓
+No empty directories, no stray .md/.bak/.log files, no hardcoded credentials ✓

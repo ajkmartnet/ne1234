@@ -1,0 +1,729 @@
+import { Router } from "express";
+import { db } from "@workspace/db";
+import {
+  usersTable,
+  walletTransactionsTable,
+  notificationsTable,
+  ordersTable, pharmacyOrdersTable, parcelBookingsTable, ridesTable, rideBidsTable,
+  platformSettingsTable,
+} from "@workspace/db/schema";
+import { eq, desc, count, sum, and, gte, lte, sql, or, ilike, asc, isNull, isNotNull, avg, ne } from "drizzle-orm";
+import {
+  stripUser, generateId, getUserLanguage, t,
+  sendUserNotification, logger,
+  ORDER_NOTIF_KEYS, RIDE_NOTIF_KEYS, PHARMACY_NOTIF_KEYS, PARCEL_NOTIF_KEYS,
+  checkAdminLoginLockout, recordAdminLoginFailure, resetAdminLoginAttempts,
+  addAuditEntry, addSecurityEvent, getClientIp,
+  signAdminJwt, verifyAdminJwt, invalidateSettingsCache, getCachedSettings,
+  ADMIN_TOKEN_TTL_HRS, verifyTotpToken, verifyAdminSecret,
+  ensureDefaultRideServices, ensureDefaultLocations, formatSvc,
+  type AdminRequest, revokeAllUserSessions,
+} from "../admin-shared.js";
+import { sendSuccess, sendCreated, sendError, sendNotFound, sendValidationError, sendErrorWithData } from "../../lib/response.js";
+import { buildCursorPage, decodeCursor } from "../../lib/pagination/cursor.js";
+import {
+  ORDER_VALID_STATUSES, RIDE_VALID_STATUSES, PARCEL_VALID_STATUSES, PHARMACY_ORDER_VALID_STATUSES,
+  getSocketRoom,
+} from "@workspace/service-constants";
+import { getIO } from "../../lib/socketio.js";
+
+const router = Router();
+
+router.post("/orders", async (req, res) => {
+  const { userId, vendorId, type, items, total, deliveryAddress, paymentMethod, status } = req.body;
+  if (!userId || typeof userId !== "string" || !userId.trim()) {
+    sendValidationError(res, "userId is required");
+    return;
+  }
+  const numTotal = Number(total);
+  if (!numTotal || numTotal <= 0) {
+    sendValidationError(res, "total must be a positive number");
+    return;
+  }
+  const validTypes = ["mart", "food"];
+  const orderType = validTypes.includes(type) ? type : "mart";
+  const validPayments = ["cod", "wallet", "jazzcash", "easypaisa"];
+  const payment = validPayments.includes(paymentMethod) ? paymentMethod : "cod";
+  const validStatuses = ["pending", "confirmed", "preparing", "picked_up", "delivered", "cancelled"];
+  const orderStatus = validStatuses.includes(status) ? status : "pending";
+  try {
+    const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, userId.trim()));
+    if (!user) {
+      sendValidationError(res, "User not found with the given userId");
+      return;
+    }
+    const [order] = await db.insert(ordersTable).values({
+      id: generateId(),
+      userId: userId.trim(),
+      vendorId: (vendorId || userId).trim(),
+      type: orderType,
+      items: items ? (typeof items === "string" ? items : JSON.stringify(items)) : JSON.stringify([{ name: "Custom item", qty: 1, price: numTotal.toString() }]),
+      total: numTotal.toString(),
+      deliveryAddress: (deliveryAddress || "Admin-created order").trim(),
+      paymentMethod: payment,
+      status: orderStatus,
+      paymentStatus: "pending",
+      estimatedTime: "30-45 min",
+    }).returning();
+    sendSuccess(res, { order });
+  } catch (e: unknown) {
+    logger.error({ err: e }, "[admin/orders] create order failed");
+    sendError(res, "An internal error occurred", 500);
+  }
+});
+
+router.get("/orders", async (req, res) => {
+  const { status, type } = req.query;
+  const settings = await getCachedSettings();
+  const isDemoMode = (settings["platform_mode"] ?? "demo") === "demo";
+
+  if (isDemoMode) {
+    const { getDemoSnapshot } = await import("../../lib/demo-snapshot.js");
+    const snap = await getDemoSnapshot();
+    const filtered = snap.orders
+      .filter(o => !status || o.status === status)
+      .filter(o => !type   || o.type   === type);
+    sendSuccess(res, { orders: filtered, total: filtered.length, isDemo: true });
+    return;
+  }
+
+  /* Cursor-paginated list — default 50, hard cap 200.
+     ?after=<cursor>  — opaque base64url cursor from a previous response
+     ?limit=<n>       — page size (1-200, default 50) */
+  const rawLimit = parseInt(String(req.query["limit"] ?? "50"), 10);
+  const pageLimit = Math.min(Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 50), 200);
+
+  const cursorVal = decodeCursor(String(req.query["after"] ?? ""));
+  let cursorDate: Date | null = null;
+  if (cursorVal) {
+    const ts = new Date(cursorVal);
+    if (!isNaN(ts.getTime())) cursorDate = ts;
+  }
+
+  const whereClause = and(
+    isNull(ordersTable.deletedAt),
+    status ? sql`${ordersTable.status} = ${status}` : undefined,
+    type   ? sql`${ordersTable.type} = ${type}`     : undefined,
+    cursorDate ? sql`${ordersTable.createdAt} < ${cursorDate}` : undefined,
+  );
+
+  const rows = await db
+    .select()
+    .from(ordersTable)
+    .where(whereClause)
+    .orderBy(desc(ordersTable.createdAt))
+    .limit(pageLimit + 1);
+
+  type OrderRow = (typeof rows)[number];
+  const cursorPageResult = buildCursorPage<OrderRow>({
+    data: rows,
+    limit: pageLimit,
+    getCursorValue: (o: OrderRow) => (o.createdAt instanceof Date ? o.createdAt : new Date(String(o.createdAt))).toISOString(),
+  });
+
+  sendSuccess(res, {
+    orders: cursorPageResult.data.map((o: OrderRow) => ({
+      ...o,
+      total: parseFloat(String(o.total)),
+      createdAt: (o.createdAt instanceof Date ? o.createdAt : new Date(String(o.createdAt))).toISOString(),
+      updatedAt: (o.updatedAt instanceof Date ? o.updatedAt : new Date(String(o.updatedAt))).toISOString(),
+    })),
+    total: cursorPageResult.data.length,
+    nextCursor: cursorPageResult.nextCursor,
+    hasMore: cursorPageResult.hasMore,
+    isDemo: false,
+  });
+});
+
+router.patch("/orders/:id/status", async (req, res) => {
+  const { status } = req.body;
+  const orderId = req.params["id"]!;
+
+  if (!status || !(ORDER_VALID_STATUSES as readonly string[]).includes(status)) {
+    sendValidationError(res, `Invalid order status "${status}". Valid statuses: ${ORDER_VALID_STATUSES.join(", ")}`);
+    return;
+  }
+
+  /* For wallet-paid → cancelled: do status update + wallet refund in ONE transaction */
+  const [preOrder] = await db.select().from(ordersTable).where(and(eq(ordersTable.id, orderId), isNull(ordersTable.deletedAt))).limit(1);
+  if (!preOrder) { sendNotFound(res, "Order not found"); return; }
+
+  const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+    pending: ["confirmed", "cancelled"],
+    confirmed: ["preparing", "cancelled"],
+    preparing: ["ready", "out_for_delivery", "picked_up", "cancelled"],
+    ready: ["picked_up", "out_for_delivery", "delivered", "cancelled"],
+    picked_up: ["out_for_delivery", "delivered", "cancelled"],
+    out_for_delivery: ["delivered", "cancelled"],
+    delivered: [],
+    cancelled: [],
+    completed: [],
+  };
+
+  const allowed = ALLOWED_TRANSITIONS[preOrder.status] || [];
+  if (!allowed.includes(status)) {
+    sendValidationError(res, `Cannot transition from "${preOrder.status}" to "${status}". Allowed next statuses: ${allowed.length ? allowed.join(", ") : "none (terminal state)"}`);
+    return;
+  }
+
+  let order = preOrder;
+
+  if (status === "cancelled" && preOrder.paymentMethod === "wallet" && !preOrder.refundedAt) {
+    const refundAmt = parseFloat(String(preOrder.total));
+    const now = new Date();
+    /* Atomic: status update + wallet credit + refund stamp in one transaction.
+       Guard: WHERE refunded_at IS NULL prevents double-credit under concurrency.
+       If the conditional update returns 0 rows, we throw to roll back the transaction. */
+    const txResult = await db.transaction(async (tx) => {
+      const result = await tx.update(ordersTable)
+        .set({ status, refundedAt: now, refundedAmount: refundAmt.toFixed(2), paymentStatus: "refunded", updatedAt: now })
+        .where(and(eq(ordersTable.id, orderId), isNull(ordersTable.refundedAt)))
+        .returning();
+      if (result.length === 0) {
+        /* Already refunded (concurrent request won) — throw to roll back entire tx */
+        throw new Error("ALREADY_REFUNDED");
+      }
+      await tx.update(usersTable)
+        .set({ walletBalance: sql`wallet_balance + ${refundAmt}`, updatedAt: now })
+        .where(eq(usersTable.id, preOrder.userId));
+      await tx.insert(walletTransactionsTable).values({
+        id: generateId(), userId: preOrder.userId, type: "credit",
+        amount: refundAmt.toFixed(2),
+        description: `Refund — Order #${orderId.slice(-6).toUpperCase()} cancelled by admin`,
+      });
+      return result[0];
+    }).catch((err: Error) => {
+      if (err.message === "ALREADY_REFUNDED") return null;
+      throw err;
+    });
+    if (!txResult) { sendError(res, "Order has already been refunded", 409); return; }
+    order = txResult;
+    /* Refund + cancellation consolidated into ONE notification after successful commit
+       (avoids sending two separate push notifications for the same event) */
+    await sendUserNotification(
+      preOrder.userId,
+      "Order Cancelled & Refunded 💰",
+      `Order #${orderId.slice(-6).toUpperCase()} cancel ho gaya. Rs. ${refundAmt.toFixed(0)} aapki wallet mein wapas aa gaya.`,
+      "mart",
+      "wallet-outline",
+    );
+    /* Skip the generic "cancelled" status notification below */
+    const io = getIO();
+    if (io) {
+      const payload = { id: orderId, status: "cancelled", updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt };
+      io.to(getSocketRoom(orderId, order.type ?? "mart")).emit("order:update", payload);
+      io.to(`user:${preOrder.userId}`).emit("order:update", payload);
+    }
+    addAuditEntry({
+      action: "order_status_cancelled_refunded",
+      adminId: (req as AdminRequest).adminId,
+      ip: getClientIp(req),
+      details: `Order #${orderId.slice(-6).toUpperCase()} cancelled + wallet refund Rs.${parseFloat(String(preOrder.total)).toFixed(0)} issued`,
+      result: "success",
+    });
+    sendSuccess(res, order);
+    return;
+  } else {
+    const [updated] = await db.update(ordersTable)
+      .set({ status, updatedAt: new Date() })
+      .where(and(eq(ordersTable.id, orderId), ne(ordersTable.status, status)))
+      .returning();
+    if (!updated) { sendError(res, "Order status has already been updated", 409); return; }
+    order = updated;
+  }
+
+  const notifKeys = ORDER_NOTIF_KEYS[status];
+  if (notifKeys) {
+    const orderUserLang = await getUserLanguage(order.userId);
+    await sendUserNotification(order.userId, t(notifKeys.titleKey, orderUserLang), t(notifKeys.bodyKey, orderUserLang), "mart", notifKeys.icon);
+  }
+
+  // NOTE: Wallet is already debited when order is PLACED (orders.ts).
+  // Do NOT deduct again here. Only credit the rider's share on delivery.
+
+  if (status === "delivered") {
+    const total = parseFloat(String(order.total));
+    const riderKeepPct = (Number((await getCachedSettings())["rider_keep_pct"]) || 80) / 100;
+    const riderEarning = parseFloat((total * riderKeepPct).toFixed(2));
+    if (order.riderId) {
+      await db.transaction(async (tx) => {
+        await tx.update(usersTable)
+          .set({ walletBalance: sql`wallet_balance + ${riderEarning}`, updatedAt: new Date() })
+          .where(eq(usersTable.id, order.riderId!));
+        await tx.insert(walletTransactionsTable).values({
+          id: generateId(), userId: order.riderId!, type: "credit",
+          amount: String(riderEarning),
+          description: `Delivery earnings — Order #${order.id.slice(-6).toUpperCase()} (${Math.round(riderKeepPct * 100)}%)`,
+        });
+      });
+    }
+  }
+
+  const io = getIO();
+  if (io) {
+    const payload = { id: orderId, status: order.status, updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt };
+    io.to(getSocketRoom(orderId, order.type ?? "mart")).emit("order:update", payload);
+    io.to(`user:${order.userId}`).emit("order:update", payload);
+  }
+
+  /* Audit: record terminal status transitions for compliance trail */
+  if (["delivered", "cancelled"].includes(status)) {
+    addAuditEntry({
+      action: `order_status_${status}`,
+      adminId: (req as AdminRequest).adminId,
+      ip: getClientIp(req),
+      details: `Order #${orderId.slice(-6).toUpperCase()} marked ${status}`,
+      result: "success",
+    });
+  }
+
+  sendSuccess(res, { ...order, total: parseFloat(String(order.total)) });
+});
+
+router.post("/orders/:id/refund", async (req, res) => {
+  const { amount, reason } = req.body;
+  const [order] = await db.select().from(ordersTable).where(and(eq(ordersTable.id, req.params["id"]!), isNull(ordersTable.deletedAt))).limit(1);
+  if (!order) { sendNotFound(res, "Order not found"); return; }
+
+  /* Only allow refunds for terminal orders */
+  if (order.status !== "delivered" && order.status !== "cancelled") {
+    sendValidationError(res, "Refund only allowed for delivered or cancelled orders"); return;
+  }
+
+  /* Only wallet-paid orders can be wallet-refunded */
+  if (order.paymentMethod !== "wallet") {
+    sendValidationError(res, "Refund only applies to wallet-paid orders"); return;
+  }
+
+  /* Fast-path: pre-check before entering transaction */
+  if (order.refundedAt) {
+    sendErrorWithData(res, "Order has already been refunded", {
+      refundedAt: order.refundedAt,
+      refundedAmount: order.refundedAmount ? parseFloat(String(order.refundedAmount)) : null,
+    }, 409);
+    return;
+  }
+
+  /* Validate refund amount — reject invalid/negative instead of silently defaulting */
+  const maxRefund = parseFloat(String(order.total));
+  const parsedAmount = amount !== undefined && amount !== null && amount !== ""
+    ? parseFloat(String(amount))
+    : NaN;
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    sendValidationError(res, "amount must be a positive number"); return;
+  }
+  if (parsedAmount > maxRefund) {
+    sendValidationError(res, `Refund amount (${parsedAmount}) cannot exceed order total (${maxRefund})`); return;
+  }
+  const refundAmt = parsedAmount;
+
+  const now = new Date();
+  let alreadyRefunded = false;
+
+  await db.transaction(async (tx) => {
+    /* Atomic idempotency: only stamp refunded_at if it is still NULL.
+       The WHERE clause with IS NULL means only one concurrent request will get rowCount > 0. */
+    const updated = await tx.update(ordersTable)
+      .set({ refundedAt: now, refundedAmount: refundAmt.toFixed(2), paymentStatus: "refunded", updatedAt: now })
+      .where(and(eq(ordersTable.id, order.id), isNull(ordersTable.refundedAt)))
+      .returning({ id: ordersTable.id });
+
+    if (updated.length === 0) {
+      /* Another concurrent request beat us to the refund — abort */
+      alreadyRefunded = true;
+      return;
+    }
+
+    /* Credit customer wallet only if we successfully stamped the order */
+    await tx.update(usersTable)
+      .set({ walletBalance: sql`wallet_balance + ${refundAmt}`, updatedAt: now })
+      .where(eq(usersTable.id, order.userId));
+
+    await tx.insert(walletTransactionsTable).values({
+      id: generateId(),
+      userId: order.userId,
+      type: "credit",
+      amount: refundAmt.toFixed(2),
+      description: `Admin refund — Order #${order.id.slice(-6).toUpperCase()}${reason ? `. ${reason}` : ""}`,
+    });
+  });
+
+  if (alreadyRefunded) {
+    sendError(res, "Order has already been refunded", 409); return;
+  }
+
+  await sendUserNotification(
+    order.userId,
+    "Order Refund 💰",
+    `Rs. ${refundAmt.toFixed(0)} aapki wallet mein refund ho gaya — Order #${order.id.slice(-6).toUpperCase()}`,
+    "mart",
+    "wallet-outline"
+  );
+
+  addAuditEntry({
+    action: "order_refunded",
+    adminId: (req as AdminRequest).adminId,
+    ip: getClientIp(req),
+    details: `Order #${order.id.slice(-6).toUpperCase()} admin refund Rs.${refundAmt.toFixed(0)}${reason ? ` — ${reason}` : ""}`,
+    result: "success",
+  });
+
+  sendSuccess(res, { success: true, refundedAmount: refundAmt, orderId: order.id });
+});
+router.get("/pharmacy-orders", async (_req, res) => {
+  const orders = await db
+    .select()
+    .from(pharmacyOrdersTable)
+    .orderBy(desc(pharmacyOrdersTable.createdAt))
+    .limit(200);
+  sendSuccess(res, {
+    orders: orders.map(o => ({
+      ...o,
+      total: parseFloat(o.total),
+      createdAt: o.createdAt.toISOString(),
+      updatedAt: o.updatedAt.toISOString(),
+    })),
+    total: orders.length,
+  });
+});
+
+router.patch("/pharmacy-orders/:id/status", async (req, res) => {
+  const { status } = req.body;
+  if (!status || !(PHARMACY_ORDER_VALID_STATUSES as readonly string[]).includes(status)) {
+    sendValidationError(res, `Invalid pharmacy order status "${status}". Valid statuses: ${PHARMACY_ORDER_VALID_STATUSES.join(", ")}`);
+    return;
+  }
+  const [order] = await db
+    .update(pharmacyOrdersTable)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(pharmacyOrdersTable.id, req.params["id"]!))
+    .returning();
+  if (!order) { sendNotFound(res, "Not found"); return; }
+
+  const pharmNotifKeys = PHARMACY_NOTIF_KEYS[status];
+  if (pharmNotifKeys) {
+    const pharmUserLang = await getUserLanguage(order.userId);
+    await sendUserNotification(order.userId, t(pharmNotifKeys.titleKey, pharmUserLang), t(pharmNotifKeys.bodyKey, pharmUserLang), "pharmacy", pharmNotifKeys.icon);
+  }
+
+  // Wallet refund on cancellation (atomic)
+  if (status === "cancelled" && order.paymentMethod === "wallet") {
+    const refundAmt = parseFloat(order.total);
+    await db.transaction(async (tx) => {
+      await tx.update(usersTable).set({ walletBalance: sql`wallet_balance + ${refundAmt}`, updatedAt: new Date() }).where(eq(usersTable.id, order.userId));
+      await tx.insert(walletTransactionsTable).values({ id: generateId(), userId: order.userId, type: "credit", amount: refundAmt.toFixed(2), description: `Refund — Pharmacy Order #${order.id.slice(-6).toUpperCase()} cancelled` });
+    }).catch(() => {});
+    const pharmRefundLang = await getUserLanguage(order.userId);
+    await sendUserNotification(order.userId, t("notifPharmacyRefund", pharmRefundLang), t("notifPharmacyRefundBody", pharmRefundLang).replace("{amount}", refundAmt.toFixed(0)), "pharmacy", "wallet-outline");
+  }
+
+  const ioPharm = getIO();
+  if (ioPharm) {
+    const pharmPayload = { id: order.id, status: order.status, updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt };
+    ioPharm.to(getSocketRoom(order.id, "pharmacy")).emit("order:update", pharmPayload);
+    ioPharm.to(`user:${order.userId}`).emit("order:update", pharmPayload);
+  }
+
+  if (["delivered", "cancelled"].includes(status)) {
+    addAuditEntry({
+      action: `pharmacy_order_${status}`,
+      adminId: (req as AdminRequest).adminId,
+      ip: getClientIp(req),
+      details: `Pharmacy Order #${order.id.slice(-6).toUpperCase()} marked ${status}`,
+      result: "success",
+    });
+  }
+
+  sendSuccess(res, { ...order, total: parseFloat(order.total) });
+});
+
+/* ── Parcel Bookings ── */
+router.get("/parcel-bookings", async (_req, res) => {
+  const bookings = await db
+    .select()
+    .from(parcelBookingsTable)
+    .orderBy(desc(parcelBookingsTable.createdAt))
+    .limit(200);
+  sendSuccess(res, {
+    bookings: bookings.map(b => ({
+      ...b,
+      fare: parseFloat(b.fare),
+      createdAt: b.createdAt.toISOString(),
+      updatedAt: b.updatedAt.toISOString(),
+    })),
+    total: bookings.length,
+  });
+});
+
+router.patch("/parcel-bookings/:id/status", async (req, res) => {
+  const { status } = req.body;
+  if (!status || !(PARCEL_VALID_STATUSES as readonly string[]).includes(status)) {
+    sendValidationError(res, `Invalid parcel status "${status}". Valid statuses: ${PARCEL_VALID_STATUSES.join(", ")}`);
+    return;
+  }
+  const [booking] = await db
+    .update(parcelBookingsTable)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(parcelBookingsTable.id, req.params["id"]!))
+    .returning();
+  if (!booking) { sendNotFound(res, "Not found"); return; }
+
+  const parcelNotifKeys = PARCEL_NOTIF_KEYS[status];
+  if (parcelNotifKeys) {
+    const parcelUserLang = await getUserLanguage(booking.userId);
+    await sendUserNotification(booking.userId, t(parcelNotifKeys.titleKey, parcelUserLang), t(parcelNotifKeys.bodyKey, parcelUserLang), "parcel", parcelNotifKeys.icon);
+  }
+
+  // Wallet refund on cancellation (atomic)
+  if (status === "cancelled" && booking.paymentMethod === "wallet") {
+    const refundAmt = parseFloat(booking.fare);
+    await db.transaction(async (tx) => {
+      await tx.update(usersTable).set({ walletBalance: sql`wallet_balance + ${refundAmt}`, updatedAt: new Date() }).where(eq(usersTable.id, booking.userId));
+      await tx.insert(walletTransactionsTable).values({ id: generateId(), userId: booking.userId, type: "credit", amount: refundAmt.toFixed(2), description: `Refund — Parcel Booking #${booking.id.slice(-6).toUpperCase()} cancelled` });
+    }).catch(() => {});
+    const parcelRefundLang = await getUserLanguage(booking.userId);
+    await sendUserNotification(booking.userId, t("notifParcelRefund", parcelRefundLang), t("notifParcelRefundBody", parcelRefundLang).replace("{amount}", refundAmt.toFixed(0)), "parcel", "wallet-outline");
+  }
+
+  const ioParcel = getIO();
+  if (ioParcel) {
+    const parcelPayload = { id: booking.id, status: booking.status, updatedAt: booking.updatedAt instanceof Date ? booking.updatedAt.toISOString() : booking.updatedAt };
+    ioParcel.to(getSocketRoom(booking.id, "parcel")).emit("order:update", parcelPayload);
+    ioParcel.to(`user:${booking.userId}`).emit("order:update", parcelPayload);
+  }
+
+  if (["completed", "cancelled"].includes(status)) {
+    addAuditEntry({
+      action: `parcel_booking_${status}`,
+      adminId: (req as AdminRequest).adminId,
+      ip: getClientIp(req),
+      details: `Parcel Booking #${booking.id.slice(-6).toUpperCase()} marked ${status}`,
+      result: "success",
+    });
+  }
+
+  sendSuccess(res, { ...booking, fare: parseFloat(booking.fare) });
+});
+router.get("/pharmacy-enriched", async (_req, res) => {
+  const orders = await db.select().from(pharmacyOrdersTable).orderBy(desc(pharmacyOrdersTable.createdAt)).limit(200);
+  const users = await db.select({ id: usersTable.id, name: usersTable.name, phone: usersTable.phone }).from(usersTable);
+  const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+  sendSuccess(res, {
+    orders: orders.map(o => ({
+      ...o,
+      total: parseFloat(String(o.total)),
+      createdAt: o.createdAt.toISOString(),
+      updatedAt: o.updatedAt.toISOString(),
+      userName: userMap[o.userId]?.name || null,
+      userPhone: userMap[o.userId]?.phone || null,
+    })),
+    total: orders.length,
+  });
+});
+
+/* ── Parcel Bookings Enriched ── */
+router.get("/parcel-enriched", async (_req, res) => {
+  const bookings = await db.select().from(parcelBookingsTable).orderBy(desc(parcelBookingsTable.createdAt)).limit(200);
+  const users = await db.select({ id: usersTable.id, name: usersTable.name, phone: usersTable.phone }).from(usersTable);
+  const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+  sendSuccess(res, {
+    bookings: bookings.map(b => ({
+      ...b,
+      fare: parseFloat(b.fare),
+      createdAt: b.createdAt.toISOString(),
+      updatedAt: b.updatedAt.toISOString(),
+      userName: userMap[b.userId]?.name || null,
+      userPhone: userMap[b.userId]?.phone || null,
+    })),
+    total: bookings.length,
+  });
+});
+
+/* ── Delete User ── */
+const ACTIVE_STATUSES = ["pending", "confirmed", "preparing", "ready", "picked_up", "out_for_delivery"];
+
+function buildOrderFilters(query: Record<string, string | undefined>) {
+  const { status, type, search, dateFrom, dateTo } = query;
+  const conditions: any[] = [];
+
+  if (status && status !== "all") {
+    if (status === "active") {
+      conditions.push(or(...ACTIVE_STATUSES.map(s => eq(ordersTable.status, s))));
+    } else {
+      conditions.push(eq(ordersTable.status, status));
+    }
+  }
+
+  if (type && type !== "all") {
+    conditions.push(eq(ordersTable.type, type));
+  }
+
+  if (dateFrom) {
+    conditions.push(gte(ordersTable.createdAt, new Date(dateFrom)));
+  }
+  if (dateTo) {
+    conditions.push(lte(ordersTable.createdAt, new Date(dateTo)));
+  }
+
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+/* ── User Security Management ── */
+router.patch("/orders/:id/assign-rider", async (req, res) => {
+  const { riderId } = req.body as { riderId?: string };
+  let riderName: string | null = null;
+  let riderPhone: string | null = null;
+  if (riderId) {
+    const [rider] = await db.select({ name: usersTable.name, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, riderId));
+    riderName = rider?.name ?? null;
+    riderPhone = rider?.phone ?? null;
+  }
+  const [order] = await db.update(ordersTable)
+    .set({ riderId: riderId || null, riderName, riderPhone, updatedAt: new Date() })
+    .where(and(eq(ordersTable.id, req.params["id"]!), isNull(ordersTable.deletedAt)))
+    .returning();
+  if (!order) { sendNotFound(res, "Order not found"); return; }
+  addAuditEntry({ action: "order_rider_assigned", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Rider ${riderName ?? riderId ?? "unassigned"} assigned to order ${req.params["id"]}`, result: "success" });
+  sendSuccess(res, { success: true, order: { ...order, total: parseFloat(String(order.total)), riderName, riderPhone } });
+});
+
+/* ── Helpers: DB-backed return/dispute storage via platform_settings key-value ── */
+type ReturnRecord  = { id: string; reason: string; amount: number; status: string; createdAt: string };
+type DisputeRecord = { id: string; type: string; note: string; status: string; createdAt: string };
+
+async function loadJson<T>(key: string): Promise<T[]> {
+  const row = await db.select({ value: platformSettingsTable.value }).from(platformSettingsTable).where(eq(platformSettingsTable.key, key)).limit(1).then(r => r[0]);
+  if (!row) return [];
+  try { return JSON.parse(row.value) as T[]; } catch { return []; }
+}
+
+async function saveJson<T>(key: string, data: T[]): Promise<void> {
+  const value = JSON.stringify(data);
+  await db.insert(platformSettingsTable).values({ key, value, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value, updatedAt: new Date() } });
+}
+
+/* ── Return requests (DB-backed via platform_settings) ── */
+router.get("/orders/:id/returns", async (req, res) => {
+  const orderId = req.params["id"]!;
+  sendSuccess(res, await loadJson<ReturnRecord>(`return_log_${orderId}`));
+});
+
+router.post("/orders/:id/return", async (req, res) => {
+  const orderId = req.params["id"]!;
+  const { reason, amount } = req.body;
+  if (!reason) { sendValidationError(res, "reason is required"); return; }
+  const entry: ReturnRecord = { id: generateId(), reason: String(reason), amount: parseFloat(String(amount)) || 0, status: "pending", createdAt: new Date().toISOString() };
+  const existing = await loadJson<ReturnRecord>(`return_log_${orderId}`);
+  await saveJson(`return_log_${orderId}`, [...existing, entry]);
+  addAuditEntry({ action: "order_return_logged", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Return logged for order ${orderId}: ${entry.reason}`, result: "success" });
+  sendCreated(res, entry, "Return logged successfully");
+});
+
+router.patch("/orders/:id/returns/:returnId", async (req, res) => {
+  const { id: orderId, returnId } = req.params as { id: string; returnId: string };
+  const { status } = req.body;
+  const existing = await loadJson<ReturnRecord>(`return_log_${orderId}`);
+  const idx = existing.findIndex(r => r.id === returnId);
+  if (idx === -1) { sendNotFound(res, "Return request not found"); return; }
+  existing[idx] = { ...existing[idx]!, status: String(status ?? "pending") };
+  await saveJson(`return_log_${orderId}`, existing);
+  sendSuccess(res, existing[idx]);
+});
+
+/* ── Dispute requests (DB-backed via platform_settings) ── */
+router.get("/orders/:id/disputes", async (req, res) => {
+  const orderId = req.params["id"]!;
+  sendSuccess(res, await loadJson<DisputeRecord>(`dispute_log_${orderId}`));
+});
+
+router.post("/orders/:id/dispute", async (req, res) => {
+  const orderId = req.params["id"]!;
+  const { type, note } = req.body;
+  if (!note) { sendValidationError(res, "note is required"); return; }
+  const entry: DisputeRecord = { id: generateId(), type: String(type ?? "other"), note: String(note), status: "open", createdAt: new Date().toISOString() };
+  const existing = await loadJson<DisputeRecord>(`dispute_log_${orderId}`);
+  await saveJson(`dispute_log_${orderId}`, [...existing, entry]);
+  addAuditEntry({ action: "order_dispute_logged", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Dispute logged for order ${orderId}: ${entry.note}`, result: "success" });
+  sendCreated(res, entry, "Dispute logged successfully");
+});
+
+router.patch("/orders/:id/disputes/:disputeId", async (req, res) => {
+  const { id: orderId, disputeId } = req.params as { id: string; disputeId: string };
+  const { status } = req.body;
+  const existing = await loadJson<DisputeRecord>(`dispute_log_${orderId}`);
+  const idx = existing.findIndex(d => d.id === disputeId);
+  if (idx === -1) { sendNotFound(res, "Dispute not found"); return; }
+  existing[idx] = { ...existing[idx]!, status: String(status ?? "open") };
+  await saveJson(`dispute_log_${orderId}`, existing);
+  sendSuccess(res, existing[idx]);
+});
+
+/* ── GET /admin/orders-stats — summary stats for orders dashboard ── */
+router.get("/orders-stats", async (_req, res) => {
+  try {
+    const result = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status NOT IN ('cancelled', 'refunded'))  AS total,
+        COUNT(*) FILTER (WHERE status = 'pending')                        AS pending,
+        COUNT(*) FILTER (WHERE status = 'processing')                     AS processing,
+        COUNT(*) FILTER (WHERE status = 'delivered')                      AS delivered,
+        COUNT(*) FILTER (WHERE status = 'cancelled')                      AS cancelled,
+        COUNT(*) FILTER (WHERE status = 'refunded')                       AS refunded,
+        COALESCE(SUM(CAST(total AS NUMERIC)) FILTER (WHERE status = 'delivered'), 0) AS revenue
+      FROM orders
+      WHERE deleted_at IS NULL
+    `);
+    const stats = (result.rows?.[0] ?? {}) as Record<string, unknown>;
+    sendSuccess(res, {
+      total:      Number(stats["total"]      ?? 0),
+      pending:    Number(stats["pending"]    ?? 0),
+      processing: Number(stats["processing"] ?? 0),
+      delivered:  Number(stats["delivered"]  ?? 0),
+      cancelled:  Number(stats["cancelled"]  ?? 0),
+      refunded:   Number(stats["refunded"]   ?? 0),
+      revenue:    parseFloat(String(stats["revenue"] ?? "0")),
+    });
+  } catch (e) {
+    sendError(res, "Failed to load order stats", 500);
+  }
+});
+
+/* ── POST /admin/vendors/invite — invite a vendor by email/phone ── */
+router.post("/vendors/invite", async (req, res) => {
+  try {
+    const { email, phone, name, message } = req.body as { email?: string; phone?: string; name?: string; message?: string };
+    if (!email && !phone) { sendValidationError(res, "email or phone is required"); return; }
+    addAuditEntry({
+      action: "vendor_invite_sent",
+      ip: getClientIp(req),
+      adminId: (req as AdminRequest).adminId,
+      details: `Vendor invite sent to ${email || phone} (${name ?? "unknown"})`,
+      result: "success",
+    });
+    sendSuccess(res, { invited: true, email, phone, message });
+  } catch (e) {
+    sendError(res, "Failed to send vendor invite", 500);
+  }
+});
+
+/* ── PATCH /admin/vendors/:id/tier — update vendor account tier ── */
+router.patch("/vendors/:id/tier", async (req, res) => {
+  const { tier } = req.body;
+  const VALID_TIERS = ["bronze", "silver", "gold"];
+  if (!tier || !VALID_TIERS.includes(String(tier))) {
+    sendValidationError(res, `tier must be one of: ${VALID_TIERS.join(", ")}`);
+    return;
+  }
+  const vendorId = req.params["id"]!;
+  const [user] = await db
+    .update(usersTable)
+    .set({ accountLevel: String(tier), updatedAt: new Date() })
+    .where(eq(usersTable.id, vendorId))
+    .returning({ id: usersTable.id, accountLevel: usersTable.accountLevel });
+  if (!user) { sendNotFound(res, "Vendor not found"); return; }
+  addAuditEntry({ action: "vendor_tier_update", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Vendor ${vendorId} tier set to ${tier}`, result: "success" });
+  sendSuccess(res, user);
+});
+
+export default router;

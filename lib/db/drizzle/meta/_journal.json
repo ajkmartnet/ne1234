@@ -1,0 +1,76 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1777965587755,
+      "tag": "0000_brief_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778017837370,
+      "tag": "0001_tan_prima",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778100000000,
+      "tag": "0002_vendor_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778200000000,
+      "tag": "0003_vendor_quick_replies",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1746700000000,
+      "tag": "0004_pharmacy_referral_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778224533135,
+      "tag": "0005_red_human_robot",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1746960000000,
+      "tag": "0006_pii_encryption_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778330600168,
+      "tag": "0007_reflective_grey_gargoyle",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778389787424,
+      "tag": "0008_soft_delete_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778450000000,
+      "tag": "0009_soft_delete_users",
+      "breakpoints": true
+    }
+  ]
+}

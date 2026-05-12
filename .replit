@@ -60,6 +60,10 @@ args = "Customer App"
 task = "workflow.run"
 args = "Setup"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "typecheck"
+
 # --- INDIVIDUAL CLEAN WORKFLOWS ---
 
 [[workflows.workflow]]
@@ -131,6 +135,17 @@ args = "pnpm --filter @workspace/scripts run decrypt-env"
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow]]
+name = "typecheck"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm typecheck"
+
+[workflows.workflow.metadata]
+isValidation = true
 
 [[ports]]
 localPort = 3000

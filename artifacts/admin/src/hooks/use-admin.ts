@@ -53,8 +53,10 @@ export const useUsers = (params?: {
   dateTo?: string;
   page?: number;
   limit?: number;
+  sortKey?: string;
+  sortDir?: string;
 }) => {
-  const { conditionTier, status, search, role, dateFrom, dateTo, page = 1, limit = 50 } = params ?? {};
+  const { conditionTier, status, search, role, dateFrom, dateTo, page = 1, limit = 50, sortKey, sortDir } = params ?? {};
   const { toast } = useToast();
   const qs = new URLSearchParams();
   if (conditionTier) qs.set("conditionTier", conditionTier);
@@ -65,9 +67,11 @@ export const useUsers = (params?: {
   if (dateTo) qs.set("dateTo", dateTo);
   qs.set("page", String(page));
   qs.set("limit", String(limit));
+  if (sortKey) qs.set("sortKey", sortKey);
+  if (sortDir) qs.set("sortDir", sortDir);
   const qsStr = qs.toString();
   const query = useQuery({
-    queryKey: ["admin-users", conditionTier || "", status || "", search || "", role || "", dateFrom || "", dateTo || "", page, limit],
+    queryKey: ["admin-users", conditionTier || "", status || "", search || "", role || "", dateFrom || "", dateTo || "", page, limit, sortKey || "", sortDir || ""],
     queryFn: () => adminFetch(`/users${qsStr ? `?${qsStr}` : ""}`),
     refetchInterval: REFETCH_INTERVAL,
   });

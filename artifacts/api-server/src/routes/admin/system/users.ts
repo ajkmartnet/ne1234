@@ -70,7 +70,12 @@ router.post("/users", requirePermission("users.create"), async (req, res) => {
     } else if (email) {
       [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.trim().toLowerCase())).limit(1);
     }
-    sendSuccess(res, { user: user ? stripUser(user) : { id: result.userId } });
+    if (!user) {
+      logger.error({ result }, "[admin/users] user created but could not be fetched");
+      sendError(res, "User was created but could not be retrieved. Please refresh the user list.", 500);
+      return;
+    }
+    sendSuccess(res, { user: stripUser(user) });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error({ err: error }, "[admin/users] create user failed");
@@ -216,6 +221,17 @@ router.get("/users", requirePermission("users.view"), async (req, res) => {
 
   // Rebuild whereClause now that conditionTier conditions are included
   const finalWhere = conditions.length > 0 ? and(...conditions) : undefined;
+  const rawSortKey = ((req.query?.sortKey as string) ?? "joined").trim();
+  const rawSortDir = ((req.query?.sortDir as string) ?? "desc").trim().toLowerCase();
+  const sortDir2 = rawSortDir === "asc" ? "asc" : "desc";
+  const sortOrder = (() => {
+    const dir = <T>(col: T) => sortDir2 === "asc" ? asc(col as Parameters<typeof asc>[0]) : desc(col as Parameters<typeof desc>[0]);
+    if (rawSortKey === "name")   return [dir(usersTable.name), dir(usersTable.createdAt)];
+    if (rawSortKey === "wallet") return [dir(usersTable.walletBalance), dir(usersTable.createdAt)];
+    if (rawSortKey === "status") return [dir(usersTable.isBanned), dir(usersTable.isActive), dir(usersTable.createdAt)];
+    return [dir(usersTable.createdAt)];
+  })();
+
   const finalBaseQuery = db
     .select({
       user: usersTable,
@@ -226,7 +242,7 @@ router.get("/users", requirePermission("users.view"), async (req, res) => {
     .leftJoin(vendorProfilesTable, eq(usersTable.id, vendorProfilesTable.userId))
     .leftJoin(riderProfilesTable, eq(usersTable.id, riderProfilesTable.userId))
     .where(finalWhere)
-    .orderBy(desc(usersTable.createdAt));
+    .orderBy(...sortOrder as [ReturnType<typeof asc>]);
 
   try {
     const globalStatsQuery = db.select({
@@ -304,34 +320,44 @@ router.patch("/users/bulk-ban", requirePermission("users.ban"), async (req, res)
   if (!ids?.length) { sendValidationError(res, "ids required"); return; }
   if (action !== "ban" && action !== "unban") { sendValidationError(res, "action must be 'ban' or 'unban'"); return; }
   const adminReq = req as AdminRequest;
+  let affected = 0;
+  const failed: string[] = [];
   try {
-    for (const id of ids) {
+    await db.transaction(async (tx) => {
       if (action === "ban") {
-        const [u] = await db.select({ roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id)).limit(1);
-        await db.insert(accountConditionsTable).values({
+        const users = await tx.select({ id: usersTable.id, roles: usersTable.roles })
+          .from(usersTable)
+          .where(inArray(usersTable.id, ids));
+        const conditionValues = users.map(u => ({
           id: generateId(),
-          userId: id,
-          userRole: u?.roles?.split(",")[0]?.trim() || "customer",
-          conditionType: "ban_hard",
-          severity: "ban",
-          category: "ban",
+          userId: u.id,
+          userRole: u.roles?.split(",")[0]?.trim() || "customer",
+          conditionType: "ban_hard" as const,
+          severity: "ban" as const,
+          category: "ban" as const,
           reason: reason || "Bulk banned by admin",
           appliedBy: adminReq.adminId || "admin",
-        });
+        }));
+        if (conditionValues.length > 0) {
+          await tx.insert(accountConditionsTable).values(conditionValues);
+          affected = conditionValues.length;
+        }
       } else {
-        await db.update(accountConditionsTable).set({
+        await tx.update(accountConditionsTable).set({
           isActive: false, liftedAt: new Date(), liftedBy: adminReq.adminId || "admin",
           liftReason: "Bulk unbanned via admin", updatedAt: new Date(),
         }).where(and(
-          eq(accountConditionsTable.userId, id),
+          inArray(accountConditionsTable.userId, ids),
           eq(accountConditionsTable.isActive, true),
           eq(accountConditionsTable.severity, "ban"),
         ));
+        affected = ids.length;
       }
-      await reconcileUserFlags(id);
-    }
-    addAuditEntry({ action: `bulk_${action}`, ip: getClientIp(req), adminId: adminReq.adminId, details: `Bulk ${action}: ${ids.length} users`, result: "success" });
-    sendSuccess(res, { success: true, affected: ids.length, action });
+    });
+    // Reconcile flags outside the transaction so failures don't roll back the ban inserts
+    await Promise.allSettled(ids.map(id => reconcileUserFlags(id).catch(e => { failed.push(id); logger.warn({ err: e, id }, "[admin/users] reconcile failed during bulk-ban"); })));
+    addAuditEntry({ action: `bulk_${action}`, ip: getClientIp(req), adminId: adminReq.adminId, details: `Bulk ${action}: ${affected} users`, result: "success" });
+    sendSuccess(res, { success: true, affected, action, failed });
   } catch (err: unknown) {
     logger.error({ err }, "[admin/users] bulk-ban failed");
     sendError(res, "An internal error occurred", 500);
@@ -343,6 +369,13 @@ router.patch("/users/:id", requirePermission("users.edit"), async (req, res) => 
   const { role, isActive, walletBalance } = req.body;
   const userId = req.params["id"]!;
   try {
+    if (role !== undefined) {
+      const allowedRoles = ["customer", "rider", "vendor"];
+      if (!allowedRoles.includes(String(role))) {
+        sendValidationError(res, `role must be one of: ${allowedRoles.join(", ")}`);
+        return;
+      }
+    }
     const updates: Partial<typeof usersTable.$inferInsert> & { tokenVersion?: ReturnType<typeof sql> } = {};
     if (role !== undefined) { updates.roles = role; }
     if (isActive !== undefined) updates.isActive = isActive;
@@ -627,101 +660,102 @@ router.patch("/users/:id/security", requirePermission("users.ban"), async (req, 
   const { id } = req.params;
   const body = req.body as Record<string, unknown>;
   try {
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (body.isActive     !== undefined) updates.isActive     = body.isActive;
-  if (body.isBanned     !== undefined) updates.isBanned     = body.isBanned;
-  if (body.banReason    !== undefined) updates.banReason    = (body.banReason as string) || null;
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.isActive     !== undefined) updates.isActive     = body.isActive;
+    if (body.isBanned     !== undefined) updates.isBanned     = body.isBanned;
+    if (body.banReason    !== undefined) updates.banReason    = (body.banReason as string) || null;
 
-  const willBeBanned = body.isBanned === true;
-  const currentUser = await db.select({ isBanned: usersTable.isBanned }).from(usersTable).where(eq(usersTable.id, id!)).limit(1).then(r => r[0]);
-  const alreadyBanned = currentUser?.isBanned ?? false;
-  const canAutoApprove = !willBeBanned && !alreadyBanned;
+    const willBeBanned = body.isBanned === true;
+    const currentUser = await db.select({ isBanned: usersTable.isBanned }).from(usersTable).where(eq(usersTable.id, id!)).limit(1).then(r => r[0]);
+    const alreadyBanned = currentUser?.isBanned ?? false;
+    const canAutoApprove = !willBeBanned && !alreadyBanned;
 
-  if (body.roles !== undefined) {
-    const rolesValue = String(body.roles).trim();
-    const roleList = rolesValue.split(",").map((r: string) => r.trim()).filter(Boolean);
-    if (!roleList.length) { sendValidationError(res, "At least one role must be assigned"); return; }
-    updates.roles = roleList.join(",");
-    updates.role = roleList.includes("vendor") ? "vendor" : roleList.includes("rider") ? "rider" : roleList[0];
+    if (body.roles !== undefined) {
+      const rolesValue = String(body.roles).trim();
+      const roleList = rolesValue.split(",").map((r: string) => r.trim()).filter(Boolean);
+      if (!roleList.length) { sendValidationError(res, "At least one role must be assigned"); return; }
+      updates.roles = roleList.join(",");
+      updates.role = roleList.includes("vendor") ? "vendor" : roleList.includes("rider") ? "rider" : roleList[0];
 
-    if (canAutoApprove && (roleList.includes("rider") || roleList.includes("vendor"))) {
-      updates.isActive = true;
-      updates.approvalStatus = "approved";
-    }
-  }
-  if (body.role !== undefined) {
-    const roleValue = String(body.role).trim();
-    if (roleValue) {
-      updates.role = roleValue;
-      if (canAutoApprove && (roleValue === "vendor" || roleValue === "rider")) {
+      if (canAutoApprove && (roleList.includes("rider") || roleList.includes("vendor"))) {
         updates.isActive = true;
         updates.approvalStatus = "approved";
       }
     }
-  }
-
-  const prevBlockedServices = body.blockedServices !== undefined
-    ? (await db.select({ blockedServices: usersTable.blockedServices }).from(usersTable).where(eq(usersTable.id, id!)).limit(1).then(r => r[0]?.blockedServices ?? ""))
-    : null;
-  if (body.blockedServices !== undefined) updates.blockedServices = body.blockedServices;
-  if (body.securityNote !== undefined) updates.securityNote = body.securityNote || null;
-  if (body.devOtpEnabled !== undefined) updates.devOtpEnabled = body.devOtpEnabled === true;
-
-  const adminReq = req as AdminRequest;
-  if (willBeBanned && !alreadyBanned) {
-    const [existingUser] = await db.select({ roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
-    await db.insert(accountConditionsTable).values({
-      id: generateId(),
-      userId: id!,
-      userRole: existingUser?.roles?.split(",")[0]?.trim() || "customer",
-      conditionType: "ban_hard",
-      severity: "ban",
-      category: "ban",
-      reason: String(body.banReason || "Banned by admin via security panel"),
-      appliedBy: adminReq.adminId || "admin",
-      notes: body.securityNote ? String(body.securityNote) : null,
-    });
-    await reconcileUserFlags(id!);
-  } else if (!willBeBanned && alreadyBanned && body.isBanned === false) {
-    await db.update(accountConditionsTable).set({
-      isActive: false,
-      liftedAt: new Date(),
-      liftedBy: adminReq.adminId || "admin",
-      liftReason: "Unbanned via security panel",
-      updatedAt: new Date(),
-    }).where(and(
-      eq(accountConditionsTable.userId, id!),
-      eq(accountConditionsTable.isActive, true),
-      eq(accountConditionsTable.severity, "ban"),
-    ));
-    await reconcileUserFlags(id!);
-  }
-
-  if (willBeBanned !== alreadyBanned) {
-    delete updates["isBanned"];
-    delete updates["isActive"];
-    delete updates["banReason"];
-  }
-  const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id!)).returning();
-  if (!user) { sendNotFound(res, "User not found"); return; }
-
-  if (body.blockedServices !== undefined && prevBlockedServices !== null) {
-    const wasFrozen = (prevBlockedServices || "").split(",").map((s: string) => s.trim()).includes("wallet");
-    const isFrozen = (String(body.blockedServices || "")).split(",").map((s: string) => s.trim()).includes("wallet");
-    if (isFrozen !== wasFrozen) {
-      const io = getIO();
-      if (io) io.to(`user:${id}`).emit(isFrozen ? "wallet:frozen" : "wallet:unfrozen", {});
+    if (body.role !== undefined) {
+      const roleValue = String(body.role).trim();
+      if (roleValue) {
+        updates.role = roleValue;
+        if (canAutoApprove && (roleValue === "vendor" || roleValue === "rider")) {
+          updates.isActive = true;
+          updates.approvalStatus = "approved";
+        }
+      }
     }
-  }
 
-  /* Revoke all sessions if ban, unban (actual transition), deactivation, or role change occurred */
-  if (body.isBanned || (alreadyBanned && body.isBanned === false) || body.isActive === false || body.roles !== undefined || body.role !== undefined) {
-    revokeAllUserSessions(id!).catch(() => {});
-  }
-  if (body.isBanned && body.notify) {
-    await sendUserNotification(id!, "Account Suspended ⚠️", String(body.banReason || "Your account has been suspended. Contact support."), "warning", "warning-outline");
-  }
-  sendSuccess(res, { ...user, roles: (user.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean), walletBalance: parseFloat(String(user.walletBalance)) });
+    const prevBlockedServices = body.blockedServices !== undefined
+      ? (await db.select({ blockedServices: usersTable.blockedServices }).from(usersTable).where(eq(usersTable.id, id!)).limit(1).then(r => r[0]?.blockedServices ?? ""))
+      : null;
+    if (body.blockedServices !== undefined) updates.blockedServices = body.blockedServices;
+    if (body.securityNote !== undefined) updates.securityNote = body.securityNote || null;
+    if (body.devOtpEnabled !== undefined) updates.devOtpEnabled = body.devOtpEnabled === true;
+
+    const adminReq = req as AdminRequest;
+    if (willBeBanned && !alreadyBanned) {
+      const [existingUser] = await db.select({ roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
+      await db.insert(accountConditionsTable).values({
+        id: generateId(),
+        userId: id!,
+        userRole: existingUser?.roles?.split(",")[0]?.trim() || "customer",
+        conditionType: "ban_hard",
+        severity: "ban",
+        category: "ban",
+        reason: String(body.banReason || "Banned by admin via security panel"),
+        appliedBy: adminReq.adminId || "admin",
+        notes: body.securityNote ? String(body.securityNote) : null,
+      });
+      await reconcileUserFlags(id!);
+    } else if (!willBeBanned && alreadyBanned && body.isBanned === false) {
+      await db.update(accountConditionsTable).set({
+        isActive: false,
+        liftedAt: new Date(),
+        liftedBy: adminReq.adminId || "admin",
+        liftReason: "Unbanned via security panel",
+        updatedAt: new Date(),
+      }).where(and(
+        eq(accountConditionsTable.userId, id!),
+        eq(accountConditionsTable.isActive, true),
+        eq(accountConditionsTable.severity, "ban"),
+      ));
+      await reconcileUserFlags(id!);
+    }
+
+    if (willBeBanned !== alreadyBanned) {
+      delete updates["isBanned"];
+      delete updates["isActive"];
+      delete updates["banReason"];
+    }
+    const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id!)).returning();
+    if (!user) { sendNotFound(res, "User not found"); return; }
+
+    if (body.blockedServices !== undefined && prevBlockedServices !== null) {
+      const wasFrozen = (prevBlockedServices || "").split(",").map((s: string) => s.trim()).includes("wallet");
+      const isFrozen = (String(body.blockedServices || "")).split(",").map((s: string) => s.trim()).includes("wallet");
+      if (isFrozen !== wasFrozen) {
+        const io = getIO();
+        if (io) io.to(`user:${id}`).emit(isFrozen ? "wallet:frozen" : "wallet:unfrozen", {});
+      }
+    }
+
+    /* Revoke all sessions if ban, unban (actual transition), deactivation, or role change occurred */
+    if (body.isBanned || (alreadyBanned && body.isBanned === false) || body.isActive === false || body.roles !== undefined || body.role !== undefined) {
+      revokeAllUserSessions(id!).catch(() => {});
+    }
+    /* Send push notification only when user is being newly banned and notify flag is set */
+    if (willBeBanned && !alreadyBanned && body.notify) {
+      await sendUserNotification(id!, "Account Suspended ⚠️", String(body.banReason || "Your account has been suspended. Contact support."), "warning", "warning-outline");
+    }
+    sendSuccess(res, { ...user, roles: (user.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean), walletBalance: parseFloat(String(user.walletBalance)) });
   } catch (err: unknown) {
     logger.error({ err }, "[admin/users] security patch failed");
     sendError(res, "An internal error occurred", 500);
@@ -1371,6 +1405,7 @@ router.post("/users/export", requirePermission("users.view"), async (req, res) =
     dateTo?: string;
   };
 
+  try {
   let users: (typeof usersTable.$inferSelect)[] = [];
 
   if (ids && ids.length > 0) {
@@ -1450,6 +1485,10 @@ router.post("/users/export", requirePermission("users.view"), async (req, res) =
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(csv);
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] export failed");
+    sendError(res, "An internal error occurred during export", 500);
+  }
 });
 
 export default router;

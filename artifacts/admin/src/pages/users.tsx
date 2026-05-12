@@ -1682,6 +1682,8 @@ export default function Users() {
     dateTo: dateTo || undefined,
     page: currentPage,
     limit: PAGE_SIZE,
+    sortKey,
+    sortDir,
   });
   useEffect(() => { if (!isLoading && data) setLastRefreshed(Date.now()); }, [data, isLoading]);
   const { data: pendingData, refetch: refetchPending } = usePendingUsers();
@@ -1695,6 +1697,7 @@ export default function Users() {
   const qc = useQueryClient();
   const waiveDebtMutation = useWaiveDebt();
 
+  const [waiveDebtTarget, setWaiveDebtTarget] = useState<any>(null);
   const [walletUser, setWalletUser] = useState<any>(null);
   const [deleteUser, setDeleteUser] = useState<any>(null);
   const [pendingBlockToggle, setPendingBlockToggle] = useState<{ id: string; val: boolean } | null>(null);
@@ -1756,44 +1759,18 @@ export default function Users() {
   };
 
   const users = data?.users || [];
-  const filtered = users.filter((u: any) => {
-    const matchSearch =
-      (u.name?.toLowerCase() || "").includes(debouncedSearch.toLowerCase()) ||
-      (u.phone || "").includes(debouncedSearch) ||
-      (u.email?.toLowerCase() || "").includes(debouncedSearch.toLowerCase());
-    const allUserRoles = new Set([
-      ...(u.roles || "").split(",").map((r: string) => r.trim()).filter(Boolean),
-      ...(u.role  || "").split(",").map((r: string) => r.trim()).filter(Boolean),
-    ]);
-    const matchRole = roleFilter === "all" || allUserRoles.has(roleFilter);
-    const matchStatus = statusFilter === "all"
-      || (statusFilter === "active"   && u.isActive && !u.isBanned)
-      || (statusFilter === "blocked"  && !u.isActive && !u.isBanned)
-      || (statusFilter === "banned"   && u.isBanned);
-    const matchDate = (!dateFrom || new Date(u.createdAt) >= new Date(dateFrom))
-                   && (!dateTo   || new Date(u.createdAt) <= new Date(dateTo + "T23:59:59"));
-    return matchSearch && matchRole && matchStatus && matchDate;
-  });
 
   const bannedCount  = data?.bannedCount  ?? users.filter((u: any) => u.isBanned).length;
   const blockedCount = data?.blockedCount ?? users.filter((u: any) => !u.isActive && !u.isBanned).length;
   const activeCount  = data?.activeCount  ?? users.filter((u: any) => u.isActive && !u.isBanned).length;
   const totalCount   = data?.totalCount   ?? data?.total ?? users.length;
 
-  const sortedUsers = [...filtered].sort((a, b) => {
-    const dir = sortDir === "asc" ? 1 : -1;
-    if (sortKey === "name")   return dir * ((a.name || a.phone || "").localeCompare(b.name || b.phone || ""));
-    if (sortKey === "wallet") return dir * ((a.walletBalance || 0) - (b.walletBalance || 0));
-    if (sortKey === "status") return dir * ((a.isBanned ? 2 : !a.isActive ? 1 : 0) - (b.isBanned ? 2 : !b.isActive ? 1 : 0));
-    return dir * (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-  });
-
-  const allSelected = filtered.length > 0 && filtered.every((u: any) => selectedIds.has(u.id));
+  const allSelected = users.length > 0 && users.every((u: any) => selectedIds.has(u.id));
   const toggleAll = () => {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filtered.map((u: any) => u.id)));
+      setSelectedIds(new Set(users.map((u: any) => u.id)));
     }
   };
 
@@ -2105,12 +2082,12 @@ export default function Users() {
         <div className="md:hidden space-y-3">
           {isLoading ? (
             [1,2,3].map(i => <div key={i} className="h-20 bg-muted rounded-2xl animate-pulse" />)
-          ) : filtered.length === 0 ? (
+          ) : users.length === 0 ? (
             <Card className="rounded-2xl p-12 text-center border-border/50">
               <UsersIcon className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
               <p className="text-muted-foreground text-sm">No users found</p>
             </Card>
-          ) : filtered.map((user: any) => {
+          ) : users.map((user: any) => {
             const userRoles = (user.roles || user.role || "customer").split(",").filter(Boolean);
             const isBanned  = user.isBanned;
             const isBlocked = !user.isActive && !isBanned;
@@ -2191,7 +2168,7 @@ export default function Users() {
                     <SkeletonRow />
                     <SkeletonRow />
                   </>
-                ) : filtered.length === 0 ? (
+                ) : users.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="h-40">
                       <div className="flex flex-col items-center justify-center gap-2 text-center">
@@ -2206,7 +2183,7 @@ export default function Users() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  sortedUsers.map((user: any) => {
+                  users.map((user: any) => {
                     const userRoles = (user.roles || user.role || "customer").split(",").filter(Boolean);
                     const isBanned  = user.isBanned;
                     const isBlocked = !user.isActive && !isBanned;
@@ -2324,10 +2301,7 @@ export default function Users() {
                             {parseFloat(user.cancellationDebt || "0") > 0 && (
                               <Button
                                 variant="outline" size="sm"
-                                onClick={() => waiveDebtMutation.mutate(user.id, {
-                                  onSuccess: (data: any) => toast({ title: "Debt Waived", description: `${formatCurrency(Number(data?.waived?.toFixed(0) || parseFloat(user.cancellationDebt || "0")))} cancellation debt cleared.` }),
-                                  onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-                                })}
+                                onClick={() => setWaiveDebtTarget(user)}
                                 disabled={waiveDebtMutation.isPending}
                                 className="h-8 rounded-lg text-xs gap-1.5 border-orange-200 text-orange-700 hover:bg-orange-50 hover:border-orange-300 transition-colors"
                                 title={`Waive Rs. ${parseFloat(user.cancellationDebt).toFixed(0)} debt`}
@@ -2350,8 +2324,8 @@ export default function Users() {
           {!isLoading && (
             <div className="border-t border-border/50 px-4 py-3 bg-muted/20 flex items-center justify-between gap-3 flex-wrap">
               <p className="text-xs text-muted-foreground">
-                {filtered.length > 0
-                  ? <>Showing <span className="font-semibold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}–{(currentPage - 1) * PAGE_SIZE + filtered.length}</span> of <span className="font-semibold text-foreground">{data?.total ?? users.length}</span> users{data?.totalCount && data.totalCount !== (data?.total ?? 0) ? ` (${data.totalCount} total)` : ""}</>
+                {users.length > 0
+                  ? <>Showing <span className="font-semibold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}–{(currentPage - 1) * PAGE_SIZE + users.length}</span> of <span className="font-semibold text-foreground">{data?.total ?? users.length}</span> users{data?.totalCount && data.totalCount !== (data?.total ?? 0) ? ` (${data.totalCount} total)` : ""}</>
                   : "No users found"
                 }
               </p>
@@ -2405,6 +2379,42 @@ export default function Users() {
           />
         );
       })()}
+
+      {/* Waive Debt Confirmation Dialog */}
+      <Dialog open={!!waiveDebtTarget} onOpenChange={open => { if (!open) setWaiveDebtTarget(null); }}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <span>⚡</span> Waive Cancellation Debt
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              This will permanently waive <span className="font-semibold text-foreground">{formatCurrency(parseFloat(waiveDebtTarget?.cancellationDebt || "0"))}</span> of cancellation debt for <span className="font-semibold text-foreground">{waiveDebtTarget?.name || waiveDebtTarget?.phone}</span>. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setWaiveDebtTarget(null)}>Cancel</Button>
+              <Button
+                disabled={waiveDebtMutation.isPending}
+                onClick={() => {
+                  const user = waiveDebtTarget;
+                  waiveDebtMutation.mutate(user.id, {
+                    onSuccess: (data: any) => {
+                      toast({ title: "Debt Waived", description: `${formatCurrency(Number(data?.waived?.toFixed(0) || parseFloat(user.cancellationDebt || "0")))} cancellation debt cleared.` });
+                      setWaiveDebtTarget(null);
+                    },
+                    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+                  });
+                }}
+                className="flex-1 rounded-xl gap-2 bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                {waiveDebtMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>⚡</span>}
+                {waiveDebtMutation.isPending ? "Waiving..." : "Confirm Waive"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Bulk Ban/Unban Confirmation Dialog */}
       <Dialog open={!!bulkConfirmAction} onOpenChange={open => { if (!open) { setBulkConfirmAction(null); setBulkReason(""); } }}>

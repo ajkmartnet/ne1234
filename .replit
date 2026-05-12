@@ -97,16 +97,12 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; ADMIN_PORT_OVERRIDE=3000 node node_modules/.pnpm/vite@7.3.1_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_terser@5.46.1_tsx@4.21.0_yaml@2.8.4/node_modules/vite/bin/vite.js --config artifacts/admin/vite.config.ts --host 0.0.0.0"
+args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; ADMIN_PORT_OVERRIDE=3000 BASE_PATH=/admin/ node node_modules/.pnpm/vite@7.3.1_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_terser@5.46.1_tsx@4.21.0_yaml@2.8.4/node_modules/vite/bin/vite.js --config artifacts/admin/vite.config.ts --host 0.0.0.0"
 waitForPort = 3000
 
 [[ports]]
 localPort = 3000
 externalPort = 3000
-
-[[ports]]
-localPort = 3001
-externalPort = 3002
 
 [[ports]]
 localPort = 3002

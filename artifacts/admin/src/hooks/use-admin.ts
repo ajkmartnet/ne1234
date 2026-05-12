@@ -2225,11 +2225,11 @@ export const useAdminResetOtp = () => {
   });
 };
 
-export const useAdminViewOtp = (userId: string | null) =>
+export const useAdminViewOtp = (userId: string | null, options?: { enabled?: boolean }) =>
   useQuery({
     queryKey: ["admin-user-otp", userId],
     queryFn: () => adminFetch(`/users/${userId}/otp`),
-    enabled: false,
+    enabled: options?.enabled === true,
     staleTime: 0,
   });
 

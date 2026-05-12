@@ -544,7 +544,8 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
 
   /* ── OTP Tools state ── */
   const [showOtpData, setShowOtpData] = useState(false);
-  const otpQuery = useAdminViewOtp(user.id);
+  const [viewOtpEnabled, setViewOtpEnabled] = useState(false);
+  const otpQuery = useAdminViewOtp(user.id, { enabled: viewOtpEnabled });
 
   const verifyContact = useAdminVerifyContact();
   const forcePasswordReset = useAdminForcePasswordReset();
@@ -552,7 +553,7 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
 
   const handleViewOtp = () => {
     setShowOtpData(true);
-    otpQuery.refetch();
+    setViewOtpEnabled(true);
   };
 
   const handleVerifyContact = (type: "phone" | "email") => {
@@ -1270,38 +1271,6 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
   );
 }
 
-/* ── CSV Export helper ── */
-function csvField(value: string | number | null | undefined): string {
-  let str = String(value ?? "");
-  // Neutralize formula injection: prefix a tab when value starts with =, +, -, or @
-  if (/^[=+\-@\t]/.test(str)) {
-    str = "\t" + str;
-  }
-  return `"${str.replace(/"/g, '""')}"`;
-}
-
-function exportUsersCSV(users: any[]) {
-  const header = "ID,Name,Phone,Email,Role,Status,Wallet,Joined";
-  const rows = users.map((u: any) =>
-    [
-      csvField(u.id),
-      csvField(u.name || ""),
-      csvField(u.phone || ""),
-      csvField(u.email || ""),
-      csvField(u.role || "customer"),
-      csvField(u.isBanned ? "banned" : u.isActive ? "active" : "blocked"),
-      csvField(u.walletBalance),
-      csvField(u.createdAt?.slice(0,10) || ""),
-    ].join(",")
-  );
-  const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
-  const a = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  a.href = url;
-  a.download = `users-${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
 
 /* ── KYC Doc Viewer ── */
 function parseUserDocuments(user: any): { files: { type: string; url: string; label: string }[]; note?: string } {
@@ -1333,6 +1302,7 @@ function parseUserDocuments(user: any): { files: { type: string; url: string; la
         }
       }
     } catch (err) {
+      console.warn("[parseUserDocuments] JSON parse failed:", err);
     }
   }
   return result;
@@ -1629,7 +1599,7 @@ function KycDocModal({ user, onClose }: { user: any; onClose: () => void }) {
 }
 
 function AddressBookModal({ user, onClose }: { user: any; onClose: () => void }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["admin-user-addresses", user.id],
     queryFn: () => adminFetch(`/users/${user.id}/addresses`),
   });
@@ -1644,6 +1614,12 @@ function AddressBookModal({ user, onClose }: { user: any; onClose: () => void })
     >
       {isLoading ? (
         <div className="flex items-center justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" /></div>
+      ) : isError ? (
+        <div className="flex flex-col items-center justify-center py-10 gap-3 text-red-500">
+          <AlertTriangle className="w-8 h-8" />
+          <p className="text-sm font-medium">Failed to load addresses</p>
+          <p className="text-xs text-muted-foreground text-center">{(error as Error)?.message || "Something went wrong. Please try again."}</p>
+        </div>
       ) : addresses.length === 0 ? (
         <div className="text-center py-10 text-muted-foreground">
           <MapPin className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -1782,9 +1758,9 @@ export default function Users() {
   const users = data?.users || [];
   const filtered = users.filter((u: any) => {
     const matchSearch =
-      (u.name?.toLowerCase() || "").includes(search.toLowerCase()) ||
-      (u.phone || "").includes(search) ||
-      (u.email?.toLowerCase() || "").includes(search.toLowerCase());
+      (u.name?.toLowerCase() || "").includes(debouncedSearch.toLowerCase()) ||
+      (u.phone || "").includes(debouncedSearch) ||
+      (u.email?.toLowerCase() || "").includes(debouncedSearch.toLowerCase());
     const allUserRoles = new Set([
       ...(u.roles || "").split(",").map((r: string) => r.trim()).filter(Boolean),
       ...(u.role  || "").split(",").map((r: string) => r.trim()).filter(Boolean),
@@ -2410,18 +2386,25 @@ export default function Users() {
         </>
       )}
 
-      {walletUser && (
-        <WalletAdjustModal
-          mode="customer"
-          subject={{
-            id: walletUser.id,
-            name: walletUser.name,
-            phone: walletUser.phone,
-            walletBalance: Number(walletUser.walletBalance) || 0,
-          }}
-          onClose={() => setWalletUser(null)}
-        />
-      )}
+      {walletUser && (() => {
+        const walletUserRoles = new Set([
+          ...(walletUser.roles || "").split(",").map((r: string) => r.trim()).filter(Boolean),
+          ...(walletUser.role  || "").split(",").map((r: string) => r.trim()).filter(Boolean),
+        ]);
+        const walletMode = walletUserRoles.has("rider") ? "rider" : walletUserRoles.has("vendor") ? "vendor" : "customer";
+        return (
+          <WalletAdjustModal
+            mode={walletMode}
+            subject={{
+              id: walletUser.id,
+              name: walletUser.name,
+              phone: walletUser.phone,
+              walletBalance: Number(walletUser.walletBalance) || 0,
+            }}
+            onClose={() => setWalletUser(null)}
+          />
+        );
+      })()}
 
       {/* Bulk Ban/Unban Confirmation Dialog */}
       <Dialog open={!!bulkConfirmAction} onOpenChange={open => { if (!open) { setBulkConfirmAction(null); setBulkReason(""); } }}>

@@ -1,78 +1,147 @@
-# Setup Guide — Encrypted Environment Vault
+# AJKMart — Setup Guide
 
-This repository now supports a password-protected `.env.enc` vault for secrets, while preserving Replit Secrets as the primary source of truth.
+This guide covers how to get the project running on a fresh clone, fork, or Codespace checkout.
 
-## 1. One-time vault creation
+---
 
-1. Copy `.env.template` to `.env` at the monorepo root.
-2. Fill in every required value with your real secrets.
-3. Run:
-   ```bash
-   pnpm --filter @workspace/scripts run encrypt-env
-   ```
-4. Enter the master password when prompted.
-5. Commit `scripts/.env.enc` to the repo. Do not commit `.env`.
+## Overview
 
-> The encrypted vault file is safe to commit because it contains only AES-256-GCM ciphertext, salt, iv, and auth tag.
+AJKMart uses an **encrypted vault** (`scripts/.env.enc`) to store environment secrets safely in source control. The vault is encrypted with AES-256-GCM using a master password that you obtain from the project operator out-of-band.
 
-## 2. Fresh clone setup
+If you don't have the master password, the API server boots in **dev mode** using a local SQLite database and placeholder JWT secrets — enough to explore the codebase, but with limited features.
 
-On a fresh clone or fork, run either:
+---
+
+## Option A — Full Setup (with vault password)
+
+### 1. Install dependencies
+
+```bash
+pnpm install
+```
+
+### 2. Decrypt the vault
 
 ```bash
 pnpm --filter @workspace/scripts run decrypt-env
 ```
 
-or use the Replit `Setup` workflow.
+You will be prompted for the master password (up to 10 attempts). On success:
+- `.env` is written to the monorepo root with all secrets
+- `VAULT_UNLOCKED=1` is appended to the file
+- `pnpm install` runs automatically
+- Database migrations run automatically
 
-Then enter the same master password created during vault encryption.
+> **Where is the master password?**  
+> The password is never stored anywhere. Obtain it from the project operator (team lead, DevOps contact, etc.) through a secure channel such as a password manager share or encrypted message.
 
-## 3. Master password handling
+### 3. Start the server
 
-- The vault password is never stored in the repository.
-- It must be shared out-of-band with contributors or operators.
-- If you lose it, you must recreate `.env` and re-encrypt to a new `.env.enc` file.
+On Replit — click **Run** or start the **Project** workflow.  
+On other environments:
 
-## 4. Lockout behavior
+```bash
+pnpm --filter @workspace/api-server run dev
+```
 
-- There are 10 total password attempts.
-- On the 10th failed attempt, the script prints:
-  `🔒 Too many failed attempts. Setup locked.`
-- At that point the script exits with code `1`.
-- Restarting the terminal or rerunning the script resets the attempt counter.
+---
 
-## 5. Dev mode fallback
+## Option B — Dev Mode (no vault password)
 
-If the vault password is not provided and `NODE_ENV` is not `production`, the API server still boots in a local dev fallback mode:
+If you don't have the master password, the API server automatically enters dev mode when:
+- `VAULT_UNLOCKED` is **not** set, **and**
+- `NODE_ENV` is **not** `production` or `staging`
 
-- `artifacts/api-server/src/lib/db.ts` uses local SQLite with `dev.db`.
-- Missing JWT secret env vars are substituted with deterministic dev-only placeholder values.
-- A clear `[DEV MODE]` banner is printed.
+In dev mode:
+- A local **SQLite** database (`dev.db`) is used instead of PostgreSQL
+- JWT secrets are set to deterministic **placeholder values** (safe for local development only)
+- A `[DEV MODE]` banner is printed in the logs at startup
 
-This fallback is intended for local development only.
+**Limitations in dev mode:**
+- No SMS / email / push notification delivery
+- No real payment processing
+- No admin panel seeded data
+- Some PostgreSQL-specific features may not work
 
-## 6. Replit Secrets precedence
+To exit dev mode, obtain the vault password and run Option A.
 
-When both Replit Secrets and `scripts/.env.enc` exist:
+---
 
-- Replit Secrets always take precedence.
-- The vault is only used to fill missing values.
+## One-Time Vault Creation (operators only)
 
-## 7. Important files
+If you need to create or re-create the encrypted vault:
 
-- `.env.template` — committed template with required variables.
-- `scripts/.env.enc` — committed encrypted vault file.
-- `scripts/src/encrypt-env.ts` — encrypts `.env` into `.env.enc`.
-- `scripts/src/decrypt-env.ts` — decrypts the vault and runs migrations.
+1. Copy `.env.template` to `.env` at the monorepo root
+2. Fill in all real values
+3. Run the encryption script:
 
-## 8. Git ignore note
+```bash
+pnpm --filter @workspace/scripts run encrypt-env
+```
 
-The repository now explicitly ignores:
+4. Enter a strong master password when prompted
+5. Commit the resulting `scripts/.env.enc` to source control
+6. **Never commit `.env` itself** — it is in `.gitignore`
+7. Distribute the master password to team members through a secure channel
 
-- `.env.local`
-- `.env.*.local`
-- `dev.db`
-- `dev.db-shm`
-- `dev.db-wal`
+---
 
-and keeps `.env.template` committed with the negation rule.
+## Lockout Behaviour
+
+The `decrypt-env` script allows **10 attempts** before locking out:
+
+```
+Attempt 1/10 — Enter master password: ❌ Wrong password
+...
+Attempt 10/10 — Enter master password: ❌ Wrong password
+🔒  Too many failed attempts. Setup locked.
+```
+
+**To reset:** simply restart your terminal and run the script again. There is no persistent lockout — the counter resets on each new process.
+
+---
+
+## Replit Secrets vs Vault
+
+On Replit, secrets set in the **Secrets panel** (padlock icon) always take precedence over the vault file. The vault is used to fill gaps — if a secret is already in the Replit Secrets panel, the `.env` value is ignored (`dotenv` uses `override: false`).
+
+**Priority order:**
+1. Replit Secrets panel (highest priority)
+2. `.env` file (written by `decrypt-env`)
+3. Dev-mode placeholder values (lowest priority)
+
+Existing Replit users with all secrets already in the Secrets panel do not need to run the decrypt script.
+
+---
+
+## Environment Variables Reference
+
+See `.env.template` at the monorepo root for a complete list of all required and optional environment variables with placeholder comments.
+
+Key required variables:
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | JWT signing key (64+ hex chars) |
+| `ADMIN_JWT_SECRET` | Admin JWT signing key |
+| `ENCRYPTION_MASTER_KEY` | AES-256-GCM PII encryption key (min 16 chars) |
+
+Generate strong secrets with:
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+---
+
+## Workflows (Replit)
+
+| Workflow | Purpose |
+|---|---|
+| **Setup** | Runs `decrypt-env` to unlock the vault |
+| **Project** | Starts all services (API, Admin, Vendor, Rider, Customer) |
+| **API Server** | API server only (port 5000) |
+| **Admin Panel** | Admin dashboard (port 3000) |
+| **Vendor App** | Vendor portal (port 3001) |
+| **Rider App** | Rider PWA (port 3002) |
+| **Customer App** | Customer super-app (port 20716) |

@@ -20,32 +20,27 @@ module.exports = defineConfig([
   {
     rules: {
       // All console.* calls are banned — use @workspace/logger instead.
-      // error-reporter.ts files carry /* eslint-disable no-console */ because
-      // they monkeypatch console.error and must call the real console internally.
+      // error-reporter.ts carries /* eslint-disable no-console */ because it
+      // monkeypatches console.error and must call the real console internally.
       // The Expo production build also strips consoles via babel-plugin-transform-remove-console.
       "no-console": "error",
 
-      // React Native does not render to the DOM, so HTML entity escaping
-      // (`'` -> `&apos;`, etc.) adds no value and only fights against natural
-      // copy in user-facing strings. Disabled project-wide on purpose.
+      // React Native does not render to the DOM — HTML entity escaping adds no value.
       "react/no-unescaped-entities": "off",
 
-      // The codebase uses Platform.OS-gated `require("react-native-webview")`
-      // and similar conditional native imports to keep web bundles slim.
-      // The TypeScript compiler already enforces module shape; this rule's
-      // dynamic-import preference fights that intentional pattern.
+      // Platform.OS-gated conditional native imports are intentional in this codebase.
       "@typescript-eslint/no-require-imports": "off",
 
-      // BASELINE FOR INITIAL SETUP: these two rules account for the vast
-      // majority (260+) of pre-existing warnings in this app. Each warning
-      // represents a real backlog item but resolving them all in this
-      // setup task would be a sweeping behavioural change far outside its
-      // scope. Burning the warnings down is tracked as a dedicated
-      // follow-up task ("Clean up the lint warnings in the customer app")
-      // which will re-enable both rules and add `--max-warnings 0` once
-      // the codebase is clean.
+      // Pre-existing backlog — tracked in follow-up task "Clean up lint warnings
+      // in the customer app". Re-enable once violations are resolved.
       "@typescript-eslint/no-unused-vars": "off",
       "react-hooks/exhaustive-deps": "off",
     },
+  },
+  {
+    // Logger wrapper file — re-exports from @workspace/logger, no console calls,
+    // but excluded so future pass-through helpers aren't blocked by the rule.
+    files: ["**/utils/logger.ts"],
+    rules: { "no-console": "off" },
   },
 ]);

@@ -36,7 +36,7 @@ const ENTRIES: SchemaEntry[] = [
  *
  * Behaviour by environment:
  *   development — throws `ApiValidationError` (surface the mismatch immediately)
- *   production  — `console.warn` only; raw data is returned so the UI still works
+ *   production  — `log.warn` only; raw data is returned so the UI still works
  */
 export function createVendorValidator(
   onFailure?: ValidationOptions["onFailure"],

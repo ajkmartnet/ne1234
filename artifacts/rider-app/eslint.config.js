@@ -19,14 +19,18 @@ export default tseslint.config(
     },
     rules: {
       // All console.* calls are banned — use @workspace/logger instead.
-      // error-reporter.ts files carry /* eslint-disable no-console */ because
-      // they monkeypatch console.error and must call the real console internally.
+      // error-reporter.ts carries /* eslint-disable no-console */ because it
+      // monkeypatches console.error and must call the real console internally.
       "no-console": "error",
 
-      // Enforce correct hook dependency arrays to prevent stale closure bugs.
       "react-hooks/exhaustive-deps": "warn",
-      // Enforce rules of hooks (call order, no conditionals) — violations are bugs.
       "react-hooks/rules-of-hooks": "error",
     },
+  },
+  {
+    // Logger wrapper file — re-exports from @workspace/logger, no console calls,
+    // but excluded so future pass-through helpers aren't blocked by the rule.
+    files: ["**/lib/logger.ts"],
+    rules: { "no-console": "off" },
   },
 );

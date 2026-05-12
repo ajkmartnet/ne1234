@@ -72,7 +72,8 @@ export const useOTPBypass = () => {
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch auth config: ${response.status}`);
+          log.error(`Auth config HTTP error: ${response.status} ${response.statusText}`);
+          throw new Error(`Failed to fetch auth config: HTTP ${response.status}`);
         }
 
         const config: AuthConfig = await response.json();

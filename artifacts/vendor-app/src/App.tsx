@@ -369,14 +369,16 @@ function AppRoutes() {
                 <Route path="/notifications"><ErrorBoundary><Notifications /></ErrorBoundary></Route>
                 <Route path="/profile"><ErrorBoundary><Profile /></ErrorBoundary></Route>
                 <Route>
-                  <div className="flex items-center justify-center h-64">
-                    <div className="text-center">
-                      <p className="text-4xl mb-3">🔍</p>
-                      <p className="text-lg font-extrabold text-gray-700">Page not found</p>
-                      <p className="text-sm text-gray-400 mt-1">This page doesn't exist</p>
-                      <a href="/" className="mt-4 inline-block h-10 px-6 bg-orange-500 text-white font-bold rounded-xl text-sm leading-10">← Go Home</a>
+                  <ErrorBoundary>
+                    <div className="flex items-center justify-center h-64">
+                      <div className="text-center">
+                        <p className="text-4xl mb-3">🔍</p>
+                        <p className="text-lg font-extrabold text-gray-700">Page not found</p>
+                        <p className="text-sm text-gray-400 mt-1">This page doesn't exist</p>
+                        <a href="/" className="mt-4 inline-block h-10 px-6 bg-orange-500 text-white font-bold rounded-xl text-sm leading-10">← Go Home</a>
+                      </div>
                     </div>
-                  </div>
+                  </ErrorBoundary>
                 </Route>
               </Switch>
             </div>

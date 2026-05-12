@@ -138,6 +138,21 @@ export function useRideStatus(rideId: string): RideStatusHookResult {
         const SS = await import("expo-secure-store");
         token = await SS.getItemAsync("ajkmart_token");
       } catch {}
+      
+      // Validate token before use
+      if (token) {
+        token = token.trim();
+        // Check for basic JWT format (3 parts separated by dots)
+        if (!token || token.split(".").length !== 3) {
+          log.error("Invalid token format in SecureStore");
+          token = null;
+        }
+      }
+      
+      if (!token?.trim()) {
+        log.warn("No valid auth token found for SSE connection");
+      }
+      
       /* Never fall back to AsyncStorage — tokens must be read from SecureStore only. */
       const sseUrl = `${API_BASE}/rides/${rideId}/stream`;
 

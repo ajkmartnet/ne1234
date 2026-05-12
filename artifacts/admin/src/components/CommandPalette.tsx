@@ -180,8 +180,41 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       }
     } catch (err) {
       log.error("command execution failed:", err);
-      const message = err instanceof Error ? err.message : "Command could not be executed.";
-      toast({ title: "Command failed", description: message, variant: "destructive" });
+      
+      // Parse error type and provide specific guidance
+      let title = "Command failed";
+      let description = "An unexpected error occurred.";
+      let guidance = "";
+      
+      if (err instanceof Error) {
+        const message = err.message.toLowerCase();
+        if (message.includes("network") || message.includes("fetch") || message.includes("timeout")) {
+          title = "Network Error";
+          description = "Could not reach the server.";
+          guidance = "Check your connection and try again.";
+        } else if (message.includes("401") || message.includes("unauthorized")) {
+          title = "Permission Denied";
+          description = "You don't have permission for this command.";
+          guidance = "Contact an admin to grant access.";
+        } else if (message.includes("400") || message.includes("validation") || message.includes("invalid")) {
+          title = "Invalid Command";
+          description = "The command was not recognized or has invalid parameters.";
+          guidance = "Check the command syntax and try again.";
+        } else if (message.includes("404")) {
+          title = "Command Not Found";
+          description = "This command is not available.";
+          guidance = "Try a different command or check documentation.";
+        } else if (message.includes("429") || message.includes("rate limit")) {
+          title = "Rate Limited";
+          description = "Too many requests. Please wait before trying again.";
+          guidance = "Try again in a few moments.";
+        } else {
+          description = err.message || "Command could not be executed.";
+        }
+      }
+      
+      const fullDescription = guidance ? `${description}\n\n${guidance}` : description;
+      toast({ title, description: fullDescription, variant: "destructive" });
     } finally {
       setCmdExecuting(false);
     }

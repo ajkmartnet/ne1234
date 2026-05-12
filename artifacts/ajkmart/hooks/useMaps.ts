@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { createLogger } from "@/utils/logger";
 
+const log = createLogger("[useMaps]");
 const API = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api/maps`;
 
 export interface MapPrediction {
@@ -46,9 +48,20 @@ export function useMapsAutocomplete(query: string, debounceMs = 300) {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
       fetch(`${API}/autocomplete?input=`, { signal: ctrl.signal })
-        .then(r => r.json())
+        .then(r => {
+          if (!r.ok) {
+            log.warn(`Autocomplete initial fetch failed: HTTP ${r.status}`);
+            return { predictions: [] };
+          }
+          return r.json();
+        })
         .then(d => setPredictions(d.predictions ?? []))
-        .catch(() => setPredictions([]));
+        .catch((err) => {
+          if (err?.name !== "AbortError") {
+            log.warn("Autocomplete initial fetch error:", err?.message || err);
+          }
+          setPredictions([]);
+        });
       return;
     }
 
@@ -61,9 +74,11 @@ export function useMapsAutocomplete(query: string, debounceMs = 300) {
         const d = await r.json();
         setPredictions(d.predictions ?? []);
       } catch (e: any) {
-        if (e?.name !== "AbortError") {
-          setPredictions([]);
+        if (e?.name === "AbortError") {
+          return; // Query was cancelled, don't show error
         }
+        log.warn("Autocomplete fetch failed:", e?.message || e);
+        setPredictions([]);
       } finally {
         setLoading(false);
       }
@@ -90,21 +105,33 @@ export async function resolveLocation(
     return { lat: prediction.lat, lng: prediction.lng, address: prediction.description };
   }
   try {
+    // Try geocoding by place_id first
     const r = await fetch(`${API}/geocode?place_id=${encodeURIComponent(prediction.placeId)}`);
-    if (r.ok) {
+    
+    if (!r.ok) {
+      log.warn(`Geocode API error for place_id: HTTP ${r.status} ${r.statusText}`);
+      // Continue to fallback attempt
+    } else {
       const d: GeocodeResult = await r.json();
       if (d.lat && d.lng) return { lat: d.lat, lng: d.lng, address: d.formattedAddress };
     }
+    
     /* place_id lookup failed — retry with address text (Nominatim fallback path) */
     if (prediction.description) {
       const r2 = await fetch(`${API}/geocode?address=${encodeURIComponent(prediction.description)}`);
-      if (r2.ok) {
-        const d2: GeocodeResult = await r2.json();
-        if (d2.lat && d2.lng) return { lat: d2.lat, lng: d2.lng, address: d2.formattedAddress ?? prediction.description };
+      
+      if (!r2.ok) {
+        log.warn(`Geocode API error for address fallback: HTTP ${r2.status} ${r2.statusText}`);
+        throw new Error(`Geocode failed: HTTP ${r2.status}`);
       }
+      
+      const d2: GeocodeResult = await r2.json();
+      if (d2.lat && d2.lng) return { lat: d2.lat, lng: d2.lng, address: d2.formattedAddress ?? prediction.description };
     }
+    
     throw new Error("geocode failed for place_id and address");
-  } catch {
+  } catch (err) {
+    log.error("Error resolving location:", err);
     showError?.("Could not resolve location. Please try selecting a different address.");
     return null;
   }

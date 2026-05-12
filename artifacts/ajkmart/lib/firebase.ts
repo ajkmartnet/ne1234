@@ -11,6 +11,8 @@
 
 import type { FirebaseApp } from "firebase/app";
 import type { Auth } from "firebase/auth";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[firebase]");
 
 let _app: FirebaseApp | null = null;
 let _auth: Auth | null = null;
@@ -30,23 +32,50 @@ function getFirebaseConfig() {
 }
 
 export async function getFirebaseAuth(): Promise<Auth | null> {
-  if (_initialized) return _auth;
+  if (_initialized) {
+    if (!_auth) {
+      log.debug("Firebase not available (previously failed or not configured)");
+    }
+    return _auth;
+  }
   _initialized = true;
 
   const config = getFirebaseConfig();
-  if (!config) return null;
+  if (!config) {
+    log.warn("Firebase not configured — EXPO_PUBLIC_FIREBASE_API_KEY not set. Sign-in options will be limited.");
+    return null;
+  }
 
   try {
     const { initializeApp, getApps } = await import("firebase/app");
     const { getAuth } = await import("firebase/auth");
     _app = getApps().length === 0 ? initializeApp(config) : getApps()[0]!;
     _auth = getAuth(_app);
+    log.debug("Firebase initialized successfully");
     return _auth;
-  } catch {
+  } catch (err) {
+    log.error("Failed to initialize Firebase:", err);
     return null;
   }
 }
 
 export function isFirebaseConfigured(): boolean {
-  return !!process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
+  const configured = !!process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
+  if (!configured) {
+    log.warn("Firebase not configured — app will work without Google/phone sign-in options");
+  }
+  return configured;
+}
+
+/**
+ * Check if Firebase is available (configured AND successfully initialized).
+ * Use this before attempting Firebase operations.
+ */
+export async function isFirebaseAvailable(): Promise<boolean> {
+  const auth = await getFirebaseAuth();
+  const available = auth !== null;
+  if (!available && !log) {
+    log?.warn("Firebase features unavailable — falling back to phone OTP only");
+  }
+  return available;
 }

@@ -65,6 +65,25 @@ function checkEnv(): void {
   const isProduction = ["production", "staging"].includes(nodeEnv);
   const isDevMock = !process.env.VAULT_UNLOCKED && !isProduction;
 
+  /* Validate JWT secret strength (min 32 chars, must be hex or base64-like) */
+  function validateJwtSecret(secretName: string, secretValue: string): string | null {
+    if (!secretValue) return `${secretName} is empty`;
+    if (secretValue.length < 32) return `${secretName} too short (min 32 chars, got ${secretValue.length})`;
+    // Check if it's hex (most common for generated secrets)
+    if (!/^[a-fA-F0-9]+$/.test(secretValue) && 
+        !/^[A-Za-z0-9+/=]+$/.test(secretValue)) {
+      return `${secretName} has invalid format (must be hex or base64-like)`;
+    }
+    return null;
+  }
+
+  /* Validate encryption key strength */
+  function validateEncryptionKey(keyValue: string): string | null {
+    if (!keyValue) return "ENCRYPTION_MASTER_KEY is empty";
+    if (keyValue.length < 32) return `ENCRYPTION_MASTER_KEY too short (min 32 chars, got ${keyValue.length})`;
+    return null;
+  }
+
   /* Warn loudly (fatal in production) if dev placeholder JWT secrets are in use */
   if (isProduction) {
     const placeholderVars = JWT_SECRET_VARS.filter(
@@ -76,6 +95,30 @@ function checkEnv(): void {
         "[env:check] FATAL — dev placeholder JWT secrets detected in production. " +
         "Generate new secrets: node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\" " +
         "and update them in the Replit Secrets panel before deploying.",
+      );
+      process.exit(1);
+    }
+
+    // In production, validate all JWT secrets meet strength requirements
+    const secretErrors = [];
+    for (const k of JWT_SECRET_VARS) {
+      if (process.env[k]) {
+        const error = validateJwtSecret(k, process.env[k]!);
+        if (error) secretErrors.push(error);
+      }
+    }
+    
+    // Validate encryption key
+    if (process.env.ENCRYPTION_MASTER_KEY) {
+      const encError = validateEncryptionKey(process.env.ENCRYPTION_MASTER_KEY);
+      if (encError) secretErrors.push(encError);
+    }
+
+    if (secretErrors.length > 0) {
+      logger.fatal(
+        { errors: secretErrors },
+        "[env:check] FATAL — weak or invalid secrets detected in production. " +
+        "Generate proper secrets and update them in the Replit Secrets panel."
       );
       process.exit(1);
     }

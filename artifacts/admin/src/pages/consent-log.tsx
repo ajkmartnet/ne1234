@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { adminFetch } from "@/lib/adminFetcher";
 import { FileText, Download, Filter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -39,6 +40,7 @@ function exportCsv(entries: ConsentLogEntry[], filename = "consent-log.csv") {
 }
 
 export default function ConsentLogPage() {
+  const { toast } = useToast();
   const [policyFilter, setPolicyFilter] = useState("");
   const [versionFilter, setVersionFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -77,7 +79,11 @@ export default function ConsentLogPage() {
       const all = await adminFetch(`/legal/consent-log?${buildQs(9999, 0)}`) as ApiPaginated<ConsentLogEntry>;
       exportCsv(all.items ?? [], `consent-log-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Export failed. Please try again.");
+      toast({
+        title: "Export failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setExportLoading(false);
     }

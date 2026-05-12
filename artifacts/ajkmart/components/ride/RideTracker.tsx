@@ -171,7 +171,9 @@ export function RideTracker({
       socket.on("ride:otp", (payload: { rideId: string; otp: string }) => {
         if (payload.rideId === rideId && payload.otp) setTripOtp(payload.otp);
       });
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      log.warn("Socket.io load failed:", err instanceof Error ? err.message : String(err));
+    });
     return () => {
       unmounted = true;
       if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null; }

@@ -576,4 +576,80 @@ router.post("/bookmarks/:offerId", async (req: Request, res) => {
   }
 });
 
+router.get("/bookmarks", async (req: Request, res) => {
+  try {
+    const userId = req.customerId;
+    if (!userId) { sendValidationError(res, "auth required"); return; }
+
+    const bookmarkRows = await db.select({ offerId: offerRedemptionsTable.offerId })
+      .from(offerRedemptionsTable)
+      .where(and(
+        eq(offerRedemptionsTable.userId, userId),
+        sql`${offerRedemptionsTable.orderId} IS NULL`,
+        sql`${offerRedemptionsTable.discount} = '0'`,
+      ));
+
+    if (bookmarkRows.length === 0) {
+      sendSuccess(res, { offers: [] });
+      return;
+    }
+
+    const offerIds = bookmarkRows.map(r => r.offerId);
+    const offers = await db.select().from(offersTable).where(inArray(offersTable.id, offerIds));
+    sendSuccess(res, { offers: offers.map(o => mapOffer(o)) });
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
+});
+
+router.post("/offers/:id/submit", marketingAuth, async (req: Request, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const [offer] = await db.select().from(offersTable).where(eq(offersTable.id, id)).limit(1);
+    if (!offer) { sendNotFound(res, "Offer not found"); return; }
+    if (offer.status !== "draft") {
+      sendError(res, "Only draft offers can be submitted for approval", 400); return;
+    }
+    await db.update(offersTable).set({ status: "pending_approval", updatedAt: new Date() }).where(eq(offersTable.id, id));
+    sendSuccess(res, { id, status: "pending_approval" });
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
+});
+
+router.post("/offers/:id/approve", managerAuth, async (req: Request, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const [offer] = await db.select().from(offersTable).where(eq(offersTable.id, id)).limit(1);
+    if (!offer) { sendNotFound(res, "Offer not found"); return; }
+    if (offer.status !== "pending_approval") {
+      sendError(res, "Only offers pending approval can be approved", 400); return;
+    }
+    await db.update(offersTable)
+      .set({ status: "scheduled", approvedBy: req.adminId, updatedAt: new Date() })
+      .where(eq(offersTable.id, id));
+    sendSuccess(res, { id, status: "scheduled", approvedBy: req.adminId });
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
+});
+
+router.post("/offers/:id/reject", managerAuth, async (req: Request, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const [offer] = await db.select().from(offersTable).where(eq(offersTable.id, id)).limit(1);
+    if (!offer) { sendNotFound(res, "Offer not found"); return; }
+    if (offer.status !== "pending_approval") {
+      sendError(res, "Only offers pending approval can be rejected", 400); return;
+    }
+    const { reason } = req.body as { reason?: string };
+    await db.update(offersTable)
+      .set({ status: "rejected", approvedBy: req.adminId, updatedAt: new Date() })
+      .where(eq(offersTable.id, id));
+    sendSuccess(res, { id, status: "rejected", reason: reason ?? null });
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
+});
+
 export default router;

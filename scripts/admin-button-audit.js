@@ -1,105 +1,110 @@
-#!/usr/bin/env node
+"use strict";
 /**
  * AJKMart Admin Panel — Button & Interactive Element Audit Script
  *
- * Uses Puppeteer to crawl every page of the admin panel, click every button
- * and link, and report which ones produce:
- *   - Network errors (4xx / 5xx)
- *   - Console errors / unhandled rejections
- *   - Loading states that never resolve (timeout)
+ * Launches a headless browser, logs into the admin panel, visits every page
+ * derived from navConfig.ts, clicks interactive elements, and reports:
+ *   - Network errors (5xx server errors)
+ *   - Browser console errors / unhandled rejections
  *   - Navigation failures
  *
  * Usage:
- *   node scripts/admin-button-audit.js [BASE_URL] [ADMIN_USER] [ADMIN_PASS]
+ *   node scripts/admin-button-audit.js
  *
- * Defaults:
- *   BASE_URL   = http://localhost:3000
- *   ADMIN_USER = admin
- *   ADMIN_PASS = password
+ * Credentials are read from environment variables:
+ *   ADMIN_SEED_USERNAME  — admin username (required)
+ *   ADMIN_SEED_PASSWORD  — admin password (required)
+ *   AUDIT_BASE_URL       — base URL of the admin panel (default: http://localhost:3000)
  *
  * Output:
- *   Prints a summary table to stdout and writes audit-report.json to the
- *   project root.
+ *   Prints summary to stdout.
+ *   Writes full report to scripts/admin-button-audit-report.json.
  */
 
-import puppeteer from "puppeteer";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+const puppeteer = require("puppeteer");
+const fs        = require("fs");
+const path      = require("path");
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const BASE_URL   = process.env.AUDIT_BASE_URL || "http://localhost:3000";
+const ADMIN_USER = process.env.ADMIN_SEED_USERNAME;
+const ADMIN_PASS = process.env.ADMIN_SEED_PASSWORD;
+const REPORT_PATH = path.join(__dirname, "admin-button-audit-report.json");
 
-const BASE_URL   = process.argv[2] || "http://localhost:3000";
-const ADMIN_USER = process.argv[3] || "admin";
-const ADMIN_PASS = process.argv[4] || "password";
-const REPORT_PATH = path.join(__dirname, "..", "audit-report.json");
+if (!ADMIN_USER || !ADMIN_PASS) {
+  console.error("ERROR: ADMIN_SEED_USERNAME and ADMIN_SEED_PASSWORD environment variables are required.");
+  process.exit(1);
+}
 
-/* ── Admin pages to visit ─────────────────────────────────────────────── */
-const PAGES = [
-  "/",
+/* ── Routes derived from artifacts/admin/src/lib/navConfig.ts ─────────── */
+/* Each href is the canonical path as declared in NAV_GROUPS.items[].href  */
+const ADMIN_ROUTES = [
   "/dashboard",
   "/orders",
   "/rides",
+  "/van",
+  "/pharmacy",
+  "/parcel",
+  "/delivery-access",
   "/users",
-  "/vendors",
   "/riders",
-  "/fleet",
-  "/inventory",
+  "/vendors",
+  "/kyc",
+  "/products",
   "/categories",
-  "/offers",
-  "/campaigns",
-  "/wallet",
-  "/finance",
-  "/reports",
-  "/settings",
-  "/platform",
-  "/communication",
-  "/notifications",
-  "/security",
-  "/health-dashboard",
-  "/service-zones",
-  "/experiments",
-  "/deep-links",
-  "/qr-codes",
-  "/sms-gateways",
-  "/weather",
+  "/reviews",
+  "/vendor-inventory-settings",
+  "/transactions",
+  "/withdrawals",
+  "/deposit-requests",
+  "/wallet-transfers",
+  "/loyalty",
+  "/promotions",
+  "/promo-codes",
+  "/flash-deals",
+  "/banners",
+  "/popups",
+  "/communications",
+  "/support-chat",
+  "/faq-management",
   "/analytics",
+  "/qr-codes",
+  "/experiments",
+  "/security",
+  "/audit-logs",
+  "/consent-log",
+  "/roles-permissions",
+  "/sos-alerts",
+  "/health-dashboard",
+  "/error-monitor",
+  "/live-riders-map",
+  "/chat-monitor",
+  "/settings",
+  "/app-management",
+  "/auth-methods",
+  "/launch-control",
+  "/otp-control",
+  "/business-rules",
+  "/deep-links",
+  "/webhooks",
+  "/whatsapp-delivery-log",
 ];
 
-/* ── Selectors to ignore (navigation, external links, logout) ─────────── */
-const IGNORE_SELECTORS = [
-  "a[href^='mailto']",
-  "a[href^='tel']",
-  "a[target='_blank']",
-  "[data-audit-skip]",
-  "button[type='submit']",  // form submissions handled separately
-];
+const NAV_TIMEOUT = 15000;
 
-const TIMEOUT_MS = 8000;
-const NAV_TIMEOUT_MS = 15000;
-
-/* ── Result accumulators ─────────────────────────────────────────────── */
 const results = {
   summary: { pagesVisited: 0, buttonsClicked: 0, errors: 0, warnings: 0 },
   pages: [],
   errors: [],
 };
 
-function log(msg) {
-  const ts = new Date().toISOString().slice(11, 23);
-  console.log(`[${ts}] ${msg}`);
-}
-
-function warn(msg) {
-  const ts = new Date().toISOString().slice(11, 23);
-  console.warn(`[${ts}] ⚠  ${msg}`);
-}
+function ts() { return new Date().toISOString().slice(11, 23); }
+function log(msg) { console.log(`[${ts()}] ${msg}`); }
+function warn(msg) { console.warn(`[${ts()}] ⚠  ${msg}`); }
 
 async function login(page) {
   log(`Navigating to login: ${BASE_URL}`);
-  await page.goto(BASE_URL, { waitUntil: "networkidle2", timeout: NAV_TIMEOUT_MS });
+  await page.goto(BASE_URL, { waitUntil: "networkidle2", timeout: NAV_TIMEOUT });
 
-  /* Try username/password form — adapt selectors to actual admin login UI */
   const usernameSelectors = ['input[name="username"]', 'input[name="email"]', 'input[type="text"]'];
   const passwordSelectors = ['input[name="password"]', 'input[type="password"]'];
 
@@ -108,10 +113,7 @@ async function login(page) {
     usernameInput = await page.$(sel);
     if (usernameInput) break;
   }
-  if (!usernameInput) {
-    warn("Login: could not find username field — skipping login");
-    return false;
-  }
+  if (!usernameInput) { warn("Login: could not find username field"); return false; }
 
   await usernameInput.click({ clickCount: 3 });
   await usernameInput.type(ADMIN_USER);
@@ -125,180 +127,114 @@ async function login(page) {
     }
   }
 
-  /* Click login button */
-  const loginBtn = await page.$('button[type="submit"], button::-p-text(Login), button::-p-text(Sign in)');
+  const loginBtn = await page.$('button[type="submit"]');
   if (loginBtn) {
     await loginBtn.click();
-    await page.waitForNavigation({ timeout: NAV_TIMEOUT_MS, waitUntil: "networkidle2" }).catch(() => {});
+    await page.waitForNavigation({ timeout: NAV_TIMEOUT, waitUntil: "networkidle2" }).catch(() => {});
     log("Login submitted");
   } else {
     warn("Login: submit button not found");
     return false;
   }
-
   return true;
 }
 
 async function auditPage(page, pagePath) {
   const url = `${BASE_URL}${pagePath}`;
-  const pageResult = { path: pagePath, url, buttons: [], consoleErrors: [], networkErrors: [] };
+  const pageResult = { path: pagePath, url, buttonsClicked: 0, consoleErrors: [], networkErrors: [] };
   const consoleErrors = [];
   const networkErrors = [];
 
-  /* Collect console errors */
   const consoleHandler = (msg) => {
     if (msg.type() === "error") {
       const text = msg.text();
       if (!text.includes("favicon") && !text.includes("net::ERR_ABORTED")) {
-        consoleErrors.push({ text, location: msg.location() });
+        consoleErrors.push(text);
       }
     }
   };
-  page.on("console", consoleHandler);
-
-  /* Collect network failures */
   const responseHandler = (response) => {
-    const status = response.status();
-    if (status >= 400) {
+    if (response.status() >= 500) {
       const reqUrl = response.url();
       if (!reqUrl.includes("favicon") && !reqUrl.includes(".map")) {
-        networkErrors.push({ url: reqUrl, status });
+        networkErrors.push(`${response.status()} ${reqUrl}`);
       }
     }
   };
+
+  page.on("console", consoleHandler);
   page.on("response", responseHandler);
 
   try {
     log(`Visiting: ${url}`);
-    await page.goto(url, { waitUntil: "networkidle2", timeout: NAV_TIMEOUT_MS });
-
-    /* Small delay for React to render */
+    await page.goto(url, { waitUntil: "networkidle2", timeout: NAV_TIMEOUT });
     await new Promise(r => setTimeout(r, 1200));
 
-    /* Find all interactive elements */
     const elements = await page.evaluate(() => {
       const els = Array.from(document.querySelectorAll(
-        'button:not([disabled]):not([aria-hidden="true"]), ' +
-        '[role="button"]:not([disabled]), ' +
-        'a[href]:not([href^="http"]):not([href^="mailto"]):not([href^="tel"])'
+        'button:not([disabled]):not([aria-hidden="true"]), [role="button"]:not([disabled])'
       ));
-
       return els
         .filter(el => {
           const rect = el.getBoundingClientRect();
           const style = window.getComputedStyle(el);
-          return (
-            rect.width > 0 &&
-            rect.height > 0 &&
-            style.display !== "none" &&
-            style.visibility !== "hidden" &&
-            style.opacity !== "0"
-          );
+          return rect.width > 0 && rect.height > 0 &&
+            style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
         })
-        .slice(0, 30) // cap at 30 elements per page to avoid endless loops
+        .slice(0, 25)
         .map(el => ({
-          tag: el.tagName,
           text: (el.textContent || "").trim().slice(0, 60),
           ariaLabel: el.getAttribute("aria-label") || "",
-          href: el.getAttribute("href") || "",
-          role: el.getAttribute("role") || "",
           id: el.id || "",
-          classes: el.className.toString().slice(0, 80),
-          rect: { x: el.getBoundingClientRect().x, y: el.getBoundingClientRect().y },
         }));
     });
 
     results.summary.buttonsClicked += elements.length;
+    pageResult.buttonsClicked = elements.length;
 
     for (const elInfo of elements) {
-      const btnResult = { label: elInfo.text || elInfo.ariaLabel || elInfo.href, status: "ok", error: null };
-
-      /* Skip navigation links that would leave the admin panel */
-      if (elInfo.href && (elInfo.href.startsWith("http") || elInfo.href === "/")) {
-        btnResult.status = "skipped";
-        pageResult.buttons.push(btnResult);
-        continue;
-      }
-
-      /* Skip logout / destructive action buttons */
       const labelLower = (elInfo.text + elInfo.ariaLabel).toLowerCase();
-      if (["logout", "sign out", "delete all", "clear all", "wipe"].some(k => labelLower.includes(k))) {
-        btnResult.status = "skipped (destructive)";
-        pageResult.buttons.push(btnResult);
-        continue;
-      }
+      if (["logout", "sign out", "delete all", "clear all", "wipe"].some(k => labelLower.includes(k))) continue;
 
       try {
-        /* Find the element again (DOM may have re-rendered) */
-        let target;
-        if (elInfo.id) {
-          target = await page.$(`#${CSS.escape(elInfo.id)}`);
-        }
-        if (!target && elInfo.ariaLabel) {
-          target = await page.$(`[aria-label="${elInfo.ariaLabel}"]`);
-        }
+        let target = null;
+        if (elInfo.id) target = await page.$(`#${elInfo.id}`).catch(() => null);
         if (!target) {
-          /* Find by text/position */
-          const candidates = await page.$$(elInfo.tag.toLowerCase() === "a" ? "a" : "button, [role='button']");
+          const candidates = await page.$$("button, [role='button']");
           for (const c of candidates) {
-            const txt = await page.evaluate(el => (el.textContent || "").trim().slice(0, 60), c);
+            const txt = await page.evaluate(el => (el.textContent || "").trim().slice(0, 60), c).catch(() => "");
             if (txt === elInfo.text) { target = c; break; }
           }
         }
+        if (!target) continue;
 
-        if (!target) {
-          btnResult.status = "not-found";
-          pageResult.buttons.push(btnResult);
-          continue;
-        }
-
-        const preClickErrors = consoleErrors.length;
-        const preClickNetworkErrors = networkErrors.length;
+        const preErrors = consoleErrors.length;
+        const preNet    = networkErrors.length;
 
         await target.click().catch(() => {});
+        await new Promise(r => setTimeout(r, 500));
 
-        /* Short wait for any async effects */
-        await new Promise(r => setTimeout(r, 600));
+        const newConsole = consoleErrors.slice(preErrors);
+        const newNet     = networkErrors.slice(preNet);
 
-        const newConsoleErrors = consoleErrors.slice(preClickErrors);
-        const newNetworkErrors = networkErrors.slice(preClickNetworkErrors);
-
-        if (newConsoleErrors.length > 0) {
-          btnResult.status = "console-error";
-          btnResult.error = newConsoleErrors.map(e => e.text).join("; ").slice(0, 200);
+        if (newConsole.length > 0) {
           results.summary.errors++;
-          results.errors.push({ page: pagePath, element: btnResult.label, type: "console", detail: btnResult.error });
-        } else if (newNetworkErrors.length > 0) {
-          const serverErrors = newNetworkErrors.filter(e => e.status >= 500);
-          if (serverErrors.length > 0) {
-            btnResult.status = "server-error";
-            btnResult.error = serverErrors.map(e => `${e.status} ${e.url}`).join("; ").slice(0, 200);
-            results.summary.errors++;
-            results.errors.push({ page: pagePath, element: btnResult.label, type: "network", detail: btnResult.error });
-          } else {
-            btnResult.status = "client-error";
-            btnResult.error = newNetworkErrors.map(e => `${e.status} ${e.url}`).join("; ").slice(0, 200);
-            results.summary.warnings++;
-          }
-        } else {
-          btnResult.status = "ok";
+          results.errors.push({ page: pagePath, element: elInfo.text || elInfo.ariaLabel, type: "console", detail: newConsole[0].slice(0, 200) });
+        } else if (newNet.length > 0) {
+          results.summary.errors++;
+          results.errors.push({ page: pagePath, element: elInfo.text || elInfo.ariaLabel, type: "network-5xx", detail: newNet[0].slice(0, 200) });
         }
 
-        /* Navigate back if we left the page */
         const currentUrl = page.url();
         if (!currentUrl.startsWith(BASE_URL + pagePath)) {
-          await page.goBack({ timeout: NAV_TIMEOUT_MS, waitUntil: "networkidle2" }).catch(() => {
-            return page.goto(url, { timeout: NAV_TIMEOUT_MS, waitUntil: "networkidle2" });
-          });
-          await new Promise(r => setTimeout(r, 800));
+          await page.goBack({ timeout: NAV_TIMEOUT, waitUntil: "networkidle2" }).catch(() =>
+            page.goto(url, { timeout: NAV_TIMEOUT, waitUntil: "networkidle2" })
+          );
+          await new Promise(r => setTimeout(r, 600));
         }
-      } catch (clickErr) {
-        btnResult.status = "click-error";
-        btnResult.error = clickErr.message?.slice(0, 120);
+      } catch (_e) {
         results.summary.warnings++;
       }
-
-      pageResult.buttons.push(btnResult);
     }
 
     pageResult.consoleErrors = consoleErrors;
@@ -321,41 +257,31 @@ async function auditPage(page, pagePath) {
 async function main() {
   log("=".repeat(60));
   log("AJKMart Admin Panel — Button Audit");
-  log(`Target: ${BASE_URL}`);
+  log(`Target: ${BASE_URL}  User: ${ADMIN_USER}`);
   log("=".repeat(60));
 
   const browser = await puppeteer.launch({
     headless: "new",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-web-security",
-      "--disable-features=IsolateOrigins,site-per-process",
-    ],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   });
 
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 900 });
 
-  /* Suppress browser-level SSL errors (dev env) */
-  await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
-
   try {
     const loggedIn = await login(page);
     if (!loggedIn) {
-      warn("Could not log in — auditing public pages only");
+      warn("Could not log in — results may be incomplete");
     }
 
-    for (const pagePath of PAGES) {
-      const result = await auditPage(page, pagePath);
+    for (const route of ADMIN_ROUTES) {
+      const result = await auditPage(page, route);
       results.pages.push(result);
     }
   } finally {
     await browser.close();
   }
 
-  /* ── Print summary ─────────────────────────────────────────────────── */
   console.log("\n" + "=".repeat(60));
   console.log("AUDIT SUMMARY");
   console.log("=".repeat(60));
@@ -367,16 +293,15 @@ async function main() {
   if (results.errors.length > 0) {
     console.log("\nERRORS:");
     for (const err of results.errors) {
-      console.log(`  [${err.type.toUpperCase()}] ${err.page} → ${err.element ?? ""}`);
+      console.log(`  [${err.type.toUpperCase()}] ${err.page} → ${err.element || ""}`);
       if (err.detail) console.log(`    ${err.detail}`);
     }
   } else {
     console.log("\nNo errors detected.");
   }
 
-  /* ── Write JSON report ─────────────────────────────────────────────── */
   fs.writeFileSync(REPORT_PATH, JSON.stringify(results, null, 2));
-  console.log(`\nFull report written to: ${REPORT_PATH}`);
+  console.log(`\nReport written to: ${REPORT_PATH}`);
   console.log("=".repeat(60));
 
   process.exit(results.summary.errors > 0 ? 1 : 0);

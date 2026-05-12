@@ -315,6 +315,7 @@ export default function OrderDetailScreen() {
         });
         socketRef.current = socket;
 
+
         socket.on("connect", () => {
           retryCount = 0;
           if (mountedRef.current) setSocketDropped(false);
@@ -357,6 +358,8 @@ export default function OrderDetailScreen() {
             setOrder((prev) => prev ? { ...prev, ...updated } : (updated as OrderDetail));
           }
         });
+      }).catch((err: unknown) => {
+        log.warn("Socket.io load failed:", err instanceof Error ? err.message : String(err));
       });
     };
 

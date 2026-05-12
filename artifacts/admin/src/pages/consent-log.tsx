@@ -76,8 +76,8 @@ export default function ConsentLogPage() {
     try {
       const all = await adminFetch(`/legal/consent-log?${buildQs(9999, 0)}`) as ApiPaginated<ConsentLogEntry>;
       exportCsv(all.items ?? [], `consent-log-${new Date().toISOString().slice(0, 10)}.csv`);
-    } catch {
-      /* silently fail */
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Export failed. Please try again.");
     } finally {
       setExportLoading(false);
     }

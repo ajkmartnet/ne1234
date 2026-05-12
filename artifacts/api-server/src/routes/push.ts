@@ -55,67 +55,58 @@ router.get("/vapid-key", (_req, res) => {
 });
 
 router.post("/subscribe", anyUserAuth, async (req, res) => {
-  const parsed = subscribeSchema.safeParse(req.body);
-  if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid subscription data"); return; }
-  const userId = req.customerId!;
-  const user   = req.customerUser!;
-  const data   = parsed.data;
+  try {
+    const parsed = subscribeSchema.safeParse(req.body);
+    if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid subscription data"); return; }
+    const userId = req.customerId!;
+    const user   = req.customerUser!;
+    const data   = parsed.data;
 
-  /* Derive role server-side from the user's actual roles; validate any hint. */
-  const role = resolveRole(user.roles ?? null, data.role);
+    const role = resolveRole(user.roles ?? null, data.role);
 
-  if (data.type === "fcm") {
-    const { token } = data;
-    /* 
-       RESOLUTION: KEEP BOTH SIDES LOGIC AS MUCH AS POSSIBLE OR MERGE INTENT.
-       HEAD wants to avoid wiping tokens from other devices.
-       8b1e877 wants to avoid accumulation of stale tokens.
-       The strategy from HEAD (comment lines 70-79) mentions that stale tokens 
-       are purged lazily by sendPushToUser(). This sounds more advanced.
-       However, 8b1e877's strategy of deleting all existing FCM rows for user+role 
-       is a security hardening (fresh push).
-       Rule 2 says keep all code. Rule 4 says keep security hardening.
-       If we delete first, we satisfy 8b1e877. Then we insert.
-    */
-    
-    /* Delete ALL existing FCM rows for this user+role so rotated/stale tokens
-       don't accumulate.  When FCM rotates the token (reinstall, OS update, etc.)
-       the old token would never be cleaned up if we only matched on the token
-       value itself.  Replacing by user+role is safe: one device, one active token. */
-    await db.delete(pushSubscriptionsTable)
-      .where(and(
-        eq(pushSubscriptionsTable.userId, userId),
-        eq(pushSubscriptionsTable.tokenType, "fcm"),
-        eq(pushSubscriptionsTable.role, role),
-      ));
+    if (data.type === "fcm") {
+      const { token } = data;
+      await db.delete(pushSubscriptionsTable)
+        .where(and(
+          eq(pushSubscriptionsTable.userId, userId),
+          eq(pushSubscriptionsTable.tokenType, "fcm"),
+          eq(pushSubscriptionsTable.role, role),
+        ));
 
-    const id = generateId();
-    await db.insert(pushSubscriptionsTable).values({
-      id, userId, role, tokenType: "fcm", endpoint: token, p256dh: null, authKey: null,
-    });
-    sendSuccess(res, { id });
-  } else {
-    const { endpoint, p256dh, auth } = data;
-    await db.delete(pushSubscriptionsTable)
-      .where(and(eq(pushSubscriptionsTable.userId, userId), eq(pushSubscriptionsTable.endpoint, endpoint)));
-    const id = generateId();
-    await db.insert(pushSubscriptionsTable).values({
-      id, userId, role, tokenType: "vapid", endpoint, p256dh, authKey: auth,
-    });
-    sendSuccess(res, { id });
+      const id = generateId();
+      await db.insert(pushSubscriptionsTable).values({
+        id, userId, role, tokenType: "fcm", endpoint: token, p256dh: null, authKey: null,
+      });
+      sendSuccess(res, { id });
+    } else {
+      const { endpoint, p256dh, auth } = data;
+      await db.delete(pushSubscriptionsTable)
+        .where(and(eq(pushSubscriptionsTable.userId, userId), eq(pushSubscriptionsTable.endpoint, endpoint)));
+      const id = generateId();
+      await db.insert(pushSubscriptionsTable).values({
+        id, userId, role, tokenType: "vapid", endpoint, p256dh, authKey: auth,
+      });
+      sendSuccess(res, { id });
+    }
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
   }
 });
 
 router.delete("/unsubscribe", anyUserAuth, async (req, res) => {
-  const userId = req.customerId!;
-  const { endpoint } = req.body as { endpoint?: string };
-  if (endpoint) {
-    await db.delete(pushSubscriptionsTable)
-      .where(and(eq(pushSubscriptionsTable.userId, userId), eq(pushSubscriptionsTable.endpoint, endpoint)));
-  } else {
-    await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.userId, userId));
+  try {
+    const userId = req.customerId!;
+    const { endpoint } = req.body as { endpoint?: string };
+    if (endpoint) {
+      await db.delete(pushSubscriptionsTable)
+        .where(and(eq(pushSubscriptionsTable.userId, userId), eq(pushSubscriptionsTable.endpoint, endpoint)));
+    } else {
+      await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.userId, userId));
+    }
+    sendSuccess(res);
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
   }
-  sendSuccess(res);
 });
 
 export default router;

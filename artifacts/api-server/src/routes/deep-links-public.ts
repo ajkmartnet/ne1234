@@ -6,27 +6,28 @@ import { eq, sql } from "drizzle-orm";
 const router = Router();
 
 router.get("/:code", async (req, res) => {
-  const code = req.params["code"]!;
-  const [link] = await db.select().from(deepLinksTable)
-    .where(eq(deepLinksTable.shortCode, code))
-    .limit(1);
+  try {
+    const code = req.params["code"]!;
+    const [link] = await db.select().from(deepLinksTable)
+      .where(eq(deepLinksTable.shortCode, code))
+      .limit(1);
 
-  if (!link) {
-    res.status(404).json({ error: "Link not found" });
-    return;
-  }
+    if (!link) {
+      res.status(404).json({ error: "Link not found" });
+      return;
+    }
 
-  await db.update(deepLinksTable)
-    .set({ clickCount: sql`${deepLinksTable.clickCount} + 1` })
-    .where(eq(deepLinksTable.id, link.id));
+    await db.update(deepLinksTable)
+      .set({ clickCount: sql`${deepLinksTable.clickCount} + 1` })
+      .where(eq(deepLinksTable.id, link.id));
 
-  const params = link.params as Record<string, string>;
-  const queryParts = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
-  const query = queryParts.length ? `?${queryParts.join("&")}` : "";
+    const params = link.params as Record<string, string>;
+    const queryParts = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+    const query = queryParts.length ? `?${queryParts.join("&")}` : "";
 
-  const appScheme = `ajkmart://${link.targetScreen}${query}`;
+    const appScheme = `ajkmart://${link.targetScreen}${query}`;
 
-  res.send(`<!DOCTYPE html>
+    res.send(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -52,6 +53,9 @@ router.get("/:code", async (req, res) => {
   <script>window.location.href = "${appScheme}";</script>
 </body>
 </html>`);
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 export default router;

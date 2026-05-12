@@ -11,14 +11,18 @@ export function loadRide() {
       return;
     }
 
-    const [ride] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
-    if (!ride) {
-      res.status(404).json({ error: "Ride not found" });
-      return;
-    }
+    try {
+      const [ride] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
+      if (!ride) {
+        res.status(404).json({ error: "Ride not found" });
+        return;
+      }
 
-    req.ride = ride;
-    next();
+      req.ride = ride;
+      next();
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   };
 }
 
@@ -33,12 +37,17 @@ export function requireRideState(allowedStates: string[]) {
         return;
       }
 
-      const [found] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
-      if (!found) {
-        res.status(404).json({ error: "Ride not found" });
+      try {
+        const [found] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
+        if (!found) {
+          res.status(404).json({ error: "Ride not found" });
+          return;
+        }
+        ride = found;
+      } catch (err) {
+        res.status(500).json({ error: "Internal server error" });
         return;
       }
-      ride = found;
     }
 
     if (!allowedStates.includes(ride!.status)) {

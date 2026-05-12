@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { generateId } from "../lib/id.js";
 import { customerAuth } from "../middleware/security.js";
 import { getPlatformDefaultLanguage } from "../lib/getUserLanguage.js";
-import { sendSuccess, sendValidationError } from "../lib/response.js";
+import { sendSuccess, sendError, sendValidationError } from "../lib/response.js";
 
 const router: IRouter = Router();
 
@@ -36,49 +36,53 @@ const settingsUpdateSchema = z.object({
 }).strip();
 
 router.get("/", async (req, res) => {
-  const userId = req.customerId!;
-  const platformLang = await getPlatformDefaultLanguage();
+  try {
+    const userId = req.customerId!;
+    const platformLang = await getPlatformDefaultLanguage();
 
-  /* Upsert: create the row if it doesn't exist yet, touching nothing if it does.
-     Safe under concurrent GETs — onConflictDoNothing prevents PK collision. */
-  await db.insert(userSettingsTable)
-    .values({ id: generateId(), userId, ...DEFAULT_SETTINGS_BASE, language: platformLang })
-    .onConflictDoNothing();
+    await db.insert(userSettingsTable)
+      .values({ id: generateId(), userId, ...DEFAULT_SETTINGS_BASE, language: platformLang })
+      .onConflictDoNothing();
 
-  const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userId, userId)).limit(1);
-  sendSuccess(res, { ...settings!, updatedAt: settings!.updatedAt.toISOString() });
+    const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userId, userId)).limit(1);
+    sendSuccess(res, { ...settings!, updatedAt: settings!.updatedAt.toISOString() });
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
 });
 
 router.put("/", async (req, res) => {
-  const userId = req.customerId!;
+  try {
+    const userId = req.customerId!;
 
-  const parsed = settingsUpdateSchema.safeParse(req.body ?? {});
-  if (!parsed.success) {
-    const msg = parsed.error.errors.map(e => e.message).join("; ");
-    sendValidationError(res, msg);
-    return;
+    const parsed = settingsUpdateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      const msg = parsed.error.errors.map(e => e.message).join("; ");
+      sendValidationError(res, msg);
+      return;
+    }
+
+    const updates = parsed.data;
+    const platformLang = await getPlatformDefaultLanguage();
+
+    await db.insert(userSettingsTable)
+      .values({
+        id: generateId(),
+        userId,
+        ...DEFAULT_SETTINGS_BASE,
+        language: platformLang,
+        ...updates,
+      })
+      .onConflictDoUpdate({
+        target: userSettingsTable.userId,
+        set: { ...updates, updatedAt: new Date() },
+      });
+
+    const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userId, userId)).limit(1);
+    sendSuccess(res, { ...settings!, updatedAt: settings!.updatedAt.toISOString() });
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
   }
-
-  const updates = parsed.data;
-  const platformLang = await getPlatformDefaultLanguage();
-
-  /* Single upsert: creates the row with defaults if absent, or updates only
-     the validated changed fields if the row exists. Race-safe — no PK collision. */
-  await db.insert(userSettingsTable)
-    .values({
-      id: generateId(),
-      userId,
-      ...DEFAULT_SETTINGS_BASE,
-      language: platformLang,
-      ...updates,
-    })
-    .onConflictDoUpdate({
-      target: userSettingsTable.userId,
-      set: { ...updates, updatedAt: new Date() },
-    });
-
-  const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userId, userId)).limit(1);
-  sendSuccess(res, { ...settings!, updatedAt: settings!.updatedAt.toISOString() });
 });
 
 export default router;

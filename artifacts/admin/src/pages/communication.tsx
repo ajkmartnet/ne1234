@@ -152,8 +152,11 @@ function DashboardTab() {
   const { state: authState } = useAdminAuth();
   const token = authState.accessToken ?? "";
 
+  const { toast } = useToast();
+
   useEffect(() => {
-    adminFetch("/communication/dashboard").then(setStats).catch((err) => {
+    adminFetch("/communication/dashboard").then(setStats).catch((err: unknown) => {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to load dashboard stats", variant: "destructive" });
     });
 
     const socket = io(window.location.origin, {
@@ -221,7 +224,10 @@ function SettingsTab() {
         }
       }
       setLoaded(true);
-    }).catch(() => { setLoaded(true); });
+    }).catch((err: unknown) => {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to load communication settings", variant: "destructive" });
+      setLoaded(true);
+    });
   }, []);
 
   const save = async () => {
@@ -469,10 +475,14 @@ function ConversationsTab() {
     setListError("");
     fetchAdmin(`/communication/conversations?search=${encodeURIComponent(debouncedSearch)}&page=${page}&limit=${LIMIT}`)
       .then((d) => { setConversations((d.data as ConversationItem[]) || []); setTotal((d.total as number) || 0); })
+<<<<<<< HEAD
       .catch((err: unknown) => {
         console.error("[communication] conversations fetch failed:", err);
         setListError("Failed to load conversations. Please try again.");
       });
+=======
+      .catch((err: unknown) => { console.error("[communication] conversations fetch failed:", err); setConversations([]); setTotal(0); });
+>>>>>>> cbe39fe (Task #5: Full system async/error handling audit and E2E bug fix)
   }, [debouncedSearch, page]);
 
   const viewMessages = async (conv: ConversationItem) => {
@@ -612,10 +622,14 @@ function CallHistoryTab() {
     setListError("");
     fetchAdmin(`/communication/calls?page=${page}&limit=${LIMIT}`)
       .then((d) => { setCalls((d.data as CallItem[]) || []); setTotal((d.total as number) || 0); })
+<<<<<<< HEAD
       .catch((err: unknown) => {
         console.error("[communication] calls fetch failed:", err);
         setListError("Failed to load call history. Please try again.");
       });
+=======
+      .catch((err: unknown) => { console.error("[communication] calls fetch failed:", err); setCalls([]); setTotal(0); });
+>>>>>>> cbe39fe (Task #5: Full system async/error handling audit and E2E bug fix)
   }, [page]);
 
   const statusColor: Record<string, string> = { completed: "default", missed: "destructive", rejected: "secondary", answered: "default", initiated: "outline" };
@@ -690,10 +704,14 @@ function AILogsTab() {
     setListError("");
     fetchAdmin(`/communication/ai-logs?page=${page}&limit=${LIMIT}`)
       .then((d) => { setLogs((d.data as AILogItem[]) || []); setTotal((d.total as number) || 0); })
+<<<<<<< HEAD
       .catch((err: unknown) => {
         console.error("[communication] ai-logs fetch failed:", err);
         setListError("Failed to load AI logs. Please try again.");
       });
+=======
+      .catch((err: unknown) => { console.error("[communication] ai-logs fetch failed:", err); setLogs([]); setTotal(0); });
+>>>>>>> cbe39fe (Task #5: Full system async/error handling audit and E2E bug fix)
   }, [page]);
 
   return (
@@ -765,7 +783,7 @@ function FlaggedTab() {
   const load = useCallback(() => {
     adminFetch(`/communication/flags?status=${status}`)
       .then((d: FlagItem[] | { data: FlagItem[] }) => setFlags(Array.isArray(d) ? d : d.data))
-      .catch((err: unknown) => { console.error("[communication] flags fetch failed:", err); });
+      .catch((err: unknown) => { console.error("[communication] flags fetch failed:", err); setFlags([]); });
   }, [status]);
 
   useEffect(() => { load(); }, [load]);

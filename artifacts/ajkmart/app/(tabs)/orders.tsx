@@ -1342,6 +1342,8 @@ function OrdersScreenInner() {
           return { ...prev, bookings: next };
         });
       });
+    }).catch((err: unknown) => {
+      log.warn("Socket.io load failed:", err instanceof Error ? err.message : String(err));
     });
 
     return () => {

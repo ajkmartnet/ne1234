@@ -171,7 +171,7 @@ export function RideTracker({
       socket.on("ride:otp", (payload: { rideId: string; otp: string }) => {
         if (payload.rideId === rideId && payload.otp) setTripOtp(payload.otp);
       });
-    });
+    }).catch(() => {});
     return () => {
       unmounted = true;
       if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null; }

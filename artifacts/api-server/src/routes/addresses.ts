@@ -4,7 +4,7 @@ import { savedAddressesTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { generateId } from "../lib/id.js";
-import { sendSuccess, sendCreated, sendNotFound, sendForbidden, sendValidationError } from "../lib/response.js";
+import { sendSuccess, sendCreated, sendNotFound, sendForbidden, sendValidationError, sendError } from "../lib/response.js";
 import { validateBody } from "../middleware/validate.js";
 import { customerAuth } from "../middleware/security.js";
 
@@ -15,11 +15,15 @@ router.use(customerAuth);
 const stripHtml = (s: string) => s.replace(/<[^>]*>/g, "").trim();
 
 router.get("/", async (req, res) => {
-  const userId = req.customerId!;
-  const addresses = await db.select().from(savedAddressesTable)
-    .where(eq(savedAddressesTable.userId, userId))
-    .orderBy(savedAddressesTable.createdAt);
-  sendSuccess(res, { addresses: addresses.map(a => ({ ...a, createdAt: a.createdAt.toISOString() })) });
+  try {
+    const userId = req.customerId!;
+    const addresses = await db.select().from(savedAddressesTable)
+      .where(eq(savedAddressesTable.userId, userId))
+      .orderBy(savedAddressesTable.createdAt);
+    sendSuccess(res, { addresses: addresses.map(a => ({ ...a, createdAt: a.createdAt.toISOString() })) });
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
 });
 
 const createAddressSchema = z.object({
@@ -39,84 +43,99 @@ const updateAddressSchema = z.object({
 });
 
 router.post("/", validateBody(createAddressSchema), async (req, res) => {
-  const userId = req.customerId!;
-  const { label, address, city, icon, isDefault } = req.body;
+  try {
+    const userId = req.customerId!;
+    const { label, address, city, icon, isDefault } = req.body;
 
-  const existing = await db.select({ id: savedAddressesTable.id }).from(savedAddressesTable).where(eq(savedAddressesTable.userId, userId));
-  if (existing.length >= 5) {
-    sendValidationError(res, "Maximum 5 addresses allowed", "زیادہ سے زیادہ 5 پتے مجاز ہیں۔");
-    return;
-  }
-
-  const id = generateId();
-
-  await db.transaction(async (tx) => {
-    if (isDefault) {
-      await tx.update(savedAddressesTable).set({ isDefault: false }).where(eq(savedAddressesTable.userId, userId));
+    const existing = await db.select({ id: savedAddressesTable.id }).from(savedAddressesTable).where(eq(savedAddressesTable.userId, userId));
+    if (existing.length >= 5) {
+      sendValidationError(res, "Maximum 5 addresses allowed", "زیادہ سے زیادہ 5 پتے مجاز ہیں۔");
+      return;
     }
-    await tx.insert(savedAddressesTable).values({
-      id,
-      userId,
-      label,
-      address,
-      city: city || null,
-      icon: icon || "location-outline",
-      isDefault: isDefault ?? false,
-    });
-  });
 
-  const [addr] = await db.select().from(savedAddressesTable).where(eq(savedAddressesTable.id, id)).limit(1);
-  sendCreated(res, { ...addr, createdAt: addr!.createdAt.toISOString() });
+    const id = generateId();
+
+    await db.transaction(async (tx) => {
+      if (isDefault) {
+        await tx.update(savedAddressesTable).set({ isDefault: false }).where(eq(savedAddressesTable.userId, userId));
+      }
+      await tx.insert(savedAddressesTable).values({
+        id,
+        userId,
+        label,
+        address,
+        city: city || null,
+        icon: icon || "location-outline",
+        isDefault: isDefault ?? false,
+      });
+    });
+
+    const [addr] = await db.select().from(savedAddressesTable).where(eq(savedAddressesTable.id, id)).limit(1);
+    sendCreated(res, { ...addr, createdAt: addr!.createdAt.toISOString() });
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
 });
 
 router.put("/:id", validateBody(updateAddressSchema), async (req, res) => {
-  const userId = req.customerId!;
-  const { label, address, city, icon, isDefault } = req.body;
-  const { id } = req.params;
+  try {
+    const userId = req.customerId!;
+    const { label, address, city, icon, isDefault } = req.body;
+    const { id } = req.params;
 
-  const [existing] = await db.select().from(savedAddressesTable).where(eq(savedAddressesTable.id, id!)).limit(1);
-  if (!existing) { sendNotFound(res, "Address not found", "پتہ نہیں ملا۔"); return; }
-  if (existing.userId !== userId) { sendForbidden(res, "Access denied", "رسائی سے انکار۔"); return; }
+    const [existing] = await db.select().from(savedAddressesTable).where(eq(savedAddressesTable.id, id!)).limit(1);
+    if (!existing) { sendNotFound(res, "Address not found", "پتہ نہیں ملا۔"); return; }
+    if (existing.userId !== userId) { sendForbidden(res, "Access denied", "رسائی سے انکار۔"); return; }
 
-  await db.transaction(async (tx) => {
-    if (isDefault) {
-      await tx.update(savedAddressesTable).set({ isDefault: false }).where(eq(savedAddressesTable.userId, userId));
-    }
-    await tx.update(savedAddressesTable).set({ label, address, city, icon, isDefault }).where(eq(savedAddressesTable.id, id!));
-  });
+    await db.transaction(async (tx) => {
+      if (isDefault) {
+        await tx.update(savedAddressesTable).set({ isDefault: false }).where(eq(savedAddressesTable.userId, userId));
+      }
+      await tx.update(savedAddressesTable).set({ label, address, city, icon, isDefault }).where(eq(savedAddressesTable.id, id!));
+    });
 
-  sendSuccess(res, null);
+    sendSuccess(res, null);
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
 });
 
 router.patch("/:id/set-default", async (req, res) => {
-  const userId = req.customerId!;
-  const { id } = req.params;
+  try {
+    const userId = req.customerId!;
+    const { id } = req.params;
 
-  const [existing] = await db.select().from(savedAddressesTable).where(eq(savedAddressesTable.id, id!)).limit(1);
-  if (!existing) { sendNotFound(res, "Address not found", "پتہ نہیں ملا۔"); return; }
-  if (existing.userId !== userId) { sendForbidden(res, "Access denied", "رسائی سے انکار۔"); return; }
+    const [existing] = await db.select().from(savedAddressesTable).where(eq(savedAddressesTable.id, id!)).limit(1);
+    if (!existing) { sendNotFound(res, "Address not found", "پتہ نہیں ملا۔"); return; }
+    if (existing.userId !== userId) { sendForbidden(res, "Access denied", "رسائی سے انکار۔"); return; }
 
-  await db.transaction(async (tx) => {
-    /* Clear all defaults, then set the target — both in the same transaction */
-    await tx.update(savedAddressesTable).set({ isDefault: false }).where(eq(savedAddressesTable.userId, userId));
-    await tx.update(savedAddressesTable).set({ isDefault: true }).where(and(
-      eq(savedAddressesTable.id, id!),
-      eq(savedAddressesTable.userId, userId),
-    ));
-  });
+    await db.transaction(async (tx) => {
+      await tx.update(savedAddressesTable).set({ isDefault: false }).where(eq(savedAddressesTable.userId, userId));
+      await tx.update(savedAddressesTable).set({ isDefault: true }).where(and(
+        eq(savedAddressesTable.id, id!),
+        eq(savedAddressesTable.userId, userId),
+      ));
+    });
 
-  sendSuccess(res, null);
+    sendSuccess(res, null);
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
 });
 
 router.delete("/:id", async (req, res) => {
-  const userId = req.customerId!;
+  try {
+    const userId = req.customerId!;
 
-  const [existing] = await db.select().from(savedAddressesTable).where(eq(savedAddressesTable.id, req.params["id"]!)).limit(1);
-  if (!existing) { sendNotFound(res, "Address not found", "پتہ نہیں ملا۔"); return; }
-  if (existing.userId !== userId) { sendForbidden(res, "Access denied", "رسائی سے انکار۔"); return; }
+    const [existing] = await db.select().from(savedAddressesTable).where(eq(savedAddressesTable.id, req.params["id"]!)).limit(1);
+    if (!existing) { sendNotFound(res, "Address not found", "پتہ نہیں ملا۔"); return; }
+    if (existing.userId !== userId) { sendForbidden(res, "Access denied", "رسائی سے انکار۔"); return; }
 
-  await db.delete(savedAddressesTable).where(eq(savedAddressesTable.id, req.params["id"]!));
-  sendSuccess(res, null);
+    await db.delete(savedAddressesTable).where(eq(savedAddressesTable.id, req.params["id"]!));
+    sendSuccess(res, null);
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
+  }
 });
 
 export default router;

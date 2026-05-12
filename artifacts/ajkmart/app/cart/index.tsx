@@ -34,7 +34,7 @@ import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { tDual, type TranslationKey } from "@workspace/i18n";
 import { createOrder, CreateOrderRequestPaymentMethod, type CreateOrderRequestType } from "@workspace/api-client-react";
-import { API_BASE, unwrapApiResponse } from "@/utils/api";
+import { API_BASE, apiRequest, unwrapApiResponse } from "@/utils/api";
 import { AuthGateSheet, useAuthGate, useRoleGate, RoleBlockSheet } from "@/components/AuthGateSheet";
 
 const C = Colors.light;
@@ -229,12 +229,9 @@ function AddressPickerModal({
       const loadedAddresses = addrLoaded.current ? addresses : [];
       const hasDefault = loadedAddresses.some(a => a.isDefault);
       const shouldBeDefault = addrLoaded.current && (loadedAddresses.length === 0 || !hasDefault);
-      const res = await fetch(`${API_BASE}/addresses`, {
+      const d = await apiRequest<{ address?: SavedAddress } & SavedAddress>("/addresses", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        token,
         body: JSON.stringify({
           label: newLabel.trim() || "Home",
           address: newAddress.trim(),
@@ -243,11 +240,6 @@ function AddressPickerModal({
           isDefault: shouldBeDefault,
         }),
       });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || "Failed to save address");
-      }
-      const d = unwrapApiResponse<{ address?: SavedAddress } & SavedAddress>(await res.json());
       const created: SavedAddress = d.address ?? d;
       onAddressCreated(created);
       resetForm();
@@ -506,11 +498,10 @@ function CartScreenInner() {
   useEffect(() => {
     if (!token || promoApplied) return;
     const ctrl = new AbortController();
-    fetch(`${API_BASE}/promotions/public?limit=5`, { signal: ctrl.signal, headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(json => {
+    apiRequest<{ offers?: CartAvailableOffer[] }>("/promotions/public?limit=5", { signal: ctrl.signal, token })
+      .then(data => {
         if (!mountedRef.current) return;
-        const offers: CartAvailableOffer[] = json?.data?.offers ?? json?.offers ?? [];
+        const offers: CartAvailableOffer[] = data?.offers ?? [];
         const codedOffers = offers.filter(o => o.code && (!o.minOrderAmount || o.minOrderAmount <= total));
         setAvailableOffers(codedOffers.slice(0, 3));
       })
@@ -525,21 +516,19 @@ function CartScreenInner() {
     if (!token || promoApplied || autoApplyDismissed || total <= 0) return;
     const ctrl = new AbortController();
     const orderType = cartType === "mixed" ? "mart" : cartType;
-    fetch(`${API_BASE}/promotions/auto-apply`, {
+    apiRequest<{ applied?: boolean; offer?: { id: string; name: string }; discount?: number; freeDelivery?: boolean; savingsMessage?: string }>("/promotions/auto-apply", {
       method: "POST",
       signal: ctrl.signal,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      token,
       body: JSON.stringify({ orderTotal: total, orderType }),
     })
-      .then(r => r.ok ? r.json() : null)
-      .then(json => {
+      .then(d => {
         if (!mountedRef.current) return;
-        const d = json?.data ?? json;
         if (d?.applied && d?.offer) {
           setAutoApplyOffer({
             offerId: d.offer.id,
             name: d.offer.name,
-            discount: d.discount,
+            discount: d.discount ?? 0,
             freeDelivery: d.freeDelivery ?? false,
             savingsMessage: d.savingsMessage ?? `Save Rs. ${d.discount}`,
           });
@@ -711,9 +700,7 @@ function CartScreenInner() {
     if (!user?.id) return;
     addrLoaded.current = false;
     setAddrLoading(true);
-    fetch(`${API_BASE}/addresses`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      .then(r => r.json())
-      .then(d => unwrapApiResponse<{ addresses?: SavedAddress[] }>(d))
+    apiRequest<{ addresses?: SavedAddress[] }>("/addresses", { token })
       .then(d => {
         const addrs: SavedAddress[] = d.addresses || [];
         setAddresses(prev => {
@@ -771,12 +758,10 @@ function CartScreenInner() {
     setPromoLoading(true);
     try {
       const orderType = (cartType === "mixed" || cartType === "pharmacy" || cartType === "none") ? "mart" : cartType;
-      const res = await fetch(`${API_BASE}/orders/validate-promo?code=${encodeURIComponent(code)}&total=${total}&type=${orderType}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        signal: controller.signal,
-      });
-      if (!mountedRef.current || seq !== promoRevalidateSeq.current) return;
-      const data = unwrapApiResponse<{ valid?: boolean; discount?: number; error?: string }>(await res.json());
+      const data = await apiRequest<{ valid?: boolean; discount?: number; error?: string }>(
+        `/orders/validate-promo?code=${encodeURIComponent(code)}&total=${total}&type=${orderType}`,
+        { token, signal: controller.signal },
+      );
       if (!mountedRef.current || seq !== promoRevalidateSeq.current) return;
       if (data.valid) {
         setPromoDiscount(data.discount ?? 0);
@@ -805,10 +790,10 @@ function CartScreenInner() {
     setPromoError(null);
     try {
       const orderType = (cartType === "mixed" || cartType === "pharmacy" || cartType === "none") ? "mart" : cartType;
-      const res = await fetch(`${API_BASE}/orders/validate-promo?code=${encodeURIComponent(code)}&total=${total}&type=${orderType}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = unwrapApiResponse<{ valid?: boolean; discount?: number; error?: string }>(await res.json());
+      const data = await apiRequest<{ valid?: boolean; discount?: number; error?: string }>(
+        `/orders/validate-promo?code=${encodeURIComponent(code)}&total=${total}&type=${orderType}`,
+        { token },
+      );
       if (data.valid) {
         setPromoCode(code);
         setPromoDiscount(data.discount ?? 0);

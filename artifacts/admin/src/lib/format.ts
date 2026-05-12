@@ -83,6 +83,10 @@ export const getStatusColor = (status: string) => {
     case 'preparing':
     case 'arrived':
       return 'bg-purple-100 text-purple-800 border-purple-200';
+    case 'ready':
+      return 'bg-teal-100 text-teal-800 border-teal-200';
+    case 'picked_up':
+      return 'bg-indigo-100 text-indigo-800 border-indigo-200';
     case 'out_for_delivery':
     case 'in_transit':
       return 'bg-orange-100 text-orange-800 border-orange-200';

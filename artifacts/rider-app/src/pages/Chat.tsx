@@ -138,6 +138,24 @@ export default function Chat() {
   const endCallRef = useRef(endCall);
   useEffect(() => { endCallRef.current = endCall; }, [endCall]);
 
+  /* Stable handler refs — updated every render so closures are always current
+     without needing to re-register listeners (which would remove ALL listeners
+     for the event, including those registered by other mounted components). */
+  const handlersRef = useRef<{
+    onMessageNew: (msg: Message) => void;
+    onTypingStart: () => void;
+    onTypingStop: () => void;
+    onMessageRead: () => void;
+    onRequestNew: () => void;
+    onRequestAccepted: () => void;
+    onCallIncoming: (data: IncomingCallData) => Promise<void>;
+    onCallEnded: () => void;
+    onCallRejected: () => void;
+    onCallOffer: (data: CallSignal) => Promise<void>;
+    onCallAnswer: (data: CallSignal) => Promise<void>;
+    onCallIce: (data: CallSignal) => Promise<void>;
+  } | null>(null);
+
   /* Socket event listeners - keyed on user?.id to rebind on user change */
   useEffect(() => {
     if (!socket || !user?.id) return;
@@ -146,19 +164,19 @@ export default function Chat() {
     loadConversations();
     loadRequests();
 
-    socket.on("comm:message:new", (msg: Message) => { setMessages(prev => [...prev, msg]); loadConversations(); });
-    socket.on("comm:typing:start", () => setTyping(true));
-    socket.on("comm:typing:stop", () => setTyping(false));
-    socket.on("comm:message:read", () => setMessages(prev => prev.map(m => ({ ...m, deliveryStatus: "read" }))));
-    socket.on("comm:request:new", () => loadRequests());
-    socket.on("comm:request:accepted", () => { loadConversations(); loadRequests(); });
-    socket.on("comm:call:incoming", async (data: IncomingCallData) => {
+    const onMessageNew = (msg: Message) => { setMessages(prev => [...prev, msg]); loadConversations(); };
+    const onTypingStart = () => setTyping(true);
+    const onTypingStop = () => setTyping(false);
+    const onMessageRead = () => setMessages(prev => prev.map(m => ({ ...m, deliveryStatus: "read" })));
+    const onRequestNew = () => loadRequests();
+    const onRequestAccepted = () => { loadConversations(); loadRequests(); };
+    const onCallIncoming = async (data: IncomingCallData) => {
       setIncomingCall(data);
       playRequestSound();
-    });
-    socket.on("comm:call:ended", () => { stopSound(); endCallRef.current(); });
-    socket.on("comm:call:rejected", () => { stopSound(); endCallRef.current(); });
-    socket.on("comm:call:offer", async (data: CallSignal) => {
+    };
+    const onCallEnded = () => { stopSound(); endCallRef.current(); };
+    const onCallRejected = () => { stopSound(); endCallRef.current(); };
+    const onCallOffer = async (data: CallSignal) => {
       if (!pcRef.current || !data.sdp) return;
       await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
       const answer = await pcRef.current.createAnswer();
@@ -171,29 +189,47 @@ export default function Chat() {
         });
       }
       socket.emit("comm:call:answer", { callId: data.callId, targetUserId: data.callerId, sdp: pcRef.current?.localDescription });
-    });
-    socket.on("comm:call:answer", async (data: CallSignal) => {
+    };
+    const onCallAnswer = async (data: CallSignal) => {
       if (!pcRef.current || !data.sdp) return;
       await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    });
-    socket.on("comm:call:ice-candidate", async (data: CallSignal) => {
+    };
+    const onCallIce = async (data: CallSignal) => {
       if (!pcRef.current || !data.candidate) return;
       await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-    });
+    };
+
+    handlersRef.current = { onMessageNew, onTypingStart, onTypingStop, onMessageRead, onRequestNew, onRequestAccepted, onCallIncoming, onCallEnded, onCallRejected, onCallOffer, onCallAnswer, onCallIce };
+
+    socket.on("comm:message:new", onMessageNew);
+    socket.on("comm:typing:start", onTypingStart);
+    socket.on("comm:typing:stop", onTypingStop);
+    socket.on("comm:message:read", onMessageRead);
+    socket.on("comm:request:new", onRequestNew);
+    socket.on("comm:request:accepted", onRequestAccepted);
+    socket.on("comm:call:incoming", onCallIncoming);
+    socket.on("comm:call:ended", onCallEnded);
+    socket.on("comm:call:rejected", onCallRejected);
+    socket.on("comm:call:offer", onCallOffer);
+    socket.on("comm:call:answer", onCallAnswer);
+    socket.on("comm:call:ice-candidate", onCallIce);
 
     return () => {
-      socket.removeAllListeners("comm:message:new");
-      socket.removeAllListeners("comm:typing:start");
-      socket.removeAllListeners("comm:typing:stop");
-      socket.removeAllListeners("comm:message:read");
-      socket.removeAllListeners("comm:request:new");
-      socket.removeAllListeners("comm:request:accepted");
-      socket.removeAllListeners("comm:call:incoming");
-      socket.removeAllListeners("comm:call:ended");
-      socket.removeAllListeners("comm:call:rejected");
-      socket.removeAllListeners("comm:call:offer");
-      socket.removeAllListeners("comm:call:answer");
-      socket.removeAllListeners("comm:call:ice-candidate");
+      const h = handlersRef.current;
+      if (!h) return;
+      socket.off("comm:message:new", h.onMessageNew);
+      socket.off("comm:typing:start", h.onTypingStart);
+      socket.off("comm:typing:stop", h.onTypingStop);
+      socket.off("comm:message:read", h.onMessageRead);
+      socket.off("comm:request:new", h.onRequestNew);
+      socket.off("comm:request:accepted", h.onRequestAccepted);
+      socket.off("comm:call:incoming", h.onCallIncoming);
+      socket.off("comm:call:ended", h.onCallEnded);
+      socket.off("comm:call:rejected", h.onCallRejected);
+      socket.off("comm:call:offer", h.onCallOffer);
+      socket.off("comm:call:answer", h.onCallAnswer);
+      socket.off("comm:call:ice-candidate", h.onCallIce);
+      handlersRef.current = null;
     };
   }, [socket, user?.id, loadConversations, loadRequests]);
 

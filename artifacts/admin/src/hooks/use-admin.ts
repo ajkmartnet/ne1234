@@ -560,10 +560,7 @@ export const useCategories = () => {
   const query = useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
-      const apiBase = window.location.origin;
-      const res = await fetch(`${apiBase}/api/categories`);
-      if (!res.ok) throw new Error("Failed to fetch categories");
-      const json = await res.json();
+      const json = await adminAbsoluteFetch("/api/categories");
       const payload = json.data ?? json;
       const list = (Array.isArray(payload) ? payload : (payload.categories ?? [])) as Array<Record<string, unknown>>;
       return list.map(c => ({

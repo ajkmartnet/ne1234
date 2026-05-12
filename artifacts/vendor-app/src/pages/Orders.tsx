@@ -184,10 +184,21 @@ export default function Orders({ targetOrderId }: { targetOrderId?: string } = {
     staleTime: 20_000,
   });
 
-  /* Save vendor location to backend (used for rider dispatch radius checks) */
+  /* Last coordinates successfully sent to the backend — used to skip redundant calls */
+  const lastSavedLocRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  /* Save vendor location to backend (used for rider dispatch radius checks).
+     Skips the API call when the position hasn't moved more than ~10 metres
+     (~0.0001 degrees) to avoid hammering the server with redundant updates. */
   const saveVendorLocationToBackend = async (lat: number, lng: number) => {
+    const EPSILON = 0.0001;
+    const last = lastSavedLocRef.current;
+    if (last && Math.abs(lat - last.lat) < EPSILON && Math.abs(lng - last.lng) < EPSILON) {
+      return;
+    }
     try {
       await api.updateLocation({ latitude: lat, longitude: lng, role: "vendor" });
+      lastSavedLocRef.current = { lat, lng };
     } catch {
       showToast("⚠️ " + T("locationSaveFailed"));
     }

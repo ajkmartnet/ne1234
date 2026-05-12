@@ -7,7 +7,6 @@ import { eq, desc, and, or, sql, count, sum, avg, gte, isNull, type InferSelectM
 import { generateId } from "../../lib/id.js";
 import { verifyUserJwt, getCachedSettings, detectGPSSpoof, addSecurityEvent, getClientIp } from "../../middleware/security.js";
 import { gpsAntiSpoofMiddleware } from "../../middleware/gpsSpoof.js";
-import { handleOsrmRateLimit } from "../../utils/osrmRateLimit.js";
 import { emitRiderLocation, emitRiderStatus, emitRideDispatchUpdate, emitRideOtp, getIO } from "../../lib/socketio.js";
 import { buildCursorPage, decodeCursor, encodeCursor } from "../../lib/pagination/cursor.js";
 import { emitRideUpdate } from "../../lib/rideEvents.js";
@@ -280,9 +279,9 @@ router.get("/me", async (req, res) => {
   ]);
 
   const deliveriesToday = (ordersTodayStats[0]?.c ?? 0) + (ridesTodayStats[0]?.c ?? 0);
-  const earningsToday   = (safeNum(ordersTodayStats[0]?.s) + safeNum(ridesTodayStats[0]?.s)) * riderKeepPct + safeNum(bonusTodayStats[0]?.s);
+  const earningsToday   = Math.round((safeNum(ordersTodayStats[0]?.s) + safeNum(ridesTodayStats[0]?.s)) * riderKeepPct * 100) / 100 + safeNum(bonusTodayStats[0]?.s);
   const totalDeliveries = (ordersAllStats[0]?.c ?? 0) + (ridesAllStats[0]?.c ?? 0);
-  const totalEarnings   = (safeNum(ordersAllStats[0]?.s) + safeNum(ridesAllStats[0]?.s)) * riderKeepPct + safeNum(bonusAllStats[0]?.s);
+  const totalEarnings   = Math.round((safeNum(ordersAllStats[0]?.s) + safeNum(ridesAllStats[0]?.s)) * riderKeepPct * 100) / 100 + safeNum(bonusAllStats[0]?.s);
 
   const [ratingRow] = await db.select({ avg: avg(reviewsTable.rating) }).from(reviewsTable).where(eq(reviewsTable.riderId, riderId));
   const avgRating = ratingRow?.avg ? parseFloat(parseFloat(String(ratingRow.avg)).toFixed(1)) : null;
@@ -1046,8 +1045,10 @@ router.patch("/orders/:id/status", async (req, res) => {
     const isCash = order.paymentMethod === "cash" || order.paymentMethod === "cod";
 
     if (isCash) {
-      const platformFee = parseFloat((orderTotal * platformFeePct).toFixed(2));
-      const riderShare  = parseFloat((orderTotal - platformFee).toFixed(2));
+      const platformFeeCents = Math.round(orderTotal * 100 * platformFeePct);
+      const riderShareCents  = Math.round(orderTotal * 100) - platformFeeCents;
+      const platformFee = platformFeeCents / 100;
+      const riderShare  = riderShareCents / 100;
       const txResult = await db.transaction(async (tx) => {
         const [row] = await tx.update(ordersTable).set(updateData).where(and(eq(ordersTable.id, req.params["id"]!), eq(ordersTable.riderId, riderId), eq(ordersTable.status, order.status))).returning();
         if (!row) throw new Error("STATUS_CONFLICT");
@@ -1089,8 +1090,8 @@ router.patch("/orders/:id/status", async (req, res) => {
         type: "wallet", icon: "wallet-outline",
       }).catch((e: Error) => logger.error("[rider] notif insert failed:", e.message));
     } else {
-      const earnings = parseFloat((orderTotal * riderKeepPct).toFixed(2));
-      const totalCredit = parseFloat((earnings + bonusPerTrip).toFixed(2));
+      const earnings = Math.round(orderTotal * 100 * riderKeepPct) / 100;
+      const totalCredit = Math.round((earnings + bonusPerTrip) * 100) / 100;
       const txResult = await db.transaction(async (tx) => {
         const [row] = await tx.update(ordersTable).set(updateData).where(and(eq(ordersTable.id, req.params["id"]!), eq(ordersTable.riderId, riderId), eq(ordersTable.status, order.status))).returning();
         if (!row) throw new Error("STATUS_CONFLICT");
@@ -1476,8 +1477,10 @@ router.patch("/rides/:id/status", rideStatusLimiter, async (req, res) => {
     const isCashRide = ride.paymentMethod === "cash";
 
     if (isCashRide) {
-      const platformFee = parseFloat((fareAmt * platformFeePct).toFixed(2));
-      const riderShare  = parseFloat((fareAmt - platformFee).toFixed(2));
+      const platformFeeCents = Math.round(fareAmt * 100 * platformFeePct);
+      const riderShareCents  = Math.round(fareAmt * 100) - platformFeeCents;
+      const platformFee = platformFeeCents / 100;
+      const riderShare  = riderShareCents / 100;
       let newRiderBalance = 0;
       updated = await db.transaction(async (tx) => {
         const [statusRow] = await tx.update(ridesTable).set({ status, completedAt: new Date(), updatedAt: new Date() }).where(and(eq(ridesTable.id, req.params["id"]!), eq(ridesTable.riderId, riderId), eq(ridesTable.status, ride.status))).returning();
@@ -1523,8 +1526,8 @@ router.patch("/rides/:id/status", rideStatusLimiter, async (req, res) => {
         sendPushToUser(riderId, { title: "Wallet Empty — You are now Offline", body: "Your wallet balance is 0. Top up to go online and accept rides.", tag: "wallet-empty" }).catch((e: Error) => logger.warn({ riderId, err: e.message }, "[rider/complete] wallet-empty push notification failed"));
       }
     } else {
-      const earnings = parseFloat((fareAmt * riderKeepPct).toFixed(2));
-      const totalCredit = parseFloat((earnings + bonusPerTrip).toFixed(2));
+      const earnings = Math.round(fareAmt * 100 * riderKeepPct) / 100;
+      const totalCredit = Math.round((earnings + bonusPerTrip) * 100) / 100;
       updated = await db.transaction(async (tx) => {
         const [statusRow] = await tx.update(ridesTable).set({ status, completedAt: new Date(), updatedAt: new Date() }).where(and(eq(ridesTable.id, req.params["id"]!), eq(ridesTable.riderId, riderId), eq(ridesTable.status, ride.status))).returning();
         if (!statusRow) throw new Error("Ride not found or status already changed");
@@ -1770,11 +1773,11 @@ router.get("/history", async (req, res) => {
   ]);
 
   const sorted = [
-    ...orders.map(o => ({ kind: "order" as const, id: o.id, status: o.status, amount: safeNum(o.total), earnings: parseFloat((safeNum(o.total) * riderKeepPct).toFixed(2)), address: o.deliveryAddress, type: o.type, createdAt: o.createdAt, updatedAt: o.updatedAt })),
+    ...orders.map(o => ({ kind: "order" as const, id: o.id, status: o.status, amount: safeNum(o.total), earnings: Math.round(safeNum(o.total) * 100 * riderKeepPct) / 100, address: o.deliveryAddress, type: o.type, createdAt: o.createdAt, updatedAt: o.updatedAt })),
     /* Cancelled rides have no earnings — the rider was never paid. Returning a
        non-zero earnings value for cancelled rides caused totalEarnings on the
        frontend to be inflated by fare×keepPct for every cancelled ride. */
-    ...rides.map(r => ({ kind: "ride" as const, id: r.id, status: r.status, amount: safeNum(r.fare), earnings: r.status === "cancelled" ? 0 : parseFloat((safeNum(r.fare) * riderKeepPct).toFixed(2)), address: r.dropAddress, type: r.type, createdAt: r.createdAt, updatedAt: r.updatedAt })),
+    ...rides.map(r => ({ kind: "ride" as const, id: r.id, status: r.status, amount: safeNum(r.fare), earnings: r.status === "cancelled" ? 0 : Math.round(safeNum(r.fare) * 100 * riderKeepPct) / 100, address: r.dropAddress, type: r.type, createdAt: r.createdAt, updatedAt: r.updatedAt })),
   ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   const hasMore = sorted.length > limitParam;
@@ -3094,19 +3097,34 @@ router.get("/osrm-route", async (req, res) => {
   const osrmBase = process.env.OSRM_API_URL ?? "https://router.project-osrm.org";
   const osrmUrl = `${osrmBase}/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true&annotations=false`;
 
+  /* Haversine fallback helper — straight-line distance when OSRM is unavailable */
+  const haversineFallback = () => {
+    const distanceKm = calcDistance(fromLat, fromLng, toLat, toLng);
+    const durationMin = Math.round((distanceKm / 30) * 60); /* assume 30 km/h avg speed */
+    sendSuccess(res, { fallback: true, distanceKm: Math.round(distanceKm * 10) / 10, durationMin });
+  };
+
   try {
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 8000);
-    const resp = await fetch(osrmUrl, { signal: ctrl.signal });
+    let osrmResp: Awaited<ReturnType<typeof fetch>>;
+    try {
+      osrmResp = await fetch(osrmUrl, { signal: ctrl.signal });
+    } catch (fetchErr: unknown) {
+      clearTimeout(timeout);
+      logger.warn("[rider/osrm-route] OSRM unreachable, using Haversine fallback:", fetchErr instanceof Error ? fetchErr.message : fetchErr);
+      haversineFallback(); return;
+    }
     clearTimeout(timeout);
 
-    if (handleOsrmRateLimit(resp.status, () => resp.headers.get("Retry-After"), res)) return;
-
-    if (!resp.ok) {
-      sendError(res, "Routing service unavailable", 502); return;
+    if (!osrmResp.ok) {
+      /* Rate-limited or any other non-2xx: always return a usable fallback estimate
+         rather than propagating the upstream error to the rider. */
+      logger.warn("[rider/osrm-route] OSRM returned non-200:", osrmResp.status, "— using Haversine fallback");
+      haversineFallback(); return;
     }
 
-    const data = await resp.json() as {
+    const data = await osrmResp.json() as {
       code: string;
       routes?: Array<{
         geometry: { coordinates: [number, number][] };
@@ -3117,7 +3135,8 @@ router.get("/osrm-route", async (req, res) => {
     };
 
     if (data.code !== "Ok" || !data.routes?.length) {
-      sendNotFound(res, "No route found"); return;
+      logger.warn("[rider/osrm-route] OSRM returned no route (code:", data.code, ") — using Haversine fallback");
+      haversineFallback(); return;
     }
 
     const route = data.routes[0]!;
@@ -3139,10 +3158,8 @@ router.get("/osrm-route", async (req, res) => {
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Routing request failed";
-    if (msg.includes("aborted") || msg.includes("abort")) {
-      sendError(res, "Routing service timed out", 504); return;
-    }
-    sendError(res, "Could not fetch route", 502); return;
+    logger.warn("[rider/osrm-route] Unexpected error:", msg, "— using Haversine fallback");
+    if (!res.headersSent) haversineFallback();
   }
 });
 

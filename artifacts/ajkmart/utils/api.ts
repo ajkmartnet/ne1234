@@ -10,6 +10,31 @@ if (!domain) {
 }
 export const API_BASE = domain ? `https://${domain}/api` : "";
 
+/**
+ * Authenticated API request helper. Injects the Bearer token into headers and
+ * unwraps the standard `{ success, data }` envelope. Throws on non-2xx responses.
+ */
+export async function apiRequest<T = Record<string, unknown>>(
+  path: string,
+  opts: RequestInit & { token?: string | null } = {},
+): Promise<T> {
+  const { token, ...fetchOpts } = opts;
+  const isFormData = fetchOpts.body instanceof FormData;
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...fetchOpts,
+    headers: {
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(fetchOpts.headers as Record<string, string> | undefined ?? {}),
+    },
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({})) as Record<string, unknown>;
+    throw new Error(String(d["error"] ?? `Request failed (${res.status})`));
+  }
+  return unwrapApiResponse<T>(await res.json());
+}
+
 export function unwrapApiResponse<T = Record<string, unknown>>(json: unknown): T {
   // Validate input is an object
   if (!json || typeof json !== "object") {

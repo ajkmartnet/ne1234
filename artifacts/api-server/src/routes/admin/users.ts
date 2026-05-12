@@ -28,6 +28,13 @@ import { reconcileUserFlags } from "./conditions.js";
 
 const router = Router();
 
+function wrapAsync(fn: (req: any, res: any) => Promise<void>): (req: any, res: any) => void {
+  return (req, res) => void fn(req, res).catch((err: unknown) => {
+    logger.error({ err }, "[admin/users] unhandled route error");
+    res.status(500).json({ success: false, error: "An internal server error occurred" });
+  });
+}
+
 router.post("/users", async (req, res) => {
   const { phone, name, role, city, area, email } = req.body;
   const trimPhone = typeof phone === "string" ? phone.trim() : "";
@@ -70,7 +77,7 @@ router.post("/users", async (req, res) => {
    Lightweight server-side rider search used by RideDetailModal for reassignment.
    Returns only active, non-rejected riders matching the search query.
    Pass onlineOnly=true to restrict to riders currently online (matches reassign constraints). */
-router.get("/users/search-riders", async (req, res) => {
+router.get("/users/search-riders", wrapAsync(async (req, res) => {
   const q = ((req.query?.q as string) ?? "").trim();
   const limitN = Math.min(50, Math.max(1, parseInt((req.query?.limit as string) ?? "20", 10)));
   const onlineOnly = (req.query?.onlineOnly as string) === "true";
@@ -96,9 +103,9 @@ router.get("/users/search-riders", async (req, res) => {
     .orderBy(asc(usersTable.name))
     .limit(limitN);
   sendSuccess(res, { riders, total: riders.length });
-});
+}));
 
-router.get("/users", async (req, res) => {
+router.get("/users", wrapAsync(async (req, res) => {
   const filter = (req.query?.filter as string) ?? "";
   const conditionTier = (req.query?.conditionTier as string) ?? "";
   const users = await (
@@ -146,9 +153,9 @@ router.get("/users", async (req, res) => {
     users: enrichedUsers,
     total: enrichedUsers.length,
   });
-});
+}));
 
-router.patch("/users/:id", async (req, res) => {
+router.patch("/users/:id", wrapAsync(async (req, res) => {
   const { role, isActive, walletBalance } = req.body;
   const updates: Partial<typeof usersTable.$inferInsert> & { tokenVersion?: ReturnType<typeof sql> } = {};
   if (role !== undefined) { updates.roles = role; }
@@ -172,10 +179,10 @@ router.patch("/users/:id", async (req, res) => {
     revokeAllUserSessions(req.params["id"]!).catch(() => {});
   }
   sendSuccess(res, { ...stripUser(user), walletBalance: parseFloat(user.walletBalance ?? "0") });
-});
+}));
 
 /* ── Pending Approval Users ── */
-router.get("/users/pending", async (_req, res) => {
+router.get("/users/pending", wrapAsync(async (_req, res) => {
   const users = await db.select().from(usersTable)
     .where(eq(usersTable.approvalStatus, "pending"))
     .orderBy(desc(usersTable.createdAt));
@@ -188,10 +195,10 @@ router.get("/users/pending", async (_req, res) => {
     })),
     total: users.length,
   });
-});
+}));
 
 /* ── Approve User ── */
-router.post("/users/:id/approve", async (req, res) => {
+router.post("/users/:id/approve", wrapAsync(async (req, res) => {
   const { note, skipDocCheck } = req.body;
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, req.params["id"]!)).limit(1);
   if (!target) { sendNotFound(res, "User not found"); return; }
@@ -215,10 +222,10 @@ router.post("/users/:id/approve", async (req, res) => {
   if (!user) { sendNotFound(res, "User not found"); return; }
   addAuditEntry({ action: "user_approved", ip: "admin", details: `User approved: ${user.phone} — ${user.name || "unnamed"}`, result: "success" });
   sendSuccess(res, { success: true, user: { ...stripUser(user), walletBalance: parseFloat(user.walletBalance ?? "0") } });
-});
+}));
 
 /* ── Reject User ── */
-router.post("/users/:id/reject", async (req, res) => {
+router.post("/users/:id/reject", wrapAsync(async (req, res) => {
   const { note } = req.body;
   const [user] = await db.update(usersTable)
     .set({ approvalStatus: "rejected", approvalNote: note || "Rejected by admin", isActive: false, updatedAt: new Date() })
@@ -227,10 +234,10 @@ router.post("/users/:id/reject", async (req, res) => {
   if (!user) { sendNotFound(res, "User not found"); return; }
   addAuditEntry({ action: "user_rejected", ip: "admin", details: `User rejected: ${user.phone} — ${note || "no reason"}`, result: "success" });
   sendSuccess(res, { success: true, user: { ...stripUser(user), walletBalance: parseFloat(user.walletBalance ?? "0") } });
-});
+}));
 
 /* ── Wallet Top-up ── */
-router.post("/users/:id/wallet-topup", async (req, res) => {
+router.post("/users/:id/wallet-topup", wrapAsync(async (req, res) => {
   const { amount, description } = req.body;
   if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
     sendValidationError(res, "Valid amount is required");
@@ -271,14 +278,14 @@ router.post("/users/:id/wallet-topup", async (req, res) => {
     newBalance,
     user: { ...stripUser(updatedUser!), walletBalance: newBalance },
   });
-});
-router.delete("/users/:id", async (req, res) => {
+}));
+router.delete("/users/:id", wrapAsync(async (req, res) => {
   await db.delete(usersTable).where(eq(usersTable.id, req.params["id"]!));
   sendSuccess(res, { success: true });
-});
+}));
 
 /* ── User Activity (orders + rides summary) ── */
-router.get("/users/:id/activity", async (req, res) => {
+router.get("/users/:id/activity", wrapAsync(async (req, res) => {
   const uid = req.params["id"]!;
   const orders = await db.select().from(ordersTable).where(eq(ordersTable.userId, uid)).orderBy(desc(ordersTable.createdAt)).limit(10);
   const rides = await db.select().from(ridesTable).where(eq(ridesTable.userId, uid)).orderBy(desc(ridesTable.createdAt)).limit(10);
@@ -292,10 +299,10 @@ router.get("/users/:id/activity", async (req, res) => {
     parcels: parcels.map(p => ({ ...p, fare: parseFloat(p.fare), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() })),
     transactions: txns.map(t => ({ ...t, amount: parseFloat(t.amount), createdAt: t.createdAt.toISOString() })),
   });
-});
+}));
 
 /* ── Overview with user enrichment (orders + user info) ── */
-router.patch("/users/:id/security", async (req, res) => {
+router.patch("/users/:id/security", wrapAsync(async (req, res) => {
   const { id } = req.params;
   const body = req.body as Record<string, unknown>;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -392,10 +399,10 @@ router.patch("/users/:id/security", async (req, res) => {
     await sendUserNotification(id!, "Account Suspended ⚠️", String(body.banReason || "Your account has been suspended. Contact support."), "warning", "warning-outline");
   }
   sendSuccess(res, { ...user, walletBalance: parseFloat(String(user.walletBalance)) });
-});
+}));
 
 /* ── PATCH /admin/users/:id/identity — Admin update user identity (username, email, name) ── */
-router.patch("/users/:id/identity", async (req, res) => {
+router.patch("/users/:id/identity", wrapAsync(async (req, res) => {
   const userId = req.params["id"]!;
   const body = req.body as Record<string, unknown>;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -465,15 +472,15 @@ router.patch("/users/:id/identity", async (req, res) => {
   revokeAllUserSessions(userId).catch(() => {});
 
   sendSuccess(res, { ...stripUser(user), walletBalance: parseFloat(String(user.walletBalance)) });
-});
+}));
 
-router.post("/users/:id/reset-otp", async (req, res) => {
+router.post("/users/:id/reset-otp", wrapAsync(async (req, res) => {
   await db.update(usersTable).set({ otpCode: null, otpExpiry: null, updatedAt: new Date() }).where(eq(usersTable.id, req.params["id"]!));
   sendSuccess(res, { success: true, message: "OTP cleared — user must re-authenticate" });
-});
+}));
 
 /* ── Force-disable 2FA for a user (admin action) ── */
-router.post("/users/:id/2fa/disable", async (req, res) => {
+router.post("/users/:id/2fa/disable", wrapAsync(async (req, res) => {
   const userId = req.params["id"]!;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) { sendNotFound(res, "User not found"); return; }
@@ -489,9 +496,9 @@ router.post("/users/:id/2fa/disable", async (req, res) => {
   writeAuthAuditLog("admin_2fa_disabled", { userId, ip, userAgent: req.headers["user-agent"] as string, metadata: { adminAction: true } });
 
   sendSuccess(res, { success: true, message: `2FA disabled for user ${user.name ?? user.phone}` });
-});
+}));
 
-router.post("/users/:id/reset-wallet-pin", async (req, res) => {
+router.post("/users/:id/reset-wallet-pin", wrapAsync(async (req, res) => {
   const userId = req.params["id"]!;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) { sendNotFound(res, "User not found"); return; }
@@ -505,10 +512,10 @@ router.post("/users/:id/reset-wallet-pin", async (req, res) => {
   }).where(eq(usersTable.id, userId));
 
   sendSuccess(res, { success: true, message: `Wallet MPIN reset for ${user.name ?? user.phone}. User will need to create a new MPIN.` });
-});
+}));
 
 /* ── Admin Accounts (Sub-Admins) ── */
-router.patch("/users/:id/request-correction", async (req, res) => {
+router.patch("/users/:id/request-correction", wrapAsync(async (req, res) => {
   const { field, note } = req.body as { field?: string; note?: string };
   const [user] = await db.update(usersTable)
     .set({ approvalStatus: "correction_needed", approvalNote: note || `Please re-upload: ${field || "document"}`, updatedAt: new Date() })
@@ -524,10 +531,10 @@ router.patch("/users/:id/request-correction", async (req, res) => {
     type: "system", icon: "document-outline",
   }).catch(() => {});
   sendSuccess(res, { success: true, user: stripUser(user) });
-});
+}));
 
 /* ── PATCH /admin/users/:id/waive-debt — waive rider's cancellation debt ── */
-router.patch("/users/:id/waive-debt", async (req, res) => {
+router.patch("/users/:id/waive-debt", wrapAsync(async (req, res) => {
   const userId = req.params["id"]!;
   const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, cancellationDebt: usersTable.cancellationDebt })
     .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
@@ -544,10 +551,10 @@ router.patch("/users/:id/waive-debt", async (req, res) => {
     type: "system", icon: "checkmark-circle-outline",
   }).catch(() => {});
   sendSuccess(res, { success: true, waived: debt });
-});
+}));
 
 /* ── PATCH /admin/users/:id/bulk-ban — ban/unban multiple users ── */
-router.patch("/users/bulk-ban", async (req, res) => {
+router.patch("/users/bulk-ban", wrapAsync(async (req, res) => {
   const { ids, action, reason } = req.body as { ids: string[]; action: "ban" | "unban"; reason?: string };
   if (!ids?.length) { sendValidationError(res, "ids required"); return; }
   const adminReq = req as AdminRequest;
@@ -578,7 +585,7 @@ router.patch("/users/bulk-ban", async (req, res) => {
   }
   addAuditEntry({ action: `bulk_${action}`, ip: getClientIp(req), adminId: adminReq.adminId, details: `Bulk ${action}: ${ids.length} users`, result: "success" });
   sendSuccess(res, { success: true, affected: ids.length, action });
-});
+}));
 
 /* ── PATCH /admin/orders/:id/assign-rider — manually assign a rider to an order ── */
 

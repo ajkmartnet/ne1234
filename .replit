@@ -1,30 +1,5 @@
 modules = ["nodejs-20"]
 
-  run = """
-  # 1. Kill processes on the ports we actually use
-  fuser -k 5000/tcp 3000/tcp 3001/tcp 3002/tcp 20716/tcp || true
-
-  # 2. Path Setup
-  export NODE_OPTIONS="--max-old-space-size=4096"
-  export PNPM_HOME="/home/runner/.local/share/pnpm"
-  export PATH="$PNPM_HOME:$PATH"
-
-  # 3. Dependency Check
-  STAMP="node_modules/.nix-install-stamp"
-  if [ ! -d "node_modules" ] || [ "pnpm-lock.yaml" -nt "$STAMP" ]; then
-    pnpm install --no-frozen-lockfile && touch "$STAMP"
-  fi
-
-  # 4. Parallel launch -- ports match [[ports]] and [[workflows]]
-  (
-    pnpm --filter @workspace/api-server dev & \
-    ADMIN_PORT_OVERRIDE=3000 ADMIN_DEV_PORT=3000 BASE_PATH=/admin/ pnpm --filter @workspace/admin dev & \
-    VENDOR_DEV_PORT=3001 BASE_PATH=/vendor/ pnpm --filter @workspace/vendor-app dev & \
-    RIDER_DEV_PORT=3002 BASE_PATH=/rider/ pnpm --filter @workspace/rider-app dev & \
-    PORT=20716 EXPO_DEV_PORT=20716 CI=1 EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID pnpm --filter @workspace/ajkmart dev:web
-  )
-  """
-
   # Deployment and Artifacts settings
   [deployment]
   run = ["pnpm", "start"]
@@ -40,91 +15,6 @@ modules = ["nodejs-20"]
 
   [workflows]
 runButton = "Project"
-
-  [[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Start application"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Admin Panel"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Vendor App"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Rider App"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Customer App"
-
-  [[workflows.workflow]]
-name = "Start application"
-author = "agent"
-
-  [workflows.workflow.metadata]
-outputType = "webview"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/api-server dev"
-waitForPort = 5000
-
-  [[workflows.workflow]]
-name = "Admin Panel"
-author = "agent"
-
-  [workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "ADMIN_PORT_OVERRIDE=3000 ADMIN_DEV_PORT=3000 BASE_PATH=/admin/ pnpm --filter @workspace/admin dev"
-waitForPort = 3000
-
-  [[workflows.workflow]]
-name = "Vendor App"
-author = "agent"
-
-  [workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "VENDOR_DEV_PORT=3001 BASE_PATH=/vendor/ pnpm --filter @workspace/vendor-app dev"
-waitForPort = 3001
-
-  [[workflows.workflow]]
-name = "Rider App"
-author = "agent"
-
-  [workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "RIDER_DEV_PORT=3002 BASE_PATH=/rider/ pnpm --filter @workspace/rider-app dev"
-waitForPort = 3002
-
-[[workflows.workflow]]
-name = "Customer App"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=20716 EXPO_DEV_PORT=20716 CI=1 EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID pnpm --filter @workspace/ajkmart dev:web"
-waitForPort = 20716
 
 [[ports]]
 localPort = 3001
@@ -205,7 +95,3 @@ stack = "BEST_EFFORT_FALLBACK"
   RIDER_JWT_SECRET = "4702772f63a217933bb7a323356db541f909e3e4a3c84d860d8525fc6668586e2fbec0a4f0efbc4a4f8094fb43dc94da4dadb4d3952130b95e36992f76e208e4"
   ERROR_REPORT_HMAC_SECRET = "9cbb600a34f0b33f88e4fd6a1e271f8dead0f010b20ed09e8c3b0f73f27aa917"
   DATABASE_URL = "postgresql://neondb_owner:npg_8CZnNQxSivM4@ep-withered-pond-aod3mqmg-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-
-  [postMerge]
-  path = "scripts/post-merge.sh"
-  timeoutMs = 180000

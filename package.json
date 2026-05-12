@@ -7,12 +7,9 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "dev:all": "concurrently \"pnpm --filter @workspace/api-server dev\" \"pnpm --filter @workspace/admin dev\" \"pnpm --filter @workspace/vendor-app dev\" \"pnpm --filter @workspace/rider-app dev\"",
     "health": "curl -sf http://localhost:${PORT:-5000}/api/health && echo OK",
-    "db:migrate": "node scripts/migrate.mjs",
     "db:generate": "pnpm --filter @workspace/db generate",
-    "db:seed": "curl -sf -X POST http://localhost:${PORT:-5000}/api/seed/full -H \"x-admin-seed-key: ${DEV_SEED_KEY:-local-dev-seed-ajkmart}\" -H 'Content-Type: application/json' | node -e \"process.stdin.resume(); let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{try{const r=JSON.parse(d);console.log(JSON.stringify(r,null,2));}catch{console.log(d);}});\"",
-    "setup": "bash scripts/setup.sh"
+    "db:seed": "curl -sf -X POST http://localhost:${PORT:-5000}/api/seed/full -H \"x-admin-seed-key: ${DEV_SEED_KEY:-local-dev-seed-ajkmart}\" -H 'Content-Type: application/json' | node -e \"process.stdin.resume(); let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{try{const r=JSON.parse(d);console.log(JSON.stringify(r,null,2));}catch{console.log(d);}});\""
   },
   "private": true,
   "devDependencies": {

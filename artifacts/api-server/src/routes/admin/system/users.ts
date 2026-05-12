@@ -325,10 +325,10 @@ router.patch("/users/bulk-ban", requirePermission("users.ban"), async (req, res)
   try {
     await db.transaction(async (tx) => {
       if (action === "ban") {
-        const users = await tx.select({ id: usersTable.id, roles: usersTable.roles })
+        const targetUsers = await tx.select({ id: usersTable.id, roles: usersTable.roles })
           .from(usersTable)
           .where(inArray(usersTable.id, ids));
-        const conditionValues = users.map(u => ({
+        const conditionValues = targetUsers.map(u => ({
           id: generateId(),
           userId: u.id,
           userRole: u.roles?.split(",")[0]?.trim() || "customer",
@@ -339,23 +339,26 @@ router.patch("/users/bulk-ban", requirePermission("users.ban"), async (req, res)
           appliedBy: adminReq.adminId || "admin",
         }));
         if (conditionValues.length > 0) {
-          await tx.insert(accountConditionsTable).values(conditionValues);
-          affected = conditionValues.length;
+          const inserted = await tx.insert(accountConditionsTable).values(conditionValues).returning({ id: accountConditionsTable.id });
+          affected = inserted.length;
         }
+        // Reconcile inside transaction — reconcileUserFlags only reads conditions, sees new rows in same tx
+        await Promise.all(targetUsers.map(u => reconcileUserFlags(u.id)));
       } else {
-        await tx.update(accountConditionsTable).set({
+        const updated = await tx.update(accountConditionsTable).set({
           isActive: false, liftedAt: new Date(), liftedBy: adminReq.adminId || "admin",
           liftReason: "Bulk unbanned via admin", updatedAt: new Date(),
         }).where(and(
           inArray(accountConditionsTable.userId, ids),
           eq(accountConditionsTable.isActive, true),
           eq(accountConditionsTable.severity, "ban"),
-        ));
-        affected = ids.length;
+        )).returning({ userId: accountConditionsTable.userId });
+        // Deduplicate to count distinct affected users (one user may have multiple ban conditions)
+        affected = new Set(updated.map(r => r.userId)).size;
+        const affectedIds = [...new Set(updated.map(r => r.userId))];
+        await Promise.all(affectedIds.map(id => reconcileUserFlags(id)));
       }
     });
-    // Reconcile flags outside the transaction so failures don't roll back the ban inserts
-    await Promise.allSettled(ids.map(id => reconcileUserFlags(id).catch(e => { failed.push(id); logger.warn({ err: e, id }, "[admin/users] reconcile failed during bulk-ban"); })));
     addAuditEntry({ action: `bulk_${action}`, ip: getClientIp(req), adminId: adminReq.adminId, details: `Bulk ${action}: ${affected} users`, result: "success" });
     sendSuccess(res, { success: true, affected, action, failed });
   } catch (err: unknown) {

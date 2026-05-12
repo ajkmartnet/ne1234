@@ -62,7 +62,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; RIDER_DEV_PORT=3002 node node_modules/.pnpm/vite@7.3.1_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_terser@5.46.1_tsx@4.21.0_yaml@2.8.4/node_modules/vite/bin/vite.js --config artifacts/rider-app/vite.config.ts --host 0.0.0.0"
+args = "pnpm --filter @workspace/rider-app run dev"
 waitForPort = 3002
 
 [[workflows.workflow]]
@@ -74,7 +74,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; fuser -k 20716/tcp 2>/dev/null || true; sleep 1 && cd artifacts/ajkmart && PORT=20716 CI=1 EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID ../../node_modules/.pnpm/@expo+cli@54.0.23_expo-router@6.0.23_expo@54.0.34_graphql@16.14.0_react-native@0.81.5_@_c148225106ef1144438ab4c2696b38c6/node_modules/@expo/cli/build/bin/cli start --web --port 20716 --host localhost"
+args = "pnpm --filter @workspace/ajkmart run dev:web"
 
 [[workflows.workflow]]
 name = "Vendor App"
@@ -85,7 +85,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; VENDOR_DEV_PORT=3001 node node_modules/.pnpm/vite@7.3.1_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_terser@5.46.1_tsx@4.21.0_yaml@2.8.4/node_modules/vite/bin/vite.js --config artifacts/vendor-app/vite.config.ts --host 0.0.0.0"
+args = "pnpm --filter @workspace/vendor-app run dev"
 waitForPort = 3001
 
 [[workflows.workflow]]
@@ -97,8 +97,12 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; ADMIN_PORT_OVERRIDE=3000 BASE_PATH=/admin/ node node_modules/.pnpm/vite@7.3.1_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_terser@5.46.1_tsx@4.21.0_yaml@2.8.4/node_modules/vite/bin/vite.js --config artifacts/admin/vite.config.ts --host 0.0.0.0"
+args = "pnpm --filter @workspace/admin run dev"
 waitForPort = 3000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
 
 [[ports]]
 localPort = 3000
@@ -106,46 +110,15 @@ externalPort = 3000
 
 [[ports]]
 localPort = 3001
-externalPort = 4200
+externalPort = 3001
 
 [[ports]]
 localPort = 3002
-externalPort = 3003
-
-[[ports]]
-localPort = 3003
 externalPort = 3002
-
-[[ports]]
-localPort = 3004
-externalPort = 8008
-
-[[ports]]
-localPort = 3005
-
-[[ports]]
-localPort = 4200
-externalPort = 5000
-
-[[ports]]
-localPort = 5000
-externalPort = 80
 
 [[ports]]
 localPort = 20716
 externalPort = 8000
-
-[[ports]]
-localPort = 20717
-externalPort = 3001
-
-[[ports]]
-localPort = 23744
-externalPort = 3000
-
-[[ports]]
-localPort = 23745
-externalPort = 6800
 
   [agent]
 expertMode = true

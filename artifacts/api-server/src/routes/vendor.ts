@@ -73,6 +73,7 @@ function formatUser(user: any) {
 
 /* ── GET /vendor/me ── */
 router.get("/me", async (req, res) => {
+  try {
   const user = req.vendorUser!;
   const vendorId = user.id;
   const today = new Date(); today.setHours(0,0,0,0);
@@ -95,10 +96,14 @@ router.get("/me", async (req, res) => {
       totalRevenue: parseFloat((safeNum(totalRev[0]?.s) * vendorShare).toFixed(2)),
     },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /vendor/profile ── */
 router.patch("/profile", validateBody(patchProfileSchema), async (req, res) => {
+  try {
   const vendorId = req.vendorId!;
   const { name, email, cnic, address, city, bankName, bankAccount, bankAccountTitle, businessType } = req.body;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -113,11 +118,14 @@ router.patch("/profile", validateBody(patchProfileSchema), async (req, res) => {
   if (businessType     !== undefined) updates.businessType     = businessType;
   const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, vendorId)).returning();
   sendSuccess(res, formatUser(user));
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /vendor/profile/quick-replies ── */
 router.get("/profile/quick-replies", async (req, res) => {
-  const vendorId = req.vendorId!;
+endorId = req.vendorId!;
   const [profile] = await db
     .select({ quickReplies: vendorProfilesTable.quickReplies })
     .from(vendorProfilesTable)
@@ -142,6 +150,7 @@ const patchQuickRepliesSchema = z.object({
 });
 
 router.patch("/profile/quick-replies", validateBody(patchQuickRepliesSchema), async (req, res) => {
+  try {
   const vendorId = req.vendorId!;
   const { quickReplies } = req.body as { quickReplies: string[] };
   const serialized = JSON.stringify(quickReplies.slice(0, 8));
@@ -153,16 +162,24 @@ router.patch("/profile/quick-replies", validateBody(patchQuickRepliesSchema), as
       set: { quickReplies: serialized, updatedAt: new Date() },
     });
   sendSuccess(res, { quickReplies });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /vendor/store ── */
 router.get("/store", async (req, res) => {
+  try {
   const user = req.vendorUser!;
   sendSuccess(res, formatUser(user));
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /vendor/store ── */
 router.patch("/store", validateBody(patchStoreSchema), async (req, res) => {
+  try {
   const vendorId = req.vendorId!;
   const body = req.body;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -175,10 +192,14 @@ router.patch("/store", validateBody(patchStoreSchema), async (req, res) => {
   if (body.storeLng !== undefined && body.storeLng !== null) updates.storeLng = String(body.storeLng);
   const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, vendorId)).returning();
   sendSuccess(res, formatUser(user));
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /vendor/stats ── */
 router.get("/stats", async (req, res) => {
+  try {
   const vendorId = req.vendorId!;
   const today = new Date(); today.setHours(0,0,0,0);
   const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
@@ -204,10 +225,14 @@ router.get("/stats", async (req, res) => {
     pending:  pending[0]?.c ?? 0,
     lowStock: lowStock[0]?.c ?? 0,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /vendor/orders ── */
 router.get("/orders", async (req, res) => {
+  try {
   const vendorId = req.vendorId!;
   const status = req.query["status"] as string | undefined;
   const conditions: any[] = [eq(ordersTable.vendorId, vendorId), isNull(ordersTable.deletedAt)];
@@ -226,11 +251,14 @@ router.get("/orders", async (req, res) => {
     .orderBy(desc(ordersTable.createdAt))
     .limit(100);
   sendSuccess(res, { orders: orders.map(row => ({ ...row.order, total: safeNum(row.order.total), riderName: row.riderName ?? undefined, riderPhone: row.riderPhone ?? undefined })) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /vendor/orders/:id/status ── */
 router.patch("/orders/:id/status", async (req, res) => {
-  const vendorId = req.vendorId!;
+endorId = req.vendorId!;
   /* Strict: only status and note accepted — reject price/total etc. explicitly */
   const allowedKeys = new Set(["status", "note"]);
   const extraKeys = Object.keys(req.body).filter(k => !allowedKeys.has(k));
@@ -431,6 +459,7 @@ router.patch("/orders/:id/status", async (req, res) => {
 
 /* ── GET /vendor/promos ── list promos owned by vendor ── */
 router.get("/promos", async (req, res) => {
+  try {
   const vendorId = (req as Request & { vendorId?: string }).vendorId;
   if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
   const promos = await db
@@ -439,10 +468,14 @@ router.get("/promos", async (req, res) => {
     .where(eq(promoCodesTable.vendorId, vendorId))
     .orderBy(desc(promoCodesTable.createdAt));
   sendSuccess(res, { promos });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /vendor/promos ── create a promo ── */
 router.post("/promos", async (req, res) => {
+  try {
   const vendorId = (req as Request & { vendorId?: string }).vendorId;
   if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
   const { code, discountPct, discountFlat, minOrderAmount, maxDiscount, usageLimit, expiresAt, description, appliesTo } = req.body as Record<string, unknown>;
@@ -465,10 +498,14 @@ router.post("/promos", async (req, res) => {
     isActive:       true,
   }).returning();
   sendCreated(res, { promo });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /vendor/promos/:id ── update a promo ── */
 router.patch("/promos/:id", async (req, res) => {
+  try {
   const vendorId = (req as Request & { vendorId?: string }).vendorId;
   if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
   const [existing] = await db.select().from(promoCodesTable)
@@ -488,10 +525,14 @@ router.patch("/promos/:id", async (req, res) => {
   const [promo] = await db.update(promoCodesTable).set(updates)
     .where(eq(promoCodesTable.id, existing.id)).returning();
   sendSuccess(res, { promo });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /vendor/promos/:id/toggle ── activate / deactivate a promo ── */
 router.patch("/promos/:id/toggle", async (req, res) => {
+  try {
   const vendorId = (req as Request & { vendorId?: string }).vendorId;
   if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
   const [existing] = await db.select().from(promoCodesTable)
@@ -503,10 +544,14 @@ router.patch("/promos/:id/toggle", async (req, res) => {
     .where(eq(promoCodesTable.id, existing.id))
     .returning();
   sendSuccess(res, { promo });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /vendor/promos/:id ── delete a promo ── */
 router.delete("/promos/:id", async (req, res) => {
+  try {
   const vendorId = (req as Request & { vendorId?: string }).vendorId;
   if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
   const [existing] = await db.select().from(promoCodesTable)
@@ -515,6 +560,9 @@ router.delete("/promos/:id", async (req, res) => {
   if (!existing) { sendNotFound(res, "Promo not found"); return; }
   await db.delete(promoCodesTable).where(eq(promoCodesTable.id, existing.id));
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

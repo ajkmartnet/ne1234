@@ -10,6 +10,7 @@ const router: IRouter = Router();
 
 /* ── GET /api/cart/snapshot — fetch the user's saved cart snapshot ── */
 router.get("/snapshot", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
   try {
     const [row] = await db
@@ -23,10 +24,14 @@ router.get("/snapshot", customerAuth, async (req, res) => {
     logger.warn({ err: (err as Error).message, userId }, "[cart] failed to fetch snapshot");
     sendError(res, "Failed to fetch cart snapshot", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PUT /api/cart/snapshot — upsert the user's cart snapshot ── */
 router.put("/snapshot", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
   const { items } = req.body;
 
@@ -52,10 +57,14 @@ router.put("/snapshot", customerAuth, async (req, res) => {
     logger.warn({ err: (err as Error).message, userId }, "[cart] failed to save snapshot");
     sendError(res, "Failed to save cart snapshot", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /api/cart/snapshot — clear the user's cart snapshot ── */
 router.delete("/snapshot", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
   try {
     await db
@@ -66,6 +75,9 @@ router.delete("/snapshot", customerAuth, async (req, res) => {
   } catch (err) {
     logger.warn({ err: (err as Error).message, userId }, "[cart] failed to clear snapshot");
     sendError(res, "Failed to clear cart snapshot", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

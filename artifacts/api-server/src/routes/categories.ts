@@ -51,6 +51,7 @@ const listQuerySchema = z.object({
 }).passthrough();
 
 router.get("/", validateQuery(listQuerySchema), async (req, res) => {
+  try {
   const type = req.query["type"] as string | undefined;
 
   if (type && (type === "mart" || type === "food")) {
@@ -128,6 +129,9 @@ router.get("/", validateQuery(listQuerySchema), async (req, res) => {
   }));
 
   sendSuccess(res, { categories });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const createCategorySchema = z.object({
@@ -140,6 +144,7 @@ const createCategorySchema = z.object({
 });
 
 router.post("/", adminAuth, validateBody(createCategorySchema), async (req, res) => {
+  try {
   const { name, icon, type, parentId, sortOrder, isActive } = req.body;
 
   const id = generateId();
@@ -154,9 +159,13 @@ router.post("/", adminAuth, validateBody(createCategorySchema), async (req, res)
   }).returning();
 
   sendCreated(res, category);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/:id", adminAuth, async (req, res) => {
+  try {
   const { name, icon, type, parentId, sortOrder, isActive } = req.body;
 
   const updates: Record<string, any> = { updatedAt: new Date() };
@@ -179,9 +188,13 @@ router.patch("/:id", adminAuth, async (req, res) => {
   }
 
   sendSuccess(res, updated);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/:id", adminAuth, async (req, res) => {
+  try {
   const id = req.params["id"]!;
 
   await db
@@ -200,6 +213,9 @@ router.delete("/:id", adminAuth, async (req, res) => {
   }
 
   sendSuccess(res, null);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const reorderSchema = z.object({
@@ -210,6 +226,7 @@ const reorderSchema = z.object({
 });
 
 router.post("/reorder", adminAuth, validateBody(reorderSchema), async (req, res) => {
+  try {
   const { items } = req.body;
 
   for (const item of items) {
@@ -222,6 +239,9 @@ router.post("/reorder", adminAuth, validateBody(reorderSchema), async (req, res)
   }
 
   sendSuccess(res, null);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

@@ -122,6 +122,7 @@ const inventorySettingsSchema = z.object({
 });
 
 router.put("/inventory-settings", validateBody(inventorySettingsSchema), async (req, res) => {
+  try {
   const body = req.body as z.infer<typeof inventorySettingsSchema>;
   /* Dedupe channels server-side so we never persist "email,email,push". */
   const channels = Array.from(new Set(body.backInStockNotifyChannels));
@@ -161,6 +162,9 @@ router.put("/inventory-settings", validateBody(inventorySettingsSchema), async (
     sendSuccess(res, rowsToSettings(rows));
   } catch (err) {
     sendError(res, (err as Error).message ?? "Failed to save inventory settings");
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

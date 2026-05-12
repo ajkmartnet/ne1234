@@ -13,6 +13,7 @@ const router = Router();
 const SERVER_EPOCH = Math.round(Date.now() / 1000 - process.uptime());
 
 router.get("/", async (_req, res) => {
+  try {
   let dbStatus: "ok" | "error" = "ok";
   let redisStatus: "ok" | "error" | "disabled" = "disabled";
 
@@ -103,6 +104,9 @@ router.get("/", async (_req, res) => {
     diskPct,
     vpnDetection: { status: vpnDetection.status },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /**

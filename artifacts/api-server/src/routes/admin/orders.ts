@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { db } from "@workspace/db";
 import {
   usersTable,
@@ -28,6 +28,10 @@ import {
 import { getIO } from "../../lib/socketio.js";
 
 const router = Router();
+
+function wrapAsync(fn: (req: Request, res: Response) => Promise<void>): RequestHandler {
+  return (req, res, next) => void fn(req, res).catch(next);
+}
 
 router.post("/orders", async (req, res) => {
   const { userId, vendorId, type, items, total, deliveryAddress, paymentMethod, status } = req.body;
@@ -72,7 +76,7 @@ router.post("/orders", async (req, res) => {
   }
 });
 
-router.get("/orders", async (req, res) => {
+router.get("/orders", wrapAsync(async (req, res) => {
   const { status, type } = req.query;
   const settings = await getCachedSettings();
   const isDemoMode = (settings["platform_mode"] ?? "demo") === "demo";
@@ -133,9 +137,9 @@ router.get("/orders", async (req, res) => {
     hasMore: cursorPageResult.hasMore,
     isDemo: false,
   });
-});
+}));
 
-router.patch("/orders/:id/status", async (req, res) => {
+router.patch("/orders/:id/status", wrapAsync(async (req, res) => {
   const { status } = req.body;
   const orderId = req.params["id"]!;
 
@@ -278,9 +282,9 @@ router.patch("/orders/:id/status", async (req, res) => {
   }
 
   sendSuccess(res, { ...order, total: parseFloat(String(order.total)) });
-});
+}));
 
-router.post("/orders/:id/refund", async (req, res) => {
+router.post("/orders/:id/refund", wrapAsync(async (req, res) => {
   const { amount, reason } = req.body;
   const [order] = await db.select().from(ordersTable).where(and(eq(ordersTable.id, req.params["id"]!), isNull(ordersTable.deletedAt))).limit(1);
   if (!order) { sendNotFound(res, "Order not found"); return; }
@@ -369,8 +373,8 @@ router.post("/orders/:id/refund", async (req, res) => {
   });
 
   sendSuccess(res, { success: true, refundedAmount: refundAmt, orderId: order.id });
-});
-router.get("/pharmacy-orders", async (_req, res) => {
+}));
+router.get("/pharmacy-orders", wrapAsync(async (_req, res) => {
   const orders = await db
     .select()
     .from(pharmacyOrdersTable)
@@ -385,9 +389,9 @@ router.get("/pharmacy-orders", async (_req, res) => {
     })),
     total: orders.length,
   });
-});
+}));
 
-router.patch("/pharmacy-orders/:id/status", async (req, res) => {
+router.patch("/pharmacy-orders/:id/status", wrapAsync(async (req, res) => {
   const { status } = req.body;
   if (!status || !(PHARMACY_ORDER_VALID_STATUSES as readonly string[]).includes(status)) {
     sendValidationError(res, `Invalid pharmacy order status "${status}". Valid statuses: ${PHARMACY_ORDER_VALID_STATUSES.join(", ")}`);
@@ -435,10 +439,10 @@ router.patch("/pharmacy-orders/:id/status", async (req, res) => {
   }
 
   sendSuccess(res, { ...order, total: parseFloat(order.total) });
-});
+}));
 
 /* ── Parcel Bookings ── */
-router.get("/parcel-bookings", async (_req, res) => {
+router.get("/parcel-bookings", wrapAsync(async (_req, res) => {
   const bookings = await db
     .select()
     .from(parcelBookingsTable)
@@ -453,9 +457,9 @@ router.get("/parcel-bookings", async (_req, res) => {
     })),
     total: bookings.length,
   });
-});
+}));
 
-router.patch("/parcel-bookings/:id/status", async (req, res) => {
+router.patch("/parcel-bookings/:id/status", wrapAsync(async (req, res) => {
   const { status } = req.body;
   if (!status || !(PARCEL_VALID_STATUSES as readonly string[]).includes(status)) {
     sendValidationError(res, `Invalid parcel status "${status}". Valid statuses: ${PARCEL_VALID_STATUSES.join(", ")}`);
@@ -503,8 +507,8 @@ router.patch("/parcel-bookings/:id/status", async (req, res) => {
   }
 
   sendSuccess(res, { ...booking, fare: parseFloat(booking.fare) });
-});
-router.get("/pharmacy-enriched", async (_req, res) => {
+}));
+router.get("/pharmacy-enriched", wrapAsync(async (_req, res) => {
   const orders = await db.select().from(pharmacyOrdersTable).orderBy(desc(pharmacyOrdersTable.createdAt)).limit(200);
   const users = await db.select({ id: usersTable.id, name: usersTable.name, phone: usersTable.phone }).from(usersTable);
   const userMap = Object.fromEntries(users.map(u => [u.id, u]));
@@ -519,10 +523,10 @@ router.get("/pharmacy-enriched", async (_req, res) => {
     })),
     total: orders.length,
   });
-});
+}));
 
 /* ── Parcel Bookings Enriched ── */
-router.get("/parcel-enriched", async (_req, res) => {
+router.get("/parcel-enriched", wrapAsync(async (_req, res) => {
   const bookings = await db.select().from(parcelBookingsTable).orderBy(desc(parcelBookingsTable.createdAt)).limit(200);
   const users = await db.select({ id: usersTable.id, name: usersTable.name, phone: usersTable.phone }).from(usersTable);
   const userMap = Object.fromEntries(users.map(u => [u.id, u]));
@@ -537,7 +541,7 @@ router.get("/parcel-enriched", async (_req, res) => {
     })),
     total: bookings.length,
   });
-});
+}));
 
 /* ── Delete User ── */
 const ACTIVE_STATUSES = ["pending", "confirmed", "preparing", "ready", "picked_up", "out_for_delivery"];
@@ -569,7 +573,7 @@ function buildOrderFilters(query: Record<string, string | undefined>) {
 }
 
 /* ── User Security Management ── */
-router.patch("/orders/:id/assign-rider", async (req, res) => {
+router.patch("/orders/:id/assign-rider", wrapAsync(async (req, res) => {
   const { riderId } = req.body as { riderId?: string };
   let riderName: string | null = null;
   let riderPhone: string | null = null;
@@ -585,7 +589,7 @@ router.patch("/orders/:id/assign-rider", async (req, res) => {
   if (!order) { sendNotFound(res, "Order not found"); return; }
   addAuditEntry({ action: "order_rider_assigned", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Rider ${riderName ?? riderId ?? "unassigned"} assigned to order ${req.params["id"]}`, result: "success" });
   sendSuccess(res, { success: true, order: { ...order, total: parseFloat(String(order.total)), riderName, riderPhone } });
-});
+}));
 
 /* ── Helpers: DB-backed return/dispute storage via platform_settings key-value ── */
 type ReturnRecord  = { id: string; reason: string; amount: number; status: string; createdAt: string };
@@ -604,12 +608,12 @@ async function saveJson<T>(key: string, data: T[]): Promise<void> {
 }
 
 /* ── Return requests (DB-backed via platform_settings) ── */
-router.get("/orders/:id/returns", async (req, res) => {
+router.get("/orders/:id/returns", wrapAsync(async (req, res) => {
   const orderId = req.params["id"]!;
   sendSuccess(res, await loadJson<ReturnRecord>(`return_log_${orderId}`));
-});
+}));
 
-router.post("/orders/:id/return", async (req, res) => {
+router.post("/orders/:id/return", wrapAsync(async (req, res) => {
   const orderId = req.params["id"]!;
   const { reason, amount } = req.body;
   if (!reason) { sendValidationError(res, "reason is required"); return; }
@@ -618,9 +622,9 @@ router.post("/orders/:id/return", async (req, res) => {
   await saveJson(`return_log_${orderId}`, [...existing, entry]);
   addAuditEntry({ action: "order_return_logged", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Return logged for order ${orderId}: ${entry.reason}`, result: "success" });
   sendCreated(res, entry, "Return logged successfully");
-});
+}));
 
-router.patch("/orders/:id/returns/:returnId", async (req, res) => {
+router.patch("/orders/:id/returns/:returnId", wrapAsync(async (req, res) => {
   const { id: orderId, returnId } = req.params as { id: string; returnId: string };
   const { status } = req.body;
   const existing = await loadJson<ReturnRecord>(`return_log_${orderId}`);
@@ -629,15 +633,15 @@ router.patch("/orders/:id/returns/:returnId", async (req, res) => {
   existing[idx] = { ...existing[idx]!, status: String(status ?? "pending") };
   await saveJson(`return_log_${orderId}`, existing);
   sendSuccess(res, existing[idx]);
-});
+}));
 
 /* ── Dispute requests (DB-backed via platform_settings) ── */
-router.get("/orders/:id/disputes", async (req, res) => {
+router.get("/orders/:id/disputes", wrapAsync(async (req, res) => {
   const orderId = req.params["id"]!;
   sendSuccess(res, await loadJson<DisputeRecord>(`dispute_log_${orderId}`));
-});
+}));
 
-router.post("/orders/:id/dispute", async (req, res) => {
+router.post("/orders/:id/dispute", wrapAsync(async (req, res) => {
   const orderId = req.params["id"]!;
   const { type, note } = req.body;
   if (!note) { sendValidationError(res, "note is required"); return; }
@@ -646,9 +650,9 @@ router.post("/orders/:id/dispute", async (req, res) => {
   await saveJson(`dispute_log_${orderId}`, [...existing, entry]);
   addAuditEntry({ action: "order_dispute_logged", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Dispute logged for order ${orderId}: ${entry.note}`, result: "success" });
   sendCreated(res, entry, "Dispute logged successfully");
-});
+}));
 
-router.patch("/orders/:id/disputes/:disputeId", async (req, res) => {
+router.patch("/orders/:id/disputes/:disputeId", wrapAsync(async (req, res) => {
   const { id: orderId, disputeId } = req.params as { id: string; disputeId: string };
   const { status } = req.body;
   const existing = await loadJson<DisputeRecord>(`dispute_log_${orderId}`);
@@ -657,7 +661,7 @@ router.patch("/orders/:id/disputes/:disputeId", async (req, res) => {
   existing[idx] = { ...existing[idx]!, status: String(status ?? "open") };
   await saveJson(`dispute_log_${orderId}`, existing);
   sendSuccess(res, existing[idx]);
-});
+}));
 
 /* ── GET /admin/orders-stats — summary stats for orders dashboard ── */
 router.get("/orders-stats", async (_req, res) => {
@@ -708,7 +712,7 @@ router.post("/vendors/invite", async (req, res) => {
 });
 
 /* ── PATCH /admin/vendors/:id/tier — update vendor account tier ── */
-router.patch("/vendors/:id/tier", async (req, res) => {
+router.patch("/vendors/:id/tier", wrapAsync(async (req, res) => {
   const { tier } = req.body;
   const VALID_TIERS = ["bronze", "silver", "gold"];
   if (!tier || !VALID_TIERS.includes(String(tier))) {
@@ -724,6 +728,6 @@ router.patch("/vendors/:id/tier", async (req, res) => {
   if (!user) { sendNotFound(res, "Vendor not found"); return; }
   addAuditEntry({ action: "vendor_tier_update", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Vendor ${vendorId} tier set to ${tier}`, result: "success" });
   sendSuccess(res, user);
-});
+}));
 
 export default router;

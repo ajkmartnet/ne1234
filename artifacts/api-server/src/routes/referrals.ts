@@ -19,6 +19,7 @@ function generateReferralCode(name: string): string {
 }
 
 router.get("/my-code", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
 
   const s = await getCachedSettings();
@@ -65,9 +66,13 @@ router.get("/my-code", customerAuth, async (req, res) => {
     rewardAmount,
     usedCount: 0,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/apply", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
   const { code } = req.body as { code?: string };
 
@@ -156,6 +161,9 @@ router.post("/apply", customerAuth, async (req, res) => {
   } catch (err) {
     logger.error({ err, userId, code: upperCode }, "[referrals/apply] transaction failed");
     sendError(res, "Failed to apply referral code. Please try again.", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

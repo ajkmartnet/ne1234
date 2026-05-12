@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { weatherConfigTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { addAuditEntry, getClientIp, type AdminRequest } from "../admin-shared.js";
-import { sendSuccess, sendValidationError } from "../../lib/response.js";
+import { sendSuccess, sendError, sendValidationError } from "../../lib/response.js";
 
 const router = Router();
 
@@ -15,23 +15,31 @@ async function getOrCreateConfig() {
 }
 
 router.get("/", async (_req, res) => {
-  const config = await getOrCreateConfig();
-  sendSuccess(res, { config });
+  try {
+    const config = await getOrCreateConfig();
+    sendSuccess(res, { config });
+  } catch (err: unknown) {
+    sendError(res, "Failed to load weather config", 500);
+  }
 });
 
 router.patch("/", async (req, res) => {
-  const { widgetEnabled, cities } = req.body;
+  try {
+    const { widgetEnabled, cities } = req.body;
 
-  const update: Record<string, unknown> = { updatedAt: new Date() };
-  if (typeof widgetEnabled === "boolean") update.widgetEnabled = widgetEnabled;
-  if (typeof cities === "string") update.cities = cities;
-  if (Array.isArray(cities)) update.cities = cities.join(",");
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (typeof widgetEnabled === "boolean") update.widgetEnabled = widgetEnabled;
+    if (typeof cities === "string") update.cities = cities;
+    if (Array.isArray(cities)) update.cities = cities.join(",");
 
-  await getOrCreateConfig();
-  const [updated] = await db.update(weatherConfigTable).set(update).where(eq(weatherConfigTable.id, "default")).returning();
+    await getOrCreateConfig();
+    const [updated] = await db.update(weatherConfigTable).set(update).where(eq(weatherConfigTable.id, "default")).returning();
 
-  addAuditEntry({ action: "weather_config_update", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Updated weather config: enabled=${updated.widgetEnabled}, cities=${updated.cities}`, result: "success" });
-  sendSuccess(res, { config: updated });
+    addAuditEntry({ action: "weather_config_update", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Updated weather config: enabled=${updated?.widgetEnabled}, cities=${updated?.cities}`, result: "success" });
+    sendSuccess(res, { config: updated });
+  } catch (err: unknown) {
+    sendError(res, "Failed to update weather config", 500);
+  }
 });
 
 /**
@@ -74,8 +82,8 @@ router.post("/test", async (req, res) => {
       latencyMs,
       message: `Open-Meteo OK — ${city} is currently ${temp}°C (${latencyMs}ms)`,
     });
-  } catch (err: any) {
-    sendValidationError(res, `Weather test failed: ${err?.message ?? err}`);
+  } catch {
+    sendError(res, "Weather provider test failed", 500);
   }
 });
 

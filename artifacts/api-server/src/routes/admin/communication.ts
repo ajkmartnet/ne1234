@@ -375,8 +375,12 @@ router.delete("/communication/roles/:id", async (req, res) => {
 });
 
 router.get("/communication/roles/ai-status", async (_req, res) => {
+  try {
   const available = !!(process.env["GEMINI_API_KEY"]);
   res.json({ data: { available, provider: available ? "gemini" : null } });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/communication/roles/ai-generate", async (req: any, res) => {

@@ -58,8 +58,12 @@ function validateBusinessRule(payload: Record<string, unknown>, requireTrigger =
 }
 
 router.get("/", async (req, res) => {
+  try {
   const rules = await db.select().from(businessRulesTable).orderBy(businessRulesTable.priority);
   sendSuccess(res, { rules });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const createBusinessRuleSchema = z.object({
@@ -73,6 +77,7 @@ const createBusinessRuleSchema = z.object({
 });
 
 router.post("/", async (req, res) => {
+  try {
   const parsed = createBusinessRuleSchema.safeParse({
     ...req.body,
     conditions: parseJsonField(req.body.conditions),
@@ -105,9 +110,13 @@ router.post("/", async (req, res) => {
   });
 
   sendCreated(res, { rule: created });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.put("/:id", async (req, res) => {
+  try {
   const id = req.params.id;
   const body = {
     name: req.body.name,
@@ -151,9 +160,13 @@ router.put("/:id", async (req, res) => {
   });
 
   sendSuccess(res, { rule: updated });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/:id", async (req, res) => {
+  try {
   const id = req.params.id;
   const [existing] = await db.select().from(businessRulesTable).where(eq(businessRulesTable.id, id)).limit(1);
   if (!existing) {
@@ -172,9 +185,13 @@ router.delete("/:id", async (req, res) => {
   });
 
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/validate", async (req, res) => {
+  try {
   const payload = {
     trigger: req.body.trigger,
     conditions: parseJsonField(req.body.conditions),
@@ -185,6 +202,9 @@ router.post("/validate", async (req, res) => {
   };
   const errors = validateBusinessRule(payload);
   sendSuccess(res, { valid: errors.length === 0, errors });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

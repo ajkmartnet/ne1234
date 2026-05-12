@@ -2,11 +2,7 @@ import { Router } from "express";
 import { db, campaignsTable, offersTable, offerRedemptionsTable, campaignParticipationsTable, requireRole } from "./helpers.js";
 import { eq, desc, asc, count, sum, inArray } from "./helpers.js";
 import { generateId, adminAuth } from "./helpers.js";
-<<<<<<< HEAD
-import { sendSuccess, sendCreated, sendNotFound, sendValidationError, sendForbidden } from "./helpers.js";
-=======
-import { sendSuccess, sendCreated, sendNotFound, sendValidationError, sendError } from "./helpers.js";
->>>>>>> cbe39fe (Task #5: Full system async/error handling audit and E2E bug fix)
+import { sendSuccess, sendCreated, sendNotFound, sendValidationError, sendForbidden, sendError } from "./helpers.js";
 import { nowIso, mapCampaign, mapOffer, marketingAuth } from "./helpers.js";
 
 const router = Router();
@@ -110,50 +106,54 @@ router.delete("/campaigns/:id", marketingAuth, async (req, res) => {
 
 /* ── GET /vendor/campaigns/:id/performance ── vendor campaign performance ── */
 router.get("/vendor/campaigns/:id/performance", requireRole("vendor"), async (req, res) => {
-  const vendorId = req.vendorId as string | undefined;
-  const campaignId = req.params["id"]!;
+  try {
+    const vendorId = req.vendorId as string | undefined;
+    const campaignId = req.params["id"]!;
 
-  const vendorParticipations = await db.select({ vendorId: campaignParticipationsTable.vendorId })
-    .from(campaignParticipationsTable)
-    .where(eq(campaignParticipationsTable.campaignId, campaignId));
-  if (!vendorParticipations.some(p => p.vendorId === vendorId)) {
-    sendForbidden(res, "You do not have access to this campaign's performance data");
-    return;
+    const vendorParticipations = await db.select({ vendorId: campaignParticipationsTable.vendorId })
+      .from(campaignParticipationsTable)
+      .where(eq(campaignParticipationsTable.campaignId, campaignId));
+    if (!vendorParticipations.some(p => p.vendorId === vendorId)) {
+      sendForbidden(res, "You do not have access to this campaign's performance data");
+      return;
+    }
+
+    const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId)).limit(1);
+    if (!campaign) { sendNotFound(res, "Campaign not found"); return; }
+
+    const offers = await db.select().from(offersTable).where(eq(offersTable.campaignId, campaignId));
+    const offerIds = offers.map(o => o.id);
+
+    const redemptions = offerIds.length > 0
+      ? await db.select({
+          offerId:    offerRedemptionsTable.offerId,
+          totalUses:  count(),
+          totalValue: sum(offerRedemptionsTable.discount),
+        })
+        .from(offerRedemptionsTable)
+        .where(inArray(offerRedemptionsTable.offerId, offerIds))
+        .groupBy(offerRedemptionsTable.offerId)
+      : [];
+
+    const redemptionMap = Object.fromEntries(
+      redemptions.map(r => [r.offerId, { totalUses: r.totalUses, totalValue: r.totalValue }])
+    );
+
+    sendSuccess(res, {
+      campaign: mapCampaign(campaign),
+      offers: offers.map(o => ({
+        ...mapOffer(o),
+        performance: redemptionMap[o.id] ?? { totalUses: 0, totalValue: "0" },
+      })),
+      totals: {
+        totalOffers:      offers.length,
+        totalRedemptions: redemptions.reduce((s, r) => s + Number(r.totalUses), 0),
+        totalDiscount:    redemptions.reduce((s, r) => s + Number(r.totalValue ?? 0), 0),
+      },
+    });
+  } catch (err) {
+    sendError(res, "Internal server error", 500);
   }
-
-  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId)).limit(1);
-  if (!campaign) { sendNotFound(res, "Campaign not found"); return; }
-
-  const offers = await db.select().from(offersTable).where(eq(offersTable.campaignId, campaignId));
-  const offerIds = offers.map(o => o.id);
-
-  const redemptions = offerIds.length > 0
-    ? await db.select({
-        offerId:    offerRedemptionsTable.offerId,
-        totalUses:  count(),
-        totalValue: sum(offerRedemptionsTable.discount),
-      })
-      .from(offerRedemptionsTable)
-      .where(inArray(offerRedemptionsTable.offerId, offerIds))
-      .groupBy(offerRedemptionsTable.offerId)
-    : [];
-
-  const redemptionMap = Object.fromEntries(
-    redemptions.map(r => [r.offerId, { totalUses: r.totalUses, totalValue: r.totalValue }])
-  );
-
-  sendSuccess(res, {
-    campaign: mapCampaign(campaign),
-    offers: offers.map(o => ({
-      ...mapOffer(o),
-      performance: redemptionMap[o.id] ?? { totalUses: 0, totalValue: "0" },
-    })),
-    totals: {
-      totalOffers:      offers.length,
-      totalRedemptions: redemptions.reduce((s, r) => s + Number(r.totalUses), 0),
-      totalDiscount:    redemptions.reduce((s, r) => s + Number(r.totalValue ?? 0), 0),
-    },
-  });
 });
 
 export default router;

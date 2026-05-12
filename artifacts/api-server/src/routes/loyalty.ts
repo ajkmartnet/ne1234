@@ -33,6 +33,7 @@ function computeLoyaltyBalance(rows: LoyaltyTxnRow[]): number {
 
 /* GET /loyalty/balance — loyalty points summary (alternate to GET /users/loyalty/balance) */
 router.get("/balance", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
 
   const txns = await db.select({
@@ -68,10 +69,14 @@ router.get("/balance", customerAuth, async (req, res) => {
       createdAt: t.createdAt.toISOString(),
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* POST /loyalty/redeem — redeem points against a pending order */
 router.post("/redeem", customerAuth, redeemLimiter, async (req, res) => {
+  try {
   const userId = req.customerId!;
   const { points, orderId } = req.body as { points?: number; orderId?: string };
 
@@ -180,6 +185,9 @@ router.post("/redeem", customerAuth, redeemLimiter, async (req, res) => {
     if (code === 409) { sendError(res, msg, 409); return; }
     logger.error({ err, userId, orderId }, "[loyalty/redeem] transaction failed");
     sendError(res, "Failed to redeem loyalty points. Please try again.", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

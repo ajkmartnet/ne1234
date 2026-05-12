@@ -21,6 +21,7 @@ const assignExperimentSchema = z.object({
 }).strict();
 
 router.get("/", async (req, res) => {
+  try {
   const p = paginationSchema.safeParse(req.query);
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -57,6 +58,9 @@ router.get("/", async (req, res) => {
     logger.error({ err }, "[experiments] list error");
     sendSuccess(res, { experiments: [], total: 0, page: 1, limit: 50 });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/:id", async (req, res) => {
@@ -81,6 +85,7 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/assign", async (req, res) => {
+  try {
   const p = assignExperimentSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -132,6 +137,9 @@ router.post("/assign", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "[experiments] assign error");
     sendSuccess(res, { assignment: null, isNew: false });
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

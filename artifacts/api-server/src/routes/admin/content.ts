@@ -34,6 +34,7 @@ const router = Router();
    Legacy callers that omit both receive a default page of 50.
 ─────────────────────────────────────────────────────────────────────────── */
 router.get("/products", async (req, res) => {
+  try {
   const settings = await getCachedSettings();
   const isDemoMode = (settings["platform_mode"] ?? "demo") === "demo";
 
@@ -89,9 +90,13 @@ router.get("/products", async (req, res) => {
     hasMore: page.hasMore,
     isDemo: false,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/products/pending", async (_req, res) => {
+  try {
   const products = await db
     .select()
     .from(productsTable)
@@ -107,9 +112,13 @@ router.get("/products/pending", async (_req, res) => {
     })),
     total: products.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/products/:id/approve", async (req, res) => {
+  try {
   const { note } = req.body;
   /* Fetch previous state before approve to detect back-in-stock transition */
   const [prevProduct] = await db.select().from(productsTable).where(eq(productsTable.id, req.params["id"]!)).limit(1);
@@ -155,9 +164,13 @@ router.patch("/products/:id/approve", async (req, res) => {
   }
   getIO()?.to("admin-fleet").emit("product:approved", { id: product.id });
   sendSuccess(res, { ...product, price: parseFloat(product.price) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/products/:id/reject", async (req, res) => {
+  try {
   const { reason } = req.body;
   if (!reason) { sendValidationError(res, "reason is required"); return; }
   const [product] = await db
@@ -182,10 +195,14 @@ router.patch("/products/:id/reject", async (req, res) => {
   }
   getIO()?.to("admin-fleet").emit("product:rejected", { id: product.id });
   sendSuccess(res, { ...product, price: parseFloat(product.price) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /products/:id/stock-history ── Admin: paginated history with vendor/date filters ── */
 router.get("/products/:id/stock-history", async (req, res) => {
+  try {
   const productId = req.params["id"]!;
   const vendorId = req.query["vendorId"] as string | undefined;
   const from     = req.query["from"]     as string | undefined;
@@ -229,6 +246,9 @@ router.get("/products/:id/stock-history", async (req, res) => {
   }));
 
   sendSuccess(res, { history, page, limit, productId, productName: product.name });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const SYSTEM_VENDOR_ID = "ajkmart_system";
@@ -266,6 +286,7 @@ const createProductSchema = z.object({
 });
 
 router.post("/products", async (req, res) => {
+  try {
   const parsed = createProductSchema.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error.errors[0]?.message ?? "Invalid request body");
@@ -292,10 +313,14 @@ router.post("/products", async (req, res) => {
   }).returning();
   if (!product) { sendError(res, "Failed to create product", 500); return; }
   sendCreated(res, { ...product, price: parseFloat(product.price) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /products/bulk-refill-reminder — notify vendors of selected low-stock products ── */
 router.post("/products/bulk-refill-reminder", adminAuth, async (req, res) => {
+  try {
   const { productIds } = req.body as { productIds?: string[] };
   if (!Array.isArray(productIds) || productIds.length === 0) {
     sendValidationError(res, "productIds must be a non-empty array");
@@ -362,10 +387,14 @@ router.post("/products/bulk-refill-reminder", adminAuth, async (req, res) => {
     failed: failedVendorIds.length,
     failedVendorIds,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /products/bulk — single atomic bulk update for price/category/stock ── */
 router.patch("/products/bulk", async (req, res) => {
+  try {
   const { ids, update } = req.body as { ids: string[]; update: { price?: number; category?: string; inStock?: boolean; stock?: number } };
   if (!Array.isArray(ids) || ids.length === 0) { sendValidationError(res, "ids must be a non-empty array"); return; }
   if (!update || typeof update !== "object" || Object.keys(update).length === 0) { sendValidationError(res, "update must contain at least one field"); return; }
@@ -381,9 +410,13 @@ router.patch("/products/bulk", async (req, res) => {
     .where(inArray(productsTable.id, ids))
     .returning({ id: productsTable.id });
   sendSuccess(res, { updated: updated.length, ids: updated.map(r => r.id) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/products/:id", async (req, res) => {
+  try {
   const { name, description, price, originalPrice, category, unit, inStock, stock, vendorName, deliveryTime, image } = req.body;
   const updates: Partial<typeof productsTable.$inferInsert> = {};
   if (name !== undefined) updates.name = name;
@@ -454,9 +487,13 @@ router.patch("/products/:id", async (req, res) => {
   }
 
   sendSuccess(res, { ...product, price: parseFloat(product.price) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/products/:id", async (req, res) => {
+  try {
   const [product] = await db
     .update(productsTable)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
@@ -464,6 +501,9 @@ router.delete("/products/:id", async (req, res) => {
     .returning({ id: productsTable.id });
   if (!product) { sendNotFound(res, "Product not found"); return; }
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Broadcast Notification ──
@@ -512,6 +552,7 @@ function buildRoleConditions(roles: BroadcastRole[]) {
  * Returns { count, targetRoles } so the admin UI can preview the audience size
  * BEFORE sending the broadcast. */
 router.get("/broadcast/recipients/count", async (req, res) => {
+  try {
   const raw = req.query["targetRole"];
   let parsed: unknown = raw;
   if (typeof raw === "string" && raw.includes(",")) {
@@ -526,9 +567,13 @@ router.get("/broadcast/recipients/count", async (req, res) => {
     count: row?.c ?? 0,
     targetRoles: roles.length > 0 ? roles : ["all"],
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/broadcast", async (req, res) => {
+  try {
   const { title, body, titleKey, bodyKey, type = "system", icon = "notifications-outline", targetRole } = req.body;
   if (!title && !titleKey) { sendValidationError(res, "title or titleKey required"); return; }
   if (!body && !bodyKey) { sendValidationError(res, "body or bodyKey required"); return; }
@@ -574,10 +619,14 @@ router.post("/broadcast", async (req, res) => {
   } catch { /* non-fatal */ }
 
   sendSuccess(res, { success: true, sent, targetRoles: roles.length > 0 ? roles : ["all"] });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Wallet Transactions ── */
 router.get("/categories/tree", async (req, res) => {
+  try {
   const type = req.query["type"] as string;
   const conditions = [];
   if (type) conditions.push(eq(categoriesTable.type, type));
@@ -604,6 +653,9 @@ router.get("/categories/tree", async (req, res) => {
   }));
 
   sendSuccess(res, { categories: tree });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/categories", async (req, res) => {
@@ -623,6 +675,7 @@ router.get("/categories", async (req, res) => {
 });
 
 router.post("/categories", async (req, res) => {
+  try {
   const { name, icon, type, parentId, sortOrder, isActive } = req.body;
   if (!name || !type) {
     sendValidationError(res, "name and type are required");
@@ -641,9 +694,13 @@ router.post("/categories", async (req, res) => {
   }).returning();
 
   sendCreated(res, category);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/categories/:id", async (req, res) => {
+  try {
   const { name, icon, type, parentId, sortOrder, isActive } = req.body;
 
   const updates: Record<string, any> = { updatedAt: new Date() };
@@ -666,9 +723,13 @@ router.patch("/categories/:id", async (req, res) => {
   }
 
   sendSuccess(res, updated);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/categories/:id", async (req, res) => {
+  try {
   const id = req.params["id"]!;
 
   await db
@@ -687,9 +748,13 @@ router.delete("/categories/:id", async (req, res) => {
   }
 
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/categories/reorder", async (req, res) => {
+  try {
   const { items } = req.body;
   if (!Array.isArray(items)) {
     sendValidationError(res, "items array required");
@@ -706,10 +771,14 @@ router.post("/categories/reorder", async (req, res) => {
   }
 
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Banners ── */
 router.get("/banners", async (req, res) => {
+  try {
   const placement = req.query["placement"] as string | undefined;
   const status = req.query["status"] as string | undefined;
 
@@ -732,9 +801,13 @@ router.get("/banners", async (req, res) => {
   if (placement) mapped = mapped.filter(b => b.placement === placement);
   if (status) mapped = mapped.filter(b => b.status === status);
   sendSuccess(res, { banners: mapped, total: mapped.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/banners", async (req, res) => {
+  try {
   const body = req.body as Record<string, unknown>;
   if (!body.title) {
     sendValidationError(res, "title is required"); return;
@@ -757,9 +830,13 @@ router.post("/banners", async (req, res) => {
     endDate: body.endDate ? new Date(body.endDate as string) : null,
   }).returning();
   sendCreated(res, banner);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/banners/reorder", async (req, res) => {
+  try {
   const { items } = req.body as { items: { id: string; sortOrder: number }[] };
   if (!Array.isArray(items)) {
     sendValidationError(res, "items array required"); return;
@@ -768,6 +845,9 @@ router.patch("/banners/reorder", async (req, res) => {
     await db.update(bannersTable).set({ sortOrder: item.sortOrder, updatedAt: new Date() }).where(eq(bannersTable.id, item.id));
   }
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const bannerUpdateHandler = async (req: import("express").Request, res: import("express").Response) => {
@@ -791,16 +871,21 @@ router.patch("/banners/:id", bannerUpdateHandler);
 router.put("/banners/:id", bannerUpdateHandler);
 
 router.delete("/banners/:id", async (req, res) => {
+  try {
   const bannerId = req.params["id"]!;
   const [deleted] = await db.delete(bannersTable).where(eq(bannersTable.id, bannerId)).returning();
   if (!deleted) {
     sendNotFound(res, "Banner not found"); return;
   }
   sendSuccess(res, { success: true, id: bannerId });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Flash Deals ── */
 router.get("/flash-deals", async (_req, res) => {
+  try {
   const deals = await db.select().from(flashDealsTable).orderBy(desc(flashDealsTable.createdAt));
   const products = await db.select({ id: productsTable.id, name: productsTable.name, price: productsTable.price, image: productsTable.image, category: productsTable.category }).from(productsTable);
   const productMap = Object.fromEntries(products.map(p => [p.id, p]));
@@ -821,9 +906,13 @@ router.get("/flash-deals", async (_req, res) => {
             : "live",
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/flash-deals", async (req, res) => {
+  try {
   const body = req.body as Record<string, unknown>;
   if (!body.productId || !body.startTime || !body.endTime) {
     sendValidationError(res, "productId, startTime, endTime required"); return;
@@ -841,9 +930,13 @@ router.post("/flash-deals", async (req, res) => {
     isActive:     body.isActive !== false,
   }).returning();
   sendCreated(res, deal);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/flash-deals/:id", async (req, res) => {
+  try {
   const body = req.body as Record<string, unknown>;
   const updates: Record<string, any> = {};
   if (body.title        !== undefined) updates.title        = body.title;
@@ -857,15 +950,23 @@ router.patch("/flash-deals/:id", async (req, res) => {
   const [deal] = await db.update(flashDealsTable).set(updates).where(eq(flashDealsTable.id, req.params["id"]!)).returning();
   if (!deal) { sendNotFound(res, "Deal not found"); return; }
   sendSuccess(res, deal);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/flash-deals/:id", async (req, res) => {
+  try {
   await db.delete(flashDealsTable).where(eq(flashDealsTable.id, req.params["id"]!));
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Promo Codes ── */
 router.get("/promo-codes", async (_req, res) => {
+  try {
   const codes = await db.select().from(promoCodesTable).orderBy(desc(promoCodesTable.createdAt));
   const now = new Date();
   sendSuccess(res, {
@@ -883,9 +984,13 @@ router.get("/promo-codes", async (_req, res) => {
             : "active",
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/promo-codes", async (req, res) => {
+  try {
   const body = req.body as Record<string, unknown>;
   if (!body.code) { sendValidationError(res, "code required"); return; }
   try {
@@ -907,9 +1012,13 @@ router.post("/promo-codes", async (req, res) => {
     if ((e as { code?: string }).code === "23505") { sendError(res, "Promo code already exists", 409); return; }
     throw e;
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/promo-codes/:id", async (req, res) => {
+  try {
   const body = req.body as Record<string, unknown>;
   const updates: Record<string, any> = {};
   if (body.code           !== undefined) updates.code           = String(body.code).toUpperCase().trim();
@@ -925,11 +1034,18 @@ router.patch("/promo-codes/:id", async (req, res) => {
   const [code] = await db.update(promoCodesTable).set(updates).where(eq(promoCodesTable.id, req.params["id"]!)).returning();
   if (!code) { sendNotFound(res, "Promo code not found"); return; }
   sendSuccess(res, code);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/promo-codes/:id", async (req, res) => {
+  try {
   await db.delete(promoCodesTable).where(eq(promoCodesTable.id, req.params["id"]!));
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════
@@ -941,6 +1057,7 @@ router.delete("/promo-codes/:id", async (req, res) => {
    Flags low-stock rows (newStock < 5) so the client can highlight them.
 ───────────────────────────────────────────────────────────────────────────────────── */
 router.get("/stock-notifications", adminAuth, async (req, res) => {
+  try {
   const LOW_STOCK_THRESHOLD = 5;
   try {
     const rows = await db
@@ -970,6 +1087,9 @@ router.get("/stock-notifications", adminAuth, async (req, res) => {
   } catch (err: any) {
     logger.error({ err: err.message }, "[stock-notifications] fetch failed");
     sendError(res, "Failed to fetch stock notifications", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

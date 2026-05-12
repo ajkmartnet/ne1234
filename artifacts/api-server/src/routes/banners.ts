@@ -8,6 +8,7 @@ import { sendSuccess, sendInternalError } from "../lib/response.js";
 const router: IRouter = Router();
 
 router.get("/", async (req, res) => {
+  try {
   const placement = (req.query["placement"] as string) || "home";
   const service = req.query["service"] as string | undefined;
   const now = new Date();
@@ -53,6 +54,9 @@ router.get("/", async (req, res) => {
   } catch (e: unknown) {
     logger.error("[banners GET /] DB error:", e);
     sendInternalError(res);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

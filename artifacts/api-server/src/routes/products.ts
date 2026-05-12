@@ -39,6 +39,7 @@ function mapSlimProduct(p: typeof productsTable.$inferSelect) {
 
 /* ── GET /products/flash-deals ──────────────────────────────────────────── */
 router.get("/flash-deals", async (req, res) => {
+  try {
   const s = await getCachedSettings();
   const flashDefault = parseInt(s["pagination_flash_deals"] ?? "20") || 20;
   const flashMax = Math.max(flashDefault, parseInt(s["pagination_products_max"] ?? "50") || 50);
@@ -100,10 +101,14 @@ router.get("/flash-deals", async (req, res) => {
     logger.error("[products GET /flash-deals] DB error:", e);
     sendInternalError(res);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /products/trending-searches — top search terms from real search logs ── */
 router.get("/trending-searches", async (req, res) => {
+  try {
   const s2 = await getCachedSettings();
   const trendingDefault = parseInt(s2["pagination_trending_limit"] ?? "12") || 12;
   const trendingMax = parseInt(s2["pagination_products_max"] ?? "50") || 50;
@@ -171,6 +176,9 @@ router.get("/trending-searches", async (req, res) => {
   }
 
   sendSuccess(res, { searches });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /products/search ─────────────────────────────────────────────────
@@ -178,6 +186,7 @@ router.get("/trending-searches", async (req, res) => {
    Falls back to ilike for very short queries (<3 chars).
    ─────────────────────────────────────────────────────────────────────── */
 router.get("/search", async (req, res) => {
+  try {
   const { q, type, sort, minPrice, maxPrice, minRating, category } = req.query;
   const ps = await getCachedSettings();
   const defaultPP = parseInt(ps["pagination_products_default"] ?? "20") || 20;
@@ -268,6 +277,9 @@ router.get("/search", async (req, res) => {
     perPage,
     totalPages: Math.ceil(total / perPage),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

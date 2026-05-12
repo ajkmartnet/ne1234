@@ -45,6 +45,7 @@ function getPool(): Pool | null {
 /* ─── Admin endpoint: WhatsApp delivery log ──────────────────────────────── */
 
 router.get("/whatsapp/delivery-log", adminAuth, async (req, res) => {
+  try {
   const pool = getPool();
   if (!pool) {
     sendError(res, "Database not configured", 503);
@@ -91,11 +92,15 @@ router.get("/whatsapp/delivery-log", adminAuth, async (req, res) => {
     logger.error("[WhatsApp delivery log] Query error:", err.message);
     sendError(res, "Failed to fetch delivery log", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─── GET: Meta verification handshake ──────────────────────────────────── */
 
 router.get("/whatsapp", async (req, res) => {
+  try {
   const mode      = req.query["hub.mode"];
   const token     = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
@@ -120,11 +125,15 @@ router.get("/whatsapp", async (req, res) => {
   }
 
   res.status(200).send(challenge);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─── POST: Delivery status & inbound message events ────────────────────── */
 
 router.post("/whatsapp", async (req, res) => {
+  try {
   /* ── HMAC-SHA256 Signature Verification ──────────────────────────────────
    * Meta signs every POST with X-Hub-Signature-256: sha256=<hex>
    * computed over the raw request bytes using the app secret.
@@ -207,6 +216,9 @@ router.post("/whatsapp", async (req, res) => {
         );
       }
     }
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

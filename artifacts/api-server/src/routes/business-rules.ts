@@ -79,6 +79,7 @@ router.get("/settings", async (_req, res) => {
 });
 
 router.post("/", async (req, res) => {
+  try {
   const p = ruleCreateSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -108,9 +109,13 @@ router.post("/", async (req, res) => {
     logger.error({ err }, "[business-rules] create error");
     sendError(res, "Failed to create business rule", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.put("/:id", async (req, res) => {
+  try {
   const p = ruleUpdateSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -154,6 +159,9 @@ router.put("/:id", async (req, res) => {
     logger.error({ err }, "[business-rules] update error");
     sendError(res, "Failed to update business rule", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/:id", async (req, res) => {
@@ -189,6 +197,7 @@ const validateSchema = z.object({
 });
 
 router.post("/validate", async (req, res) => {
+  try {
   const p = validateSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -257,9 +266,13 @@ router.post("/validate", async (req, res) => {
     logger.error({ err }, "[business-rules] validate error");
     sendError(res, "Failed to validate rule", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/evaluate", async (req, res) => {
+  try {
   const { metric, value, role } = req.body ?? {};
   if (!metric || value === undefined) {
     sendError(res, "metric and value are required", 400);
@@ -303,6 +316,9 @@ router.post("/evaluate", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "[business-rules] evaluate error");
     sendError(res, "Failed to evaluate rules", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

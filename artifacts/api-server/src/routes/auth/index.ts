@@ -346,6 +346,7 @@ const checkIdentifierLimiter = rateLimit({
 });
 
 router.post("/check-identifier", checkIdentifierLimiter, sharedValidateBody(checkIdentifierSchema), async (req, res) => {
+  try {
   const { identifier, role, deviceId } = req.body;
 
   const ip          = getClientIp(req);
@@ -498,6 +499,9 @@ router.post("/check-identifier", checkIdentifierLimiter, sharedValidateBody(chec
     isLocked:  false,
     otpChannels,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -507,6 +511,7 @@ router.post("/check-identifier", checkIdentifierLimiter, sharedValidateBody(chec
    Body: { identifier }
 ───────────────────────────────────────────────────────────── */
 router.post("/send-merge-otp", otpLimiter, async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -563,6 +568,9 @@ router.post("/send-merge-otp", otpLimiter, async (req, res) => {
   }
 
   writeAuthAuditLog("merge_otp_sent", { ip, userId: auth.userId, userAgent: req.headers["user-agent"] ?? undefined, metadata: { identifier } });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -572,6 +580,7 @@ router.post("/send-merge-otp", otpLimiter, async (req, res) => {
    Body: { identifier, otp }
 ───────────────────────────────────────────────────────────── */
 router.post("/merge-account", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -627,6 +636,9 @@ router.post("/merge-account", async (req, res) => {
     writeAuthAuditLog("account_merge_email", { ip, userId: auth.userId, userAgent: req.headers["user-agent"] ?? undefined, metadata: { email } });
     sendSuccess(res, { success: true, message: "Email linked successfully", linked: "email" });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -634,6 +646,7 @@ router.post("/merge-account", async (req, res) => {
    Atomically upsert user by phone — one account per number.
 ───────────────────────────────────────────────────────────── */
 router.post("/send-otp", otpLimiter, verifyCaptcha, sharedValidateBody(sendOtpSchema), async (req, res) => {
+  try {
   const rawPhone = req.body.phone;
   const deviceId = req.body.deviceId;
   const preferredChannel = req.body.preferredChannel;
@@ -943,6 +956,9 @@ router.post("/send-otp", otpLimiter, verifyCaptcha, sharedValidateBody(sendOtpSc
   };
 
   sendSuccess(res, response);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -950,6 +966,7 @@ router.post("/send-otp", otpLimiter, verifyCaptcha, sharedValidateBody(sendOtpSc
    Validates the OTP, checks security settings, returns token.
 ───────────────────────────────────────────────────────────── */
 router.post("/verify-otp", otpLimiter, verifyCaptcha, sharedValidateBody(verifyOtpSchema), async (req, res) => {
+  try {
   const phone = canonicalizePhone(req.body.phone);
 
   if (!(await isValidCanonicalPhone(phone))) {
@@ -1403,6 +1420,9 @@ router.post("/verify-otp", otpLimiter, verifyCaptcha, sharedValidateBody(verifyO
       createdAt:     u.createdAt.toISOString(),
     },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -1411,6 +1431,7 @@ router.post("/verify-otp", otpLimiter, verifyCaptcha, sharedValidateBody(verifyO
    and register as a vendor pending admin approval.
 ───────────────────────────────────────────────────────────── */
 router.post("/vendor-register", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) {
     sendUnauthorized(res, "Authentication required. Please verify your phone via OTP first.");
@@ -1543,6 +1564,9 @@ router.post("/vendor-register", async (req, res) => {
       ? "Your vendor account is approved! You can now log in."
       : "Your application has been submitted. Admin will review and approve your account.",
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -1550,6 +1574,7 @@ router.post("/vendor-register", async (req, res) => {
    Client can use this to check if their token is still valid.
 ───────────────────────────────────────────────────────────── */
 router.post("/validate-token", async (req, res) => {
+  try {
   /* Support both body token and Authorization header */
   const authHeader = req.headers.authorization ?? "";
   const bodyToken  = req.body?.token ?? "";
@@ -1576,6 +1601,9 @@ router.post("/validate-token", async (req, res) => {
     sendSuccess(res, { valid: true, expiresAt, userId: user.id, role: user.roles });
   } catch {
     sendUnauthorized(res, "Token validation failed");
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
@@ -1732,6 +1760,7 @@ router.post("/refresh-token", sharedValidateBody(refreshTokenSchema), handleRefr
    Revokes the refresh token and clears OTP. Client must discard tokens.
 ───────────────────────────────────────────────────────────── */
 router.post("/logout", async (req, res) => {
+  try {
   const authHeader = req.headers["authorization"] as string | undefined;
   const tokenHeader = req.headers["x-auth-token"] as string | undefined;
   const raw = tokenHeader || authHeader?.replace(/^Bearer\s+/i, "");
@@ -1781,6 +1810,9 @@ router.post("/logout", async (req, res) => {
   clearVendorRefreshCookie(res);
 
   sendSuccess(res, undefined, "Logged out successfully");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -1790,6 +1822,7 @@ router.post("/logout", async (req, res) => {
    Returns: { phone: {available,taken}, email: {...}, username: {...} }
 ══════════════════════════════════════════════════════════════ */
 router.post("/check-available", async (req, res) => {
+  try {
   /* ── IP-based rate limit: max 20 checks per 10 minutes per IP ──
      Prevents scraping the entire user registry via phone/email/username probing. */
   const ip = getClientIp(req);
@@ -1824,6 +1857,9 @@ router.post("/check-available", async (req, res) => {
   }
 
   sendSuccess(res, result);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -1832,6 +1868,7 @@ router.post("/check-available", async (req, res) => {
    Body: { email }
 ══════════════════════════════════════════════════════════════ */
 router.post("/send-email-otp", otpLimiter, verifyCaptcha, async (req, res) => {
+  try {
   const { email } = req.body;
   if (!email || !email.includes("@")) {
     sendError(res, "Valid email address required", 400); return;
@@ -1929,6 +1966,9 @@ router.post("/send-email-otp", otpLimiter, verifyCaptcha, async (req, res) => {
     channel: emailResult.sent ? "email" : "console",
     ...(isDev && emailConsoleFallback ? { otp, devMode: true } : {}),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -1936,6 +1976,7 @@ router.post("/send-email-otp", otpLimiter, verifyCaptcha, async (req, res) => {
    Login via email OTP. Body: { email, otp }
 ══════════════════════════════════════════════════════════════ */
 router.post("/verify-email-otp", otpLimiter, verifyCaptcha, async (req, res) => {
+  try {
   const { email, otp } = req.body;
   if (!email || !otp) { sendError(res, "Email and OTP are required", 400); return; }
 
@@ -2083,6 +2124,9 @@ router.post("/verify-email-otp", otpLimiter, verifyCaptcha, async (req, res) => 
     pendingApproval: false,
     user: { id: user.id, phone: decryptPii(user.encryptedPhone, user.phone), name: user.name, email: decryptPii(user.encryptedEmail, user.email), username: user.username, role: user.roles, roles: user.roles ?? "customer", avatar: user.avatar, walletBalance: parseFloat(user.walletBalance ?? "0"), emailVerified: true, phoneVerified: user.phoneVerified ?? false },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -2288,6 +2332,7 @@ router.post("/login", loginLimiter, verifyCaptcha, handleUnifiedLogin);
    Returns JWT token on success.
 ══════════════════════════════════════════════════════════════ */
 router.post("/login/verify-otp", otpLimiter, async (req, res) => {
+  try {
   const { tempToken, otp } = req.body ?? {};
   if (!tempToken || !otp) {
     sendError(res, "tempToken and otp are required", 400); return;
@@ -2375,6 +2420,9 @@ router.post("/login/verify-otp", otpLimiter, async (req, res) => {
     sessionDays: getRefreshTokenTtlDays(),
     user: { id: user.id, phone: decryptPii(user.encryptedPhone, user.phone), name: user.name, email: decryptPii(user.encryptedEmail, user.email), username: user.username, role: user.roles, roles: user.roles, walletBalance: parseFloat(user.walletBalance ?? "0") },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -2383,6 +2431,7 @@ router.post("/login/verify-otp", otpLimiter, async (req, res) => {
    Requires valid JWT. Body: { token, name, email?, username?, password? }
 ══════════════════════════════════════════════════════════════ */
 router.post("/complete-profile", async (req, res) => {
+  try {
   /* Accept token from body OR Authorization: Bearer header */
   const authHeader = req.headers["authorization"] as string | undefined;
   const rawToken = req.body?.token || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
@@ -2536,6 +2585,9 @@ router.post("/complete-profile", async (req, res) => {
     refreshToken: refreshRaw,
     user: { id: updated!.id, phone: updated!.phone, name: updated!.name, email: updated!.email, username: updated!.username, role: updated!.roles, roles: updated!.roles, avatar: updated!.avatar, cnic: updated!.cnic, city: updated!.city, area: updated!.area, address: updated!.address, latitude: updated!.latitude, longitude: updated!.longitude, kycStatus: updated!.kycStatus, accountLevel: updated!.accountLevel, totpEnabled: updated!.totpEnabled ?? false, emailVerified: updated!.emailVerified, phoneVerified: updated!.phoneVerified, walletBalance: parseFloat(updated!.walletBalance ?? "0"), isActive: updated!.isActive, createdAt: updated!.createdAt.toISOString() },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -2543,6 +2595,7 @@ router.post("/complete-profile", async (req, res) => {
    Set or change password. Body: { token, password, currentPassword? }
 ══════════════════════════════════════════════════════════════ */
 router.post("/set-password", async (req, res) => {
+  try {
   /* Accept token from body OR Authorization: Bearer header */
   const authHeader = req.headers["authorization"] as string | undefined;
   const rawToken = req.body?.token || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
@@ -2584,6 +2637,9 @@ router.post("/set-password", async (req, res) => {
   }).where(eq(usersTable.id, userId));
   writeAuthAuditLog("password_changed", { userId, ip: getClientIp(req), userAgent: req.headers["user-agent"] ?? undefined });
   sendSuccess(res, { success: true, message: "Password set ho gaya", requirePasswordChange: false });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* isAuthMethodEnabled is now exported from @workspace/auth-utils/server
@@ -2656,6 +2712,7 @@ const CNIC_REGEX = /^\d{5}-\d{7}-\d{1}$/;
 const PHONE_REGEX = /^0?3\d{9}$/;
 
 router.post("/register", verifyCaptcha, sharedValidateBody(registerSchema), async (req, res) => {
+  try {
   const { phone, password, name, role, cnic, nationalId, email, username,
           vehicleType, vehicleRegNo, drivingLicense,
           address, city, emergencyContact, vehiclePlate, vehiclePhoto, documents,
@@ -2897,9 +2954,13 @@ router.post("/register", verifyCaptcha, sharedValidateBody(registerSchema), asyn
     otpRequired: true,
     channel: smsResult.sent ? smsResult.provider : "console",
   }, undefined, 201);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/forgot-password", verifyCaptcha, sharedValidateBody(forgotPasswordSchema), async (req, res) => {
+  try {
   let { phone, email, identifier } = req.body;
   const ip = getClientIp(req);
   const settings = await getCachedSettings();
@@ -3002,6 +3063,9 @@ router.post("/forgot-password", verifyCaptcha, sharedValidateBody(forgotPassword
   sendSuccess(res, {
     message: "If an account exists, a reset code has been sent.",
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -3011,6 +3075,7 @@ router.post("/forgot-password", verifyCaptcha, sharedValidateBody(forgotPassword
    Returns: { valid: true } or 400/422 with error
 ══════════════════════════════════════════════════════════════ */
 router.post("/verify-reset-otp", otpLimiter, verifyCaptcha, async (req, res) => {
+  try {
   let { phone, email, otp } = req.body;
   const ip = getClientIp(req);
 
@@ -3068,9 +3133,13 @@ router.post("/verify-reset-otp", otpLimiter, verifyCaptcha, async (req, res) => 
 
   writeAuthAuditLog("verify_reset_otp", { userId: user.id, ip, userAgent: req.headers["user-agent"] ?? undefined });
   sendSuccess(res, { valid: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/reset-password", verifyCaptcha, async (req, res) => {
+  try {
   let { phone, email, identifier, otp, newPassword, totpCode } = req.body;
   const ip = getClientIp(req);
   const settings = await getCachedSettings();
@@ -3204,9 +3273,13 @@ router.post("/reset-password", verifyCaptcha, async (req, res) => {
   writeAuthAuditLog("password_reset", { userId: user.id, ip, userAgent: req.headers["user-agent"] ?? undefined });
 
   sendSuccess(res, undefined, "Password has been reset successfully. Please login with your new password.");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/email-register", verifyCaptcha, async (req, res) => {
+  try {
   const { email, password, name, role, phone, username, cnic, vehicleType, vehicleRegNo, vehicleRegistration, drivingLicense,
           address, city, emergencyContact, vehiclePlate, vehiclePhoto, documents } = req.body;
   const ip = getClientIp(req);
@@ -3329,9 +3402,13 @@ router.post("/email-register", verifyCaptcha, async (req, res) => {
   }, emailResult.sent
     ? "Registration successful. Please check your email to verify your account."
     : "Registration successful. Please check your email to verify your account. (Email delivery pending — contact support if not received.)");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/verify-email", async (req, res) => {
+  try {
   const { token, email } = req.query as { token?: string; email?: string };
   const ip = getClientIp(req);
 
@@ -3386,6 +3463,9 @@ router.get("/verify-email", async (req, res) => {
   writeAuthAuditLog("email_verified", { userId: user.id, ip });
 
   sendSuccess(res, undefined, "Email verified successfully. You can now log in.");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -3515,6 +3595,7 @@ function isDeviceTrusted(user: any, deviceFingerprint: string, trustedDays: numb
    Body: { idToken, deviceFingerprint? }
 ══════════════════════════════════════════════════════════════ */
 router.post("/social/google", async (req, res) => {
+  try {
   const { idToken, deviceFingerprint } = req.body;
   if (!idToken) { sendError(res, "idToken required", 400); return; }
 
@@ -3605,6 +3686,9 @@ router.post("/social/google", async (req, res) => {
   addAuditEntry({ action: "social_google_login", ip, details: `Google login: ${email ?? googleId}`, result: "success" });
   const result = await issueTokensForUser(user!, ip, "social_google", req.headers["user-agent"] as string, req, res);
   sendSuccess(res, { ...result, isNewUser, needsProfileCompletion: isNewUser || !user!.cnic || !user!.name });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -3613,6 +3697,7 @@ router.post("/social/google", async (req, res) => {
    Body: { accessToken, deviceFingerprint? }
 ══════════════════════════════════════════════════════════════ */
 router.post("/social/facebook", async (req, res) => {
+  try {
   const { accessToken: fbToken, deviceFingerprint } = req.body;
   if (!fbToken) { sendError(res, "accessToken required", 400); return; }
 
@@ -3703,6 +3788,9 @@ router.post("/social/facebook", async (req, res) => {
   addAuditEntry({ action: "social_facebook_login", ip, details: `Facebook login: ${email ?? facebookId}`, result: "success" });
   const result = await issueTokensForUser(user!, ip, "social_facebook", req.headers["user-agent"] as string, req, res);
   sendSuccess(res, { ...result, isNewUser, needsProfileCompletion: isNewUser || !user!.cnic || !user!.name });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -3710,6 +3798,7 @@ router.post("/social/facebook", async (req, res) => {
    Generate TOTP secret + QR code URI. Requires valid JWT.
 ══════════════════════════════════════════════════════════════ */
 router.get("/2fa/setup", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -3738,6 +3827,9 @@ router.get("/2fa/setup", async (req, res) => {
   try { qrDataUrl = await generateQRCodeDataURL(secret, label); } catch (err) { logger.error("[2fa/setup] QR code generation failed:", err); }
 
   sendSuccess(res, { secret, uri, qrDataUrl });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -3746,6 +3838,7 @@ router.get("/2fa/setup", async (req, res) => {
    Body: { code }
 ══════════════════════════════════════════════════════════════ */
 router.post("/2fa/verify-setup", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -3803,6 +3896,9 @@ router.post("/2fa/verify-setup", async (req, res) => {
   addAuditEntry({ action: "2fa_enabled", ip, details: `2FA enabled for user ${auth.userId}`, result: "success" });
 
   sendSuccess(res, { success: true, backupCodes, message: "2FA activated. Save your backup codes securely — they cannot be shown again." });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -3820,6 +3916,7 @@ router.post("/2fa/verify-setup", async (req, res) => {
    prefer this canonical path going forward.
 ══════════════════════════════════════════════════════════════ */
 router.post("/totp/enable", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -3878,6 +3975,9 @@ router.post("/totp/enable", async (req, res) => {
   addAuditEntry({ action: "2fa_enabled", ip, details: `2FA enabled for user ${auth.userId} via /auth/totp/enable`, result: "success" });
 
   sendSuccess(res, { success: true, backupCodes, message: "2FA activated. Save your backup codes securely — they cannot be shown again." });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -3886,6 +3986,7 @@ router.post("/totp/enable", async (req, res) => {
    Body: { tempToken, code, deviceFingerprint? }
 ══════════════════════════════════════════════════════════════ */
 router.post("/2fa/verify", async (req, res) => {
+  try {
   const { tempToken, code, deviceFingerprint } = req.body;
   if (!tempToken || !code) { sendError(res, "tempToken and code required", 400); return; }
 
@@ -3914,6 +4015,9 @@ router.post("/2fa/verify", async (req, res) => {
   const originalMethod = challengePayload.authMethod ?? "phone_otp";
   const result = await issueTokensForUser(user, ip, originalMethod, req.headers["user-agent"] as string, req, res);
   sendSuccess(res, result);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -3921,6 +4025,7 @@ router.post("/2fa/verify", async (req, res) => {
    Disable 2FA for the authenticated user. Body: { code }
 ══════════════════════════════════════════════════════════════ */
 router.post("/2fa/disable", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -3952,6 +4057,9 @@ router.post("/2fa/disable", async (req, res) => {
   addAuditEntry({ action: "2fa_disabled", ip, details: `2FA disabled by user ${auth.userId}`, result: "success" });
 
   sendSuccess(res, undefined, "Two-factor authentication has been disabled");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4043,6 +4151,7 @@ async function consumeRecoveryCode(
    Use a single-use backup code. Body: { tempToken, backupCode }
 ══════════════════════════════════════════════════════════════ */
 router.post("/2fa/recovery", async (req, res) => {
+  try {
   const { tempToken, backupCode } = req.body;
   if (!tempToken || !backupCode) { sendError(res, "tempToken and backupCode required", 400); return; }
 
@@ -4067,6 +4176,9 @@ router.post("/2fa/recovery", async (req, res) => {
   const recoveryOrigMethod = challengePayload.authMethod ?? "phone_otp";
   const result = await issueTokensForUser(user, ip, recoveryOrigMethod, req.headers["user-agent"] as string, req, res);
   sendSuccess(res, { ...result, codesRemaining: outcome.codesRemaining });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4082,6 +4194,7 @@ router.post("/2fa/recovery", async (req, res) => {
    out requires admin intervention or 2FA re-enrollment.
 ══════════════════════════════════════════════════════════════ */
 router.post("/totp/recover", async (req, res) => {
+  try {
   /* Canonical TOTP lockout-recovery path — delegates to consumeRecoveryCode() shared
      helper which handles new-table atomic consume and legacy JSON fallback/migration. */
   const { tempToken, backupCode } = req.body;
@@ -4108,6 +4221,9 @@ router.post("/totp/recover", async (req, res) => {
   const recoveryOrigMethod = challengePayload.authMethod ?? "phone_otp";
   const result = await issueTokensForUser(user, ip, recoveryOrigMethod, req.headers["user-agent"] as string, req, res);
   sendSuccess(res, { ...result, codesRemaining: outcome.codesRemaining });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4116,6 +4232,7 @@ router.post("/totp/recover", async (req, res) => {
    Body: { deviceFingerprint }
 ══════════════════════════════════════════════════════════════ */
 router.post("/2fa/trust-device", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -4151,6 +4268,9 @@ router.post("/2fa/trust-device", async (req, res) => {
   writeAuthAuditLog("device_trusted", { userId: auth.userId, ip, userAgent: req.headers["user-agent"] as string });
 
   sendSuccess(res, { success: true, message: `Device trusted for ${trustedDays} days`, trustedDevices: devices.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4161,6 +4281,7 @@ router.post("/2fa/trust-device", async (req, res) => {
 const magicLinkRateMap = new Map<string, { count: number; windowStart: number }>();
 
 router.post("/magic-link/send", async (req, res) => {
+  try {
   const { email } = req.body;
   if (!email || !email.includes("@")) { sendError(res, "Valid email address required", 400); return; }
 
@@ -4223,6 +4344,9 @@ router.post("/magic-link/send", async (req, res) => {
     message: "If an account exists with this email, a magic link has been sent.",
     ...(isDevTokenLog ? { token: rawToken } : {}),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4231,6 +4355,7 @@ router.post("/magic-link/send", async (req, res) => {
    Body: { token, totpCode?, deviceFingerprint? }
 ══════════════════════════════════════════════════════════════ */
 router.post("/magic-link/verify", async (req, res) => {
+  try {
   const { token, totpCode, deviceFingerprint } = req.body;
   if (!token) { sendError(res, "Token required", 400); return; }
 
@@ -4285,6 +4410,9 @@ router.post("/magic-link/verify", async (req, res) => {
   addAuditEntry({ action: "magic_link_login", ip, details: `Magic link login: ${user.email ?? matchedRow.userId}`, result: "success" });
   const result = await issueTokensForUser(user, ip, "magic_link", req.headers["user-agent"] as string, req, res);
   sendSuccess(res, result);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4293,6 +4421,7 @@ router.post("/magic-link/verify", async (req, res) => {
    Body: { newPhone }
 ══════════════════════════════════════════════════════════════ */
 router.post("/change-phone/request", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -4337,6 +4466,9 @@ router.post("/change-phone/request", async (req, res) => {
   writeAuthAuditLog("phone_change_requested", { userId: auth.userId, ip, userAgent: req.headers["user-agent"] as string, metadata: { newPhone: phone } });
 
   sendSuccess(res, undefined, "OTP sent to new phone number");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4345,6 +4477,7 @@ router.post("/change-phone/request", async (req, res) => {
    Body: { newPhone, otp }
 ══════════════════════════════════════════════════════════════ */
 router.post("/change-phone/confirm", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -4384,6 +4517,9 @@ router.post("/change-phone/confirm", async (req, res) => {
   writeAuthAuditLog("phone_changed", { userId: auth.userId, ip, userAgent: req.headers["user-agent"] as string, metadata: { newPhone: phone } });
 
   sendSuccess(res, { success: true, message: "Phone number updated successfully", phone });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4391,6 +4527,7 @@ router.post("/change-phone/confirm", async (req, res) => {
    Return last 20 login attempts for authenticated user.
 ══════════════════════════════════════════════════════════════ */
 router.get("/login-history", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -4412,6 +4549,9 @@ router.get("/login-history", async (req, res) => {
       createdAt: h.createdAt.toISOString(),
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4419,6 +4559,7 @@ router.get("/login-history", async (req, res) => {
    List active sessions for the authenticated user.
 ══════════════════════════════════════════════════════════════ */
 router.get("/sessions", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -4440,6 +4581,9 @@ router.get("/sessions", async (req, res) => {
       createdAt: s.createdAt.toISOString(),
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4447,6 +4591,7 @@ router.get("/sessions", async (req, res) => {
    Revoke a single session (remote logout from one device).
 ══════════════════════════════════════════════════════════════ */
 router.delete("/sessions/:id", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -4474,12 +4619,16 @@ router.delete("/sessions/:id", async (req, res) => {
 
   writeAuthAuditLog("session_revoked", { userId: auth.userId, ip: getClientIp(req), metadata: { sessionId: id } });
   sendSuccess(res, undefined, "Session revoked");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
    DELETE /auth/sessions — revoke ALL sessions (remote logout everywhere)
 ══════════════════════════════════════════════════════════════ */
 router.delete("/sessions", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -4498,6 +4647,9 @@ router.delete("/sessions", async (req, res) => {
 
   writeAuthAuditLog("all_sessions_revoked", { userId: auth.userId, ip: getClientIp(req) });
   sendSuccess(res, undefined, "All sessions revoked");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4506,6 +4658,7 @@ router.delete("/sessions", async (req, res) => {
    Body: { idToken: string }   (Google idToken from client)
 ══════════════════════════════════════════════════════════════ */
 router.post("/link-google", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -4546,6 +4699,9 @@ router.post("/link-google", async (req, res) => {
   } catch (err: any) {
     sendErrorWithData(res, "Invalid Google token", { detail: err.message }, 400);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4554,6 +4710,7 @@ router.post("/link-google", async (req, res) => {
    Body: { accessToken: string }
 ══════════════════════════════════════════════════════════════ */
 router.post("/link-facebook", async (req, res) => {
+  try {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -4594,6 +4751,9 @@ router.post("/link-facebook", async (req, res) => {
   } catch (err: any) {
     sendErrorWithData(res, "Failed to link Facebook account", { detail: err.message }, 400);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -4604,6 +4764,7 @@ router.post("/link-facebook", async (req, res) => {
    Body: { idToken: string, role?: string }
 ══════════════════════════════════════════════════════════════ */
 router.post("/firebase-verify", async (req, res) => {
+  try {
   const { idToken, role: requestedRole } = req.body;
   if (!idToken) { sendError(res, "idToken is required", 400); return; }
 
@@ -4682,6 +4843,9 @@ router.post("/firebase-verify", async (req, res) => {
 
   const { passwordHash: _ph, otpCode: _otp, otpExpiry: _exp, emailOtpCode: _eotp, emailOtpExpiry: _eexp, totpSecret: _ts, backupCodes: _bc, ...safeUser } = user;
   sendSuccess(res, { ...tokenData, user: safeUser });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

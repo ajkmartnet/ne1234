@@ -181,6 +181,7 @@ router.get("/campaigns", async (_req, res) => {
 });
 
 router.post("/campaigns", adminAuth, async (req, res) => {
+  try {
   const p = campaignCreateSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -206,9 +207,13 @@ router.post("/campaigns", adminAuth, async (req, res) => {
     logger.error({ err }, "[loyalty-full] campaigns create error");
     sendError(res, "Failed to create loyalty campaign", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.put("/campaigns/:id", adminAuth, async (req, res) => {
+  try {
   const p = campaignUpdateSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -245,6 +250,9 @@ router.put("/campaigns/:id", adminAuth, async (req, res) => {
   } catch (err) {
     logger.error({ err }, "[loyalty-full] campaigns update error");
     sendError(res, "Failed to update loyalty campaign", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
@@ -284,6 +292,7 @@ router.get("/rewards", async (_req, res) => {
 });
 
 router.post("/rewards", adminAuth, async (req, res) => {
+  try {
   const p = rewardCreateSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -309,9 +318,13 @@ router.post("/rewards", adminAuth, async (req, res) => {
     logger.error({ err }, "[loyalty-full] rewards create error");
     sendError(res, "Failed to create loyalty reward", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.put("/rewards/:id", adminAuth, async (req, res) => {
+  try {
   const p = rewardUpdateSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -348,6 +361,9 @@ router.put("/rewards/:id", adminAuth, async (req, res) => {
   } catch (err) {
     logger.error({ err }, "[loyalty-full] rewards update error");
     sendError(res, "Failed to update loyalty reward", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

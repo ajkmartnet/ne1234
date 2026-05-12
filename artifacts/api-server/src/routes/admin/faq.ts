@@ -27,6 +27,7 @@ router.get("/", async (_req, res) => {
 });
 
 router.post("/", async (req, res) => {
+  try {
   const { category, question, answer, sortOrder, isActive } = req.body as {
     category?: string; question?: string; answer?: string; sortOrder?: number; isActive?: boolean;
   };
@@ -48,9 +49,13 @@ router.post("/", async (req, res) => {
   } catch {
     return sendError(res, "Failed to create FAQ", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/:id", async (req, res) => {
+  try {
   const { id } = req.params;
   const { category, question, answer, sortOrder, isActive } = req.body as {
     category?: string; question?: string; answer?: string; sortOrder?: number; isActive?: boolean;
@@ -68,9 +73,13 @@ router.patch("/:id", async (req, res) => {
   } catch {
     return sendError(res, "Failed to update FAQ", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/:id", async (req, res) => {
+  try {
   const { id } = req.params;
   try {
     const [deleted] = await db.delete(faqsTable).where(eq(faqsTable.id, id)).returning();
@@ -78,6 +87,9 @@ router.delete("/:id", async (req, res) => {
     return sendSuccess(res, { ok: true });
   } catch {
     return sendError(res, "Failed to delete FAQ", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

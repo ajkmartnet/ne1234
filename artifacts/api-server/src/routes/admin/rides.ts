@@ -31,6 +31,7 @@ import { sendSuccess, sendCreated, sendError, sendNotFound, sendValidationError 
 
 const router = Router();
 router.get("/rides", async (_req, res) => {
+  try {
   const rides = await db.select().from(ridesTable).orderBy(desc(ridesTable.createdAt)).limit(200);
   sendSuccess(res, {
     rides: rides.map(r => ({
@@ -42,6 +43,9 @@ router.get("/rides", async (_req, res) => {
     })),
     total: rides.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -56,6 +60,7 @@ const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
 };
 
 router.get("/rides-enriched", async (req, res) => {
+  try {
   const page = Math.max(1, parseInt(req.query["page"] as string || "1", 10));
   const limit = Math.min(500, Math.max(1, parseInt(req.query["limit"] as string || "50", 10)));
   const offset = (page - 1) * limit;
@@ -141,9 +146,13 @@ router.get("/rides-enriched", async (req, res) => {
     limit,
     totalPages: Math.ceil(total / limit),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/rides/:id/status", async (req, res) => {
+  try {
   const { status, riderName, riderPhone } = req.body;
 
   if (!status || !(RIDE_VALID_STATUSES as readonly string[]).includes(status)) {
@@ -325,15 +334,23 @@ router.patch("/rides/:id/status", async (req, res) => {
   }
 
   sendSuccess(res, { ...ride, fare: parseFloat(ride.fare), distance: parseFloat(ride.distance) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 router.get("/ride-services", async (_req, res) => {
+  try {
   await ensureDefaultRideServices();
   const services = await db.select().from(rideServiceTypesTable).orderBy(asc(rideServiceTypesTable.sortOrder));
   sendSuccess(res, { services: services.map(formatSvc) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* POST /admin/ride-services — create custom service */
 router.post("/ride-services", async (req, res) => {
+  try {
   const { key, name, nameUrdu, icon, description, color, baseFare, perKm, minFare, maxPassengers, allowBargaining, sortOrder } = req.body;
   if (!key || !name || !icon) { sendValidationError(res, "key, name, icon are required"); return; }
   const existing = await db.select({ id: rideServiceTypesTable.id }).from(rideServiceTypesTable).where(eq(rideServiceTypesTable.key, String(key))).limit(1);
@@ -356,10 +373,14 @@ router.post("/ride-services", async (req, res) => {
     sortOrder:     Number(sortOrder ?? 99),
   }).returning();
   sendCreated(res, { service: formatSvc(created) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* PATCH /admin/ride-services/:id — update any field */
 router.patch("/ride-services/:id", async (req, res) => {
+  try {
   const svcId = req.params["id"]!;
   const [existing] = await db.select().from(rideServiceTypesTable).where(eq(rideServiceTypesTable.id, svcId)).limit(1);
   if (!existing) { sendNotFound(res, "Service not found"); return; }
@@ -379,16 +400,23 @@ router.patch("/ride-services/:id", async (req, res) => {
   if (sortOrder     !== undefined) patch["sortOrder"]      = Number(sortOrder);
   const [updated] = await db.update(rideServiceTypesTable).set(patch as any).where(eq(rideServiceTypesTable.id, svcId)).returning();
   sendSuccess(res, { service: formatSvc(updated) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* DELETE /admin/ride-services/:id — only custom services */
 router.delete("/ride-services/:id", async (req, res) => {
+  try {
   const svcId = req.params["id"]!;
   const [existing] = await db.select().from(rideServiceTypesTable).where(eq(rideServiceTypesTable.id, svcId)).limit(1);
   if (!existing) { sendNotFound(res, "Service not found"); return; }
   if (!existing.isCustom) { sendValidationError(res, "Built-in services cannot be deleted. Disable them instead."); return; }
   await db.delete(rideServiceTypesTable).where(eq(rideServiceTypesTable.id, svcId));
   sendSuccess(res);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════
@@ -401,6 +429,7 @@ router.delete("/ride-services/:id", async (req, res) => {
 
 
 router.get("/locations", async (_req, res) => {
+  try {
   await ensureDefaultLocations();
   const locs = await db.select().from(popularLocationsTable)
     .orderBy(asc(popularLocationsTable.sortOrder), asc(popularLocationsTable.name));
@@ -411,9 +440,13 @@ router.get("/locations", async (_req, res) => {
       lng: parseFloat(String(l.lng)),
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/locations", async (req, res) => {
+  try {
   const { name, nameUrdu, lat, lng, category = "general", icon = "📍", isActive = true, sortOrder = 0 } = req.body;
   if (!name || !lat || !lng) { sendValidationError(res, "name, lat, lng required"); return; }
   const [loc] = await db.insert(popularLocationsTable).values({
@@ -422,9 +455,13 @@ router.post("/locations", async (req, res) => {
     isActive: Boolean(isActive), sortOrder: Number(sortOrder),
   }).returning();
   sendCreated(res, { ...loc, lat: parseFloat(String(loc!.lat)), lng: parseFloat(String(loc!.lng)) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/locations/:id", async (req, res) => {
+  try {
   const { name, nameUrdu, lat, lng, category, icon, isActive, sortOrder } = req.body;
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   if (name      !== undefined) patch.name      = name;
@@ -438,14 +475,21 @@ router.patch("/locations/:id", async (req, res) => {
   const [updated] = await db.update(popularLocationsTable).set(patch).where(eq(popularLocationsTable.id, req.params["id"]!)).returning();
   if (!updated) { sendNotFound(res, "Location not found"); return; }
   sendSuccess(res, { ...updated, lat: parseFloat(String(updated.lat)), lng: parseFloat(String(updated.lng)) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/locations/:id", async (req, res) => {
+  try {
   const [existing] = await db.select({ id: popularLocationsTable.id })
     .from(popularLocationsTable).where(eq(popularLocationsTable.id, req.params["id"]!)).limit(1);
   if (!existing) { sendNotFound(res, "Location not found"); return; }
   await db.delete(popularLocationsTable).where(eq(popularLocationsTable.id, req.params["id"]!));
   sendSuccess(res);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════
@@ -471,12 +515,17 @@ function fmtRoute(r: Record<string, unknown>) {
 }
 
 router.get("/school-routes", async (_req, res) => {
+  try {
   const routes = await db.select().from(schoolRoutesTable)
     .orderBy(asc(schoolRoutesTable.sortOrder), asc(schoolRoutesTable.schoolName));
   sendSuccess(res, { routes: routes.map(fmtRoute) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/school-routes", async (req, res) => {
+  try {
   const {
     routeName, schoolName, schoolNameUrdu, fromArea, fromAreaUrdu, toAddress,
     fromLat, fromLng, toLat, toLng, monthlyPrice, morningTime, afternoonTime,
@@ -498,9 +547,13 @@ router.post("/school-routes", async (req, res) => {
     isActive: Boolean(isActive), sortOrder: Number(sortOrder),
   }).returning();
   sendCreated(res, fmtRoute(route!));
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/school-routes/:id", async (req, res) => {
+  try {
   const routeId = req.params["id"]!;
   const {
     routeName, schoolName, schoolNameUrdu, fromArea, fromAreaUrdu, toAddress,
@@ -529,9 +582,13 @@ router.patch("/school-routes/:id", async (req, res) => {
   const [updated] = await db.update(schoolRoutesTable).set(patch).where(eq(schoolRoutesTable.id, routeId)).returning();
   if (!updated) { sendNotFound(res, "Route not found"); return; }
   sendSuccess(res, fmtRoute(updated));
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/school-routes/:id", async (req, res) => {
+  try {
   const routeId = req.params["id"]!;
   /* Only delete if no active subscriptions */
   const [activeSub] = await db.select({ id: schoolSubscriptionsTable.id })
@@ -546,9 +603,13 @@ router.delete("/school-routes/:id", async (req, res) => {
   if (!existing) { sendNotFound(res, "Route not found"); return; }
   await db.delete(schoolRoutesTable).where(eq(schoolRoutesTable.id, routeId));
   sendSuccess(res);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/school-subscriptions", async (req, res) => {
+  try {
   const routeIdFilter = req.query["routeId"] as string | undefined;
   const query = routeIdFilter
     ? db.select().from(schoolSubscriptionsTable).where(eq(schoolSubscriptionsTable.routeId, routeIdFilter))
@@ -573,6 +634,9 @@ router.get("/school-subscriptions", async (req, res) => {
     };
   }));
   sendSuccess(res, { subscriptions: enriched, total: enriched.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -582,6 +646,7 @@ router.get("/school-subscriptions", async (req, res) => {
    "Fresh" = updated within last 5 minutes.
 ══════════════════════════════════════════════════════════ */
 router.get("/live-riders", async (_req, res) => {
+  try {
   const settings = await getPlatformSettings();
   const staleTimeoutSec = parseInt(settings["gps_stale_timeout_sec"] ?? "300", 10);
   const STALE_MS = staleTimeoutSec * 1000;
@@ -648,6 +713,9 @@ router.get("/live-riders", async (_req, res) => {
     freshCount: enriched.filter(r => r.isFresh).length,
     staleTimeoutSec,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -657,6 +725,7 @@ router.get("/live-riders", async (_req, res) => {
    "Fresh" = updated within last 2 hours.
 ══════════════════════════════════════════════════════════ */
 router.get("/customer-locations", async (_req, res) => {
+  try {
   const STALE_MS = 2 * 60 * 60 * 1000; /* 2 hours */
   const cutoff   = new Date(Date.now() - STALE_MS);
 
@@ -696,6 +765,9 @@ router.get("/customer-locations", async (_req, res) => {
   });
 
   sendSuccess(res, { customers: enriched, total: enriched.length, freshCount: enriched.filter(c => c.isFresh).length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -704,6 +776,7 @@ router.get("/customer-locations", async (_req, res) => {
    Returns max 5 results per category, sorted by relevance (recency)
 ══════════════════════════════════════════════════════════════════════════════ */
 router.patch("/riders/:id/online", async (req, res) => {
+  try {
   const { isOnline } = req.body as { isOnline: boolean };
   const [rider] = await db.update(usersTable)
     .set({ isOnline, updatedAt: new Date() } as any)
@@ -712,10 +785,14 @@ router.patch("/riders/:id/online", async (req, res) => {
   if (!rider) { sendNotFound(res, "Rider not found"); return; }
   addAuditEntry({ action: "rider_online_toggle", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Rider ${req.params["id"]} set ${isOnline ? "online" : "offline"} by admin`, result: "success" });
   sendSuccess(res, { isOnline });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/revenue-trend — 7-day rolling revenue + counts for dashboard sparklines ── */
 router.get("/revenue-trend", async (_req, res) => {
+  try {
   const now = new Date();
   const dayPromises = Array.from({ length: 7 }, (_, idx) => {
     const i = 6 - idx;
@@ -751,10 +828,14 @@ router.get("/revenue-trend", async (_req, res) => {
   });
   const days = await Promise.all(dayPromises);
   sendSuccess(res, { trend: days });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/leaderboard — top-5 vendors and riders ── */
 router.get("/leaderboard", async (_req, res) => {
+  try {
   const vendors = await db.select({
     id:     usersTable.id,
     name:   vendorProfilesTable.storeName,
@@ -788,10 +869,14 @@ router.get("/leaderboard", async (_req, res) => {
     vendors: vendors.map(v => ({ ...v, totalRevenue: parseFloat(String(v.totalRevenue)), totalOrders: Number(v.totalOrders) })),
     riders:  riders.map(r  => ({ ...r,  totalEarned: parseFloat(String(r.totalEarned)),  completedTrips: Number(r.completedTrips) })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/dashboard-export — export dashboard stats + 7-day trend as JSON ── */
 router.get("/dashboard-export", async (_req, res) => {
+  try {
   const now = new Date();
   const [[userCount], [orderCount], [rideCount], [revenue], [rideRev]] = await Promise.all([
     db.select({ count: count() }).from(usersTable),
@@ -841,6 +926,9 @@ router.get("/dashboard-export", async (_req, res) => {
   };
   res.setHeader("Content-Disposition", `attachment; filename="dashboard-${now.toISOString().slice(0, 10)}.json"`);
   sendSuccess(res, snapshot);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -848,6 +936,7 @@ router.get("/dashboard-export", async (_req, res) => {
 ══════════════════════════════════════════════════════════════════════════════ */
 
 router.post("/rides/:id/cancel", async (req, res) => {
+  try {
   const rideId = req.params["id"]!;
   const { reason } = req.body as { reason?: string };
   const [ride] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
@@ -933,9 +1022,13 @@ router.post("/rides/:id/cancel", async (req, res) => {
     ioCan.to(`user:${ride.userId}`).emit("order:update", cancelPayload);
   }
   sendSuccess(res, { rideId, refunded });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/rides/:id/refund", async (req, res) => {
+  try {
   const rideId = req.params["id"]!;
   const { amount, reason } = req.body as { amount?: number; reason?: string };
   const [ride] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
@@ -1001,9 +1094,13 @@ router.post("/rides/:id/refund", async (req, res) => {
   addAuditEntry({ action: "ride_refund", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Admin refunded Rs. ${refundAmt} for ride ${rideId}${reason ? ` — ${reason}` : ""}`, result: "success" });
   emitRideDispatchUpdate({ rideId, action: "refund", status: ride.status });
   sendSuccess(res, { rideId, refundedAmount: refundAmt });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/rides/:id/reassign", async (req, res) => {
+  try {
   const rideId = req.params["id"]!;
   const { riderId, riderName, riderPhone } = req.body as { riderId?: string; riderName?: string; riderPhone?: string };
   const [ride] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
@@ -1073,9 +1170,13 @@ router.post("/rides/:id/reassign", async (req, res) => {
     ioReassign.to(`user:${ride.userId}`).emit("order:update", reassignPayload);
   }
   sendSuccess(res, { ride: { ...updated, fare: parseFloat(updated!.fare), distance: parseFloat(updated!.distance) } });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/rides/:id/audit-trail", async (req, res) => {
+  try {
   const rideId = req.params["id"]!;
   const shortId = rideId.slice(-6).toUpperCase();
   const trail = auditLog.filter(e => e.details?.includes(rideId) || e.details?.includes(shortId)).map(e => ({
@@ -1088,9 +1189,13 @@ router.get("/rides/:id/audit-trail", async (req, res) => {
   }));
   trail.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   sendSuccess(res, { trail, rideId });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/rides/:id/detail", async (req, res) => {
+  try {
   const rideId = req.params["id"]!;
   const [ride] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
   if (!ride) { sendNotFound(res, "Ride not found"); return; }
@@ -1156,9 +1261,13 @@ router.get("/rides/:id/detail", async (req, res) => {
     })),
     notifiedRiderCount: Number(notifiedCount[0]?.cnt ?? 0),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/dispatch-monitor", async (_req, res) => {
+  try {
   const activeRides = await db.select().from(ridesTable)
     .where(or(eq(ridesTable.status, "searching"), eq(ridesTable.status, "bargaining")))
     .orderBy(desc(ridesTable.createdAt));
@@ -1211,6 +1320,9 @@ router.get("/dispatch-monitor", async (_req, res) => {
     })),
     total: activeRides.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -1222,6 +1334,7 @@ router.get("/dispatch-monitor", async (_req, res) => {
    - riderDistances: total estimated distance per rider (haversine over log trail)
 ══════════════════════════════════════════════════════════════════════════════ */
 router.get("/fleet-analytics", async (req, res) => {
+  try {
   const fromParam = req.query["from"] as string | undefined;
   const toParam   = req.query["to"]   as string | undefined;
 
@@ -1367,6 +1480,9 @@ router.get("/fleet-analytics", async (req, res) => {
     from: from.toISOString().slice(0, 10),
     to: to.toISOString().slice(0, 10),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/riders/:userId/route?date=YYYY-MM-DD&sinceOnline=true — fleet history for admin ──
@@ -1374,6 +1490,7 @@ router.get("/fleet-analytics", async (req, res) => {
    it uses the rider's live_locations.lastSeen timestamp as the session start boundary,
    giving "current shift to now" semantics rather than calendar midnight. */
 router.get("/riders/:userId/route", async (req, res) => {
+  try {
   const { userId } = req.params;
   const dateParam   = req.query["date"]        as string | undefined;
   const sinceOnline = req.query["sinceOnline"]  === "true";
@@ -1429,6 +1546,9 @@ router.get("/riders/:userId/route", async (req, res) => {
   const lastLocation   = points[points.length - 1] ?? null;
 
   sendSuccess(res, { userId, date: dateParam ?? "today", loginLocation, lastLocation, route: points, total: points.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable, loyaltyCampaignsTable, loyaltyRewardsTable } from "@workspace/db/schema";
@@ -11,6 +11,10 @@ import {
 import { sendSuccess, sendCreated, sendError, sendNotFound, sendValidationError } from "../../lib/response.js";
 
 const router = Router();
+
+function wrapAsync(fn: (req: Request, res: Response) => Promise<void>): RequestHandler {
+  return (req, res, next) => void fn(req, res).catch(next);
+}
 
 type LoyaltyRow = { amount: string; type: string; reference: string | null };
 
@@ -31,7 +35,7 @@ function computeLoyalty(rows: LoyaltyRow[]) {
   return { totalEarned: Math.floor(totalEarned), totalRedeemed: Math.floor(totalRedeemed), available };
 }
 
-router.get("/loyalty/users", async (req, res) => {
+router.get("/loyalty/users", wrapAsync(async (req, res) => {
   const q = ((req.query?.q as string) ?? "").trim();
 
   const conditions: ReturnType<typeof eq>[] = [
@@ -92,7 +96,7 @@ router.get("/loyalty/users", async (req, res) => {
   });
 
   sendSuccess(res, { users: enrichedUsers, total: enrichedUsers.length });
-});
+}));
 
 const adjustLoyaltySchema = z.object({
   amount: z.number({ coerce: true }).int().positive("A positive whole number amount is required"),
@@ -100,7 +104,7 @@ const adjustLoyaltySchema = z.object({
   type: z.enum(["credit", "debit"], { message: "Type must be 'credit' or 'debit'" }),
 });
 
-router.post("/loyalty/users/:id/adjust", async (req, res) => {
+router.post("/loyalty/users/:id/adjust", wrapAsync(async (req, res) => {
   const userId = req.params["id"]!;
 
   const parsed = adjustLoyaltySchema.safeParse(req.body);
@@ -193,7 +197,7 @@ router.post("/loyalty/users/:id/adjust", async (req, res) => {
     success: true,
     loyaltyPoints: updatedLoyalty,
   });
-});
+}));
 
 function parseDateString(value: unknown, field: string): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -260,7 +264,7 @@ function validateRewardInput(payload: any): string[] {
   return errors;
 }
 
-router.post("/campaigns", async (req, res) => {
+router.post("/campaigns", wrapAsync(async (req, res) => {
   const body = {
     name: req.body.name,
     description: req.body.description ?? "",
@@ -304,9 +308,9 @@ router.post("/campaigns", async (req, res) => {
   });
 
   sendCreated(res, { campaign });
-});
+}));
 
-router.put("/campaigns/:id", async (req, res) => {
+router.put("/campaigns/:id", wrapAsync(async (req, res) => {
   const id = req.params["id"];
   const [existing] = await db.select().from(loyaltyCampaignsTable).where(eq(loyaltyCampaignsTable.id, id)).limit(1);
   if (!existing) {
@@ -356,9 +360,9 @@ router.put("/campaigns/:id", async (req, res) => {
   });
 
   sendSuccess(res, { campaign });
-});
+}));
 
-router.delete("/campaigns/:id", async (req, res) => {
+router.delete("/campaigns/:id", wrapAsync(async (req, res) => {
   const id = req.params["id"];
   const [existing] = await db.select().from(loyaltyCampaignsTable).where(eq(loyaltyCampaignsTable.id, id)).limit(1);
   if (!existing) {
@@ -377,9 +381,9 @@ router.delete("/campaigns/:id", async (req, res) => {
   });
 
   sendSuccess(res, { success: true });
-});
+}));
 
-router.post("/rewards", async (req, res) => {
+router.post("/rewards", wrapAsync(async (req, res) => {
   const body = {
     name: req.body.name,
     description: req.body.description ?? "",
@@ -416,9 +420,9 @@ router.post("/rewards", async (req, res) => {
   });
 
   sendCreated(res, { reward });
-});
+}));
 
-router.put("/rewards/:id", async (req, res) => {
+router.put("/rewards/:id", wrapAsync(async (req, res) => {
   const id = req.params["id"];
   const [existing] = await db.select().from(loyaltyRewardsTable).where(eq(loyaltyRewardsTable.id, id)).limit(1);
   if (!existing) {
@@ -462,9 +466,9 @@ router.put("/rewards/:id", async (req, res) => {
   });
 
   sendSuccess(res, { reward });
-});
+}));
 
-router.delete("/rewards/:id", async (req, res) => {
+router.delete("/rewards/:id", wrapAsync(async (req, res) => {
   const id = req.params["id"];
   const [existing] = await db.select().from(loyaltyRewardsTable).where(eq(loyaltyRewardsTable.id, id)).limit(1);
   if (!existing) {
@@ -483,9 +487,9 @@ router.delete("/rewards/:id", async (req, res) => {
   });
 
   sendSuccess(res, { success: true });
-});
+}));
 
-router.get("/stats", async (req, res) => {
+router.get("/stats", wrapAsync(async (req, res) => {
   const rows = await db
     .select({
       userId: walletTransactionsTable.userId,
@@ -529,6 +533,6 @@ router.get("/stats", async (req, res) => {
     activeUsers,
     topEarners,
   });
-});
+}));
 
 export default router;

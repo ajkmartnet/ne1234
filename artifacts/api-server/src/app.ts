@@ -226,13 +226,23 @@ function validateCORS(): string[] {
   // rider on :3003, customer on :5000, expo on :5173/:19006).
   const replitDomain = process.env.REPLIT_DEV_DOMAIN;
   const replitOrigins = replitDomain
-    ? [
-        `https://${replitDomain}`,
-        // External port variants mapped in .replit [[ports]] blocks
-        ...[3000, 3001, 3002, 8000].map(
-          p => `https://${replitDomain}:${p}`
-        ),
-      ]
+    ? (() => {
+        // Derive the .expo. subdomain variant (e.g. "abc-00-xyz.pike.replit.dev"
+        // → "abc-00-xyz.expo.pike.replit.dev") used by the Expo dev client.
+        const dotIdx = replitDomain.indexOf('.');
+        const expoOrigin = dotIdx !== -1
+          ? `https://${replitDomain.slice(0, dotIdx)}.expo${replitDomain.slice(dotIdx)}`
+          : null;
+        return [
+          `https://${replitDomain}`,
+          // External port variants mapped in .replit [[ports]] blocks
+          ...[3000, 3001, 3002, 8000].map(p => `https://${replitDomain}:${p}`),
+          // Expo web dev server ports
+          ...[19006, 8081].map(p => `https://${replitDomain}:${p}`),
+          // Expo .expo. subdomain variant used by Expo Go / dev client
+          ...(expoOrigin ? [expoOrigin] : []),
+        ];
+      })()
     : [];
 
   if (fromEnv.length > 0) {

@@ -338,10 +338,6 @@ async function main() {
   }
 
   const server = createServer();
-  // Increase limit to accommodate http-proxy-middleware close listeners (one per
-  // proxy route) plus Socket.IO and shutdown handlers without triggering the
-  // default-10 MaxListenersExceededWarning.
-  server.setMaxListeners(50);
 
   // Open the port FIRST so the platform's port detector sees a live listener
   // quickly. Migrations + RBAC seeding run immediately after; if they fail,
@@ -361,6 +357,11 @@ async function main() {
     const BIND_RETRY_DELAY = 1000;
 
     const hs = server.listen(port, "0.0.0.0", () => {
+      // Increase limit on the actual http.Server to accommodate
+      // http-proxy-middleware close listeners (one per proxy route) plus
+      // Socket.IO and shutdown handlers without triggering the default-10
+      // MaxListenersExceededWarning.
+      hs.setMaxListeners(50);
       activeServer = hs;
       const addr = hs.address();
       logger.info(`[server:listen] Server listening on port ${port} (addr=${JSON.stringify(addr)})`);

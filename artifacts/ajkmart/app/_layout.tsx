@@ -441,7 +441,7 @@ function DeepLinkHandler() {
   return null;
 }
 
-function PushNotificationHandler() {
+function PushNotificationHandlerNative() {
   const lastResponse = Notifications.useLastNotificationResponse();
 
   useEffect(() => {
@@ -473,6 +473,11 @@ function PushNotificationHandler() {
   }, [lastResponse?.notification.request.identifier]);
 
   return null;
+}
+
+function PushNotificationHandler() {
+  if (Platform.OS === "web") return null;
+  return <PushNotificationHandlerNative />;
 }
 
 function semverGte(a: string, b: string): boolean {

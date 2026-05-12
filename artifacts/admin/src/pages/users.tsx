@@ -16,7 +16,7 @@ import { tDual, type TranslationKey } from "@workspace/i18n";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { useUsers, useUpdateUser, useUpdateUserSecurity, useDeleteUser, useUserActivity, usePendingUsers, useApproveUser, useRejectUser, useRequestUserCorrection, useBulkBanUsers, useCreateUser, useAdminUserSessions, useRevokeUserSession, useRevokeAllUserSessions, useAdminForcePasswordReset, useAdminKycByUserId, useAdminKycApprove, useAdminKycReject, useWaiveDebt, useAdminResetOtp, useAdminViewOtp, useAdminVerifyContact, type CreateUserInput } from "@/hooks/use-admin";
+import { useUsers, useUpdateUser, useUpdateUserSecurity, useDeleteUser, useUserActivity, usePendingUsers, useApproveUser, useRejectUser, useRequestUserCorrection, useBulkBanUsers, useCreateUser, useAdminUserSessions, useRevokeUserSession, useRevokeAllUserSessions, useAdminForcePasswordReset, useAdminKycByUserId, useAdminKycApprove, useAdminKycReject, useWaiveDebt, useAdminResetOtp, useAdminViewOtp, useAdminVerifyContact, useUpdateUserIdentity, useDisable2FA, useResetWalletPin, type CreateUserInput } from "@/hooks/use-admin";
 import { createUserSchema, type CreateUserFormErrors } from "@/lib/validation";
 import { WalletAdjustModal } from "@/components/WalletAdjustModal";
 import { useAdminAuth } from "@/lib/adminAuthContext";
@@ -580,31 +580,7 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
     user.otpBypassUntil && new Date(user.otpBypassUntil) > new Date() ? user.otpBypassUntil : null
   );
 
-  const securityMutation = useMutation({
-    mutationFn: (body: any) => adminFetch(`/users/${user.id}/security`, { method: "PATCH", body: JSON.stringify(body) }),
-    onSuccess: (_data, vars: any) => {
-      qc.invalidateQueries({ queryKey: ["admin-users"], exact: false });
-      const changedParts: string[] = [];
-      const origRoles = (user.roles || user.role || "customer").split(",").map((r: string) => r.trim()).filter(Boolean);
-      const newRoles  = (vars.roles || "customer").split(",").map((r: string) => r.trim()).filter(Boolean);
-      if (newRoles.sort().join(",") !== origRoles.sort().join(",")) {
-        const roleLabels = newRoles.map((r: string) => r.charAt(0).toUpperCase() + r.slice(1)).join(" + ");
-        changedParts.push(`Roles: ${roleLabels}`);
-      }
-      if (vars.isActive !== user.isActive || vars.isBanned !== (user.isBanned || false)) {
-        const statusLabel = vars.isBanned ? "Banned" : vars.isActive ? "Active" : "Blocked";
-        changedParts.push(`Status: ${statusLabel}`);
-      }
-      if (vars.securityNote !== (user.securityNote || "")) changedParts.push("Security note updated");
-      if (vars.blockedServices !== (user.blockedServices || "")) changedParts.push("Service restrictions updated");
-      toast({
-        title: "Security settings saved",
-        description: changedParts.length ? changedParts.join(" · ") : undefined,
-      });
-      onClose();
-    },
-    onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
-  });
+  const securityMutation = useUpdateUserSecurity();
 
   const resetOtpMutation = useAdminResetOtp();
 
@@ -630,24 +606,19 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
     onError: (e: any) => toast({ title: "Failed to cancel bypass", description: e.message, variant: "destructive" }),
   });
 
-  const disable2faMutation = useMutation({
-    mutationFn: () => adminFetch(`/users/${user.id}/2fa/disable`, { method: "POST", body: "{}" }),
-    onSuccess: () => {
-      setTotpEnabled(false);
-      qc.invalidateQueries({ queryKey: ["admin-users"] });
-      toast({ title: "2FA disabled", description: "Two-factor authentication has been turned off for this user." });
-    },
-    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
-  });
+  const _disable2fa = useDisable2FA();
+  const disable2faMutation = {
+    ...(_disable2fa),
+    mutate: () => _disable2fa.mutate(user.id, { onSuccess: () => setTotpEnabled(false) }),
+    isPending: _disable2fa.isPending,
+  };
 
-  const resetWalletPinMutation = useMutation({
-    mutationFn: () => adminFetch(`/users/${user.id}/reset-wallet-pin`, { method: "POST", body: "{}" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-users"] });
-      toast({ title: "MPIN reset", description: "User's wallet MPIN has been cleared. They will need to create a new one." });
-    },
-    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
-  });
+  const _resetWalletPin = useResetWalletPin();
+  const resetWalletPinMutation = {
+    ...(_resetWalletPin),
+    mutate: () => _resetWalletPin.mutate(user.id),
+    isPending: _resetWalletPin.isPending,
+  };
 
   /* ── Sessions ── */
   const [showSessions, setShowSessions] = useState(false);
@@ -655,14 +626,7 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
   const revokeSession = useRevokeUserSession();
   const revokeAll = useRevokeAllUserSessions();
 
-  const identityMutation = useMutation({
-    mutationFn: (body: any) => adminFetch(`/users/${user.id}/identity`, { method: "PATCH", body: JSON.stringify(body) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-users"] });
-      toast({ title: "Identity updated", description: "User identity fields saved successfully." });
-    },
-    onError: (e: any) => toast({ title: "Identity update failed", description: e.message, variant: "destructive" }),
-  });
+  const identityMutation = useUpdateUserIdentity();
 
   const handleIdentitySave = () => {
     const body: Record<string, string> = {};
@@ -670,7 +634,7 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
     if (editUsername.trim().toLowerCase() !== (user.username || "")) body.username = editUsername.trim();
     if (editEmail.trim().toLowerCase() !== (user.email || "")) body.email = editEmail.trim();
     if (Object.keys(body).length === 0) { toast({ title: "No changes", description: "No identity fields were modified." }); return; }
-    identityMutation.mutate(body);
+    identityMutation.mutate({ id: user.id, ...body });
   };
 
   const toggleRole = (r: string) => {
@@ -705,17 +669,37 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
   };
 
   const performSaveUser = () => {
-
     const newRoles = roles.length > 0 ? roles : ["customer"];
-    securityMutation.mutate({
-      isActive,
-      isBanned,
-      banReason: isBanned ? banReason : null,
-      roles: newRoles.join(","),
-      blockedServices: blockedServices.join(","),
-      securityNote,
-      notify: isBanned && !user.isBanned,
-    });
+    const origRoles = Array.isArray(user.roles) ? user.roles.slice().sort() : (user.roles || "customer").split(",").map((r: string) => r.trim()).filter(Boolean).sort();
+    securityMutation.mutate(
+      {
+        id: user.id,
+        isActive,
+        isBanned,
+        banReason: isBanned ? banReason : null,
+        roles: newRoles.join(","),
+        blockedServices: blockedServices.join(","),
+        securityNote,
+        notify: isBanned && !user.isBanned,
+      },
+      {
+        onSuccess: (_data, vars) => {
+          const changedParts: string[] = [];
+          const newRolesArr = (vars.roles || "customer").split(",").map((r: string) => r.trim()).filter(Boolean);
+          if (newRolesArr.slice().sort().join(",") !== origRoles.join(",")) {
+            changedParts.push(`Roles: ${newRolesArr.map((r: string) => r.charAt(0).toUpperCase() + r.slice(1)).join(" + ")}`);
+          }
+          if (vars.isActive !== user.isActive || vars.isBanned !== (user.isBanned || false)) {
+            changedParts.push(`Status: ${vars.isBanned ? "Banned" : vars.isActive ? "Active" : "Blocked"}`);
+          }
+          if (vars.securityNote !== (user.securityNote || "")) changedParts.push("Security note updated");
+          if (vars.blockedServices !== (user.blockedServices || "")) changedParts.push("Service restrictions updated");
+          toast({ title: "Security settings saved", description: changedParts.length ? changedParts.join(" · ") : undefined });
+          onClose();
+        },
+        onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+      }
+    );
     setPendingRoleChange(false);
   };
 

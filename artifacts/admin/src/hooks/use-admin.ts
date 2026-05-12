@@ -462,6 +462,43 @@ export const useUpdateParcelBooking = () => {
   });
 };
 
+export interface AdminUser {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  username: string | null;
+  roles: string[];
+  walletBalance: number;
+  isActive: boolean;
+  isBanned: boolean;
+  banReason: string | null;
+  approvalStatus: string | null;
+  cnic: string | null;
+  city: string | null;
+  area: string | null;
+  address: string | null;
+  hasMpin: boolean;
+  isMpinLocked: boolean;
+  riderProfile: {
+    vehicleType: string | null;
+    vehiclePlate: string | null;
+    drivingLicense: string | null;
+    vehicleRegNo: string | null;
+    documents: unknown;
+  } | null;
+  vendorProfile: {
+    storeName: string | null;
+    businessType: string | null;
+    businessName: string | null;
+    ntn: string | null;
+    storeCategory: string | null;
+    storeIsOpen: boolean | null;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreateUserInput {
   name?: string;
   phone?: string;
@@ -492,6 +529,69 @@ export const useCreateUser = () => {
         title: 'Failed to create user',
         description: error?.message || 'Unable to create new user',
         variant: 'destructive',
+      });
+    },
+  });
+};
+
+export const useUpdateUserIdentity = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; name?: string; phone?: string; email?: string; username?: string }) =>
+      adminFetch(`/users/${id}/identity`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"], exact: false });
+      toast({ title: "Identity updated", description: "User identity fields saved successfully." });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Identity update failed",
+        description: error?.message || "Unable to update user identity",
+        variant: "destructive",
+      });
+    },
+  });
+};
+
+export const useDisable2FA = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      adminFetch(`/users/${userId}/2fa/disable`, { method: "POST", body: "{}" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"], exact: false });
+      toast({ title: "2FA disabled", description: "Two-factor authentication has been turned off for this user." });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to disable 2FA",
+        description: error?.message || "Unable to disable two-factor authentication",
+        variant: "destructive",
+      });
+    },
+  });
+};
+
+export const useResetWalletPin = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      adminFetch(`/users/${userId}/reset-wallet-pin`, { method: "POST", body: "{}" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"], exact: false });
+      toast({ title: "MPIN reset", description: "User's wallet MPIN has been cleared. They will need to create a new one." });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to reset MPIN",
+        description: error?.message || "Unable to reset wallet PIN",
+        variant: "destructive",
       });
     },
   });

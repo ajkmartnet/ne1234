@@ -321,7 +321,7 @@ export default function Vendors() {
   const { language } = useLanguage();
   const T = (key: TranslationKey) => tDual(key, language);
   const [, setLocation] = useLocation();
-  const { data, isLoading, refetch, isFetching, dataUpdatedAt } = useVendors();
+  const { data, isLoading, isError, error, refetch, isFetching, dataUpdatedAt } = useVendors();
   const { data: settingsData } = usePlatformSettings();
   const overrideSuspM = useOverrideSuspension("vendors");
   const { data: daData } = useDeliveryAccess();
@@ -631,6 +631,17 @@ export default function Vendors() {
         <div className="space-y-3">
           {[1,2,3,4].map(i => <div key={i} className="h-24 bg-muted animate-pulse rounded-2xl" />)}
         </div>
+      ) : isError ? (
+        <Card className="rounded-2xl border-border/50">
+          <CardContent className="p-12 text-center">
+            <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+            <p className="font-semibold text-foreground mb-1">Failed to load vendors</p>
+            <p className="text-sm text-muted-foreground mb-4">{(error as any)?.message || "An unexpected error occurred."}</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="rounded-xl gap-2">
+              <RefreshCw className="w-4 h-4" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : filtered.length === 0 ? (
         <Card className="rounded-2xl border-border/50">
           <CardContent className="p-12 text-center">
@@ -710,13 +721,17 @@ export default function Vendors() {
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{v.name || "—"}</p>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <a href={`tel:${v.phone}`} className="flex items-center gap-1 text-xs text-blue-600 font-medium hover:underline">
-                          <Phone className="w-3 h-3" /> {v.phone}
-                        </a>
-                        <a href={`https://wa.me/92${v.phone.replace(/^(\+92|0)/, "")}`} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-green-600 font-medium hover:underline">
-                          <MessageCircle className="w-3 h-3" /> WhatsApp
-                        </a>
+                        {v.phone && (
+                          <a href={`tel:${v.phone}`} className="flex items-center gap-1 text-xs text-blue-600 font-medium hover:underline">
+                            <Phone className="w-3 h-3" /> {v.phone}
+                          </a>
+                        )}
+                        {v.phone && (
+                          <a href={`https://wa.me/92${v.phone.replace(/^(\+92|0)/, "")}`} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-green-600 font-medium hover:underline">
+                            <MessageCircle className="w-3 h-3" /> WhatsApp
+                          </a>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">Joined {formatDate(v.createdAt)}</p>
                     </div>

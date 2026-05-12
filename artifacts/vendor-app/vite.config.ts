@@ -4,10 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-/* VENDOR_DEV_PORT takes priority, then PORT, then falls back to 3002.
+/* VENDOR_DEV_PORT takes priority, then PORT, then falls back to 3001.
    This avoids conflicts when PORT=5000 is set globally for the API server. */
 const rawPort = process.env.VENDOR_DEV_PORT || process.env.PORT;
-const port = rawPort ? Number(rawPort) : 3002;
+const port = rawPort ? Number(rawPort) : 3001;
 
 if (rawPort && (Number.isNaN(port) || port <= 0)) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);

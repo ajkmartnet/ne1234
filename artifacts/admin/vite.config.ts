@@ -4,15 +4,15 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-// ADMIN_PORT_OVERRIDE (set in userenv) beats the workflow-command's ADMIN_DEV_PORT=3001,
-// then ADMIN_DEV_PORT, then PORT, then falls back to 23744.
-// The Replit artifact platform monitors port 23744 for this workflow, so
-// ADMIN_PORT_OVERRIDE=23744 must be set in userenv.shared to match it.
+// Port resolution order (highest priority first):
+//   1. ADMIN_PORT_OVERRIDE env var (optional explicit override)
+//   2. ADMIN_DEV_PORT env var — set to "3000" in userenv.shared → admin binds to port 3000
+//   3. PORT env var — set to "5000" globally (API server); skipped by ADMIN_DEV_PORT taking precedence
+//   4. Hard fallback: 3000 (the intended admin dev port)
 const rawPort =
   process.env.ADMIN_PORT_OVERRIDE ||
   process.env.ADMIN_DEV_PORT ||
-  process.env.PORT ||
-  "23744";
+  "3000";
 
 const port = Number(rawPort);
 

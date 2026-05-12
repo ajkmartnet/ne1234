@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development node ./scripts/start-with-restart.mjs",
+    "dev": "{ [ -d ../../node_modules ] && [ ../../node_modules -nt ../../pnpm-lock.yaml ]; } || (cd ../.. && pnpm install --no-frozen-lockfile); NODE_ENV=development node ./scripts/start-with-restart.mjs",
     "start": "node dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

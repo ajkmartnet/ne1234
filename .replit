@@ -16,28 +16,93 @@ modules = ["nodejs-20"]
   [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Rider App"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Customer App"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Vendor App"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Admin Panel"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; pnpm --filter @workspace/api-server run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow]]
+name = "Rider App"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; pnpm --filter @workspace/rider-app run dev"
+waitForPort = 3002
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Customer App"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; PORT=20716 pnpm --filter @workspace/ajkmart run dev:web"
+
+[[workflows.workflow]]
+name = "Vendor App"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; pnpm --filter @workspace/vendor-app run dev"
+waitForPort = 3001
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Admin Panel"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; ADMIN_PORT_OVERRIDE=3000 pnpm --filter @workspace/admin run dev"
+waitForPort = 3000
+
 [[ports]]
 localPort = 3000
-externalPort = 4200
-
-[[ports]]
-localPort = 3001
-externalPort = 3002
-
-[[ports]]
-localPort = 3002
-externalPort = 5173
-
-[[ports]]
-localPort = 3003
-externalPort = 3003
-
-[[ports]]
-localPort = 3004
-externalPort = 8008
-
-[[ports]]
-localPort = 3005
+externalPort = 3000
 
 [[ports]]
 localPort = 4200
@@ -48,12 +113,8 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 20716
+localPort = 8000
 externalPort = 8000
-
-[[ports]]
-localPort = 20717
-externalPort = 3001
 
 [[ports]]
 localPort = 23744

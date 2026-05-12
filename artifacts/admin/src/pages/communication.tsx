@@ -467,6 +467,7 @@ function ConversationsTab() {
   useEffect(() => {
     fetchAdmin(`/communication/conversations?search=${encodeURIComponent(debouncedSearch)}&page=${page}&limit=${LIMIT}`)
       .then((d) => { setConversations((d.data as ConversationItem[]) || []); setTotal((d.total as number) || 0); })
+      .catch((err: unknown) => { console.error("[communication] conversations fetch failed:", err); });
   }, [debouncedSearch, page]);
 
   const viewMessages = async (conv: ConversationItem) => {
@@ -602,6 +603,7 @@ function CallHistoryTab() {
   useEffect(() => {
     fetchAdmin(`/communication/calls?page=${page}&limit=${LIMIT}`)
       .then((d) => { setCalls((d.data as CallItem[]) || []); setTotal((d.total as number) || 0); })
+      .catch((err: unknown) => { console.error("[communication] calls fetch failed:", err); });
   }, [page]);
 
   const statusColor: Record<string, string> = { completed: "default", missed: "destructive", rejected: "secondary", answered: "default", initiated: "outline" };
@@ -673,6 +675,7 @@ function AILogsTab() {
   useEffect(() => {
     fetchAdmin(`/communication/ai-logs?page=${page}&limit=${LIMIT}`)
       .then((d) => { setLogs((d.data as AILogItem[]) || []); setTotal((d.total as number) || 0); })
+      .catch((err: unknown) => { console.error("[communication] ai-logs fetch failed:", err); });
   }, [page]);
 
   return (
@@ -743,6 +746,7 @@ function FlaggedTab() {
   const load = useCallback(() => {
     adminFetch(`/communication/flags?status=${status}`)
       .then((d: FlagItem[] | { data: FlagItem[] }) => setFlags(Array.isArray(d) ? d : d.data))
+      .catch((err: unknown) => { console.error("[communication] flags fetch failed:", err); });
   }, [status]);
 
   useEffect(() => { load(); }, [load]);
@@ -1081,6 +1085,7 @@ function RoleTemplatesTab() {
   const loadRoles = () => {
     adminFetch("/communication/roles")
       .then((d: RoleItem[] | { data: RoleItem[] }) => setRoles(Array.isArray(d) ? d : d.data))
+      .catch((err: unknown) => { console.error("[communication] roles fetch failed:", err); });
   };
 
   useEffect(() => { loadRoles(); }, []);
@@ -1224,6 +1229,7 @@ function AjkIdsTab() {
     params.set("limit", String(LIMIT));
     fetchAdmin(`/communication/ajk-ids?${params.toString()}`)
       .then((d) => { setUsers((d.data as UserItem[]) || []); setTotal((d.total as number) || 0); })
+      .catch((err: unknown) => { console.error("[communication] ajk-ids fetch failed:", err); });
   }, [debouncedSearch, roleFilter, page]);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);

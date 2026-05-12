@@ -1530,16 +1530,11 @@ function WalletScreenInner() {
     if (!socket) return;
     const handleFrozen   = () => setWalletFrozen(true);
     const handleUnfrozen = () => setWalletFrozen(false);
-    const handleFreezeChange = (payload: { frozen: boolean }) => {
-      setWalletFrozen(payload.frozen);
-    };
     socket.on("wallet:frozen", handleFrozen);
     socket.on("wallet:unfrozen", handleUnfrozen);
-    socket.on("wallet:freeze_change", handleFreezeChange);
     return () => {
       socket.off("wallet:frozen", handleFrozen);
       socket.off("wallet:unfrozen", handleUnfrozen);
-      socket.off("wallet:freeze_change", handleFreezeChange);
     };
   }, [socket]);
 

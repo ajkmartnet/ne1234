@@ -410,13 +410,13 @@ export default function Home() {
       qc.invalidateQueries({ queryKey: ["rider-active"] });
       qc.invalidateQueries({ queryKey: ["rider-earnings"] });
     };
-    sharedSocket.on("rider:new-request", handleNewRequest);
+    sharedSocket.on("rider:new_request", handleNewRequest);
     sharedSocket.on("new:request", handleNewRequest);
     sharedSocket.on("rider:request-cancelled", handleStateChange);
     sharedSocket.on("rider:ride-updated", handleCompletionEvent);
     sharedSocket.on("rider:order-updated", handleCompletionEvent);
     return () => {
-      sharedSocket.off("rider:new-request", handleNewRequest);
+      sharedSocket.off("rider:new_request", handleNewRequest);
       sharedSocket.off("new:request", handleNewRequest);
       sharedSocket.off("rider:request-cancelled", handleStateChange);
       sharedSocket.off("rider:ride-updated", handleCompletionEvent);

@@ -521,6 +521,9 @@ export default function ErrorMonitor() {
       queryClient.invalidateQueries({ queryKey: ["error-reports"] });
       queryClient.invalidateQueries({ queryKey: ["error-count"] });
     },
+    onError: (err: unknown) => {
+      console.error("[error-monitor] updateMutation failed:", err instanceof Error ? err.message : err);
+    },
   });
 
   const updateCustomerReportMutation = useMutation({
@@ -532,6 +535,9 @@ export default function ErrorMonitor() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customer-reports"] });
       queryClient.invalidateQueries({ queryKey: ["customer-reports-count"] });
+    },
+    onError: (err: unknown) => {
+      console.error("[error-monitor] updateCustomerReportMutation failed:", err instanceof Error ? err.message : err);
     },
   });
 
@@ -545,6 +551,9 @@ export default function ErrorMonitor() {
       queryClient.invalidateQueries({ queryKey: ["error-reports"] });
       queryClient.invalidateQueries({ queryKey: ["error-count"] });
     },
+    onError: (err: unknown) => {
+      console.error("[error-monitor] resolveMutation failed:", err instanceof Error ? err.message : err);
+    },
   });
 
   const undoMutation = useMutation({
@@ -553,6 +562,9 @@ export default function ErrorMonitor() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["error-reports"] });
       queryClient.invalidateQueries({ queryKey: ["error-count"] });
+    },
+    onError: (err: unknown) => {
+      console.error("[error-monitor] undoMutation failed:", err instanceof Error ? err.message : err);
     },
   });
 
@@ -571,6 +583,9 @@ export default function ErrorMonitor() {
     onSuccess: () => {
       refetchAutoSettings();
     },
+    onError: (err: unknown) => {
+      console.error("[error-monitor] updateAutoSettingsMutation failed:", err instanceof Error ? err.message : err);
+    },
   });
 
   const { data: autoResolveLog, refetch: refetchAutoLog } = useQuery<AutoResolveLogEntry[]>({
@@ -586,6 +601,9 @@ export default function ErrorMonitor() {
       queryClient.invalidateQueries({ queryKey: ["error-reports"] });
       queryClient.invalidateQueries({ queryKey: ["error-count"] });
       refetchAutoLog();
+    },
+    onError: (err: unknown) => {
+      console.error("[error-monitor] runAutoResolveMutation failed:", err instanceof Error ? err.message : err);
     },
   });
 

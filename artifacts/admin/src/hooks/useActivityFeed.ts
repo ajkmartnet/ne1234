@@ -6,7 +6,7 @@ import { getAdminSocket } from "@/lib/adminSocket";
 export type ActivityEventType =
   | "order:new"
   | "order:update"
-  | "ride:dispatch-update"
+  | "ride:dispatch_update"
   | "rider:sos"
   | "rider:status"
   | "rider:offline"
@@ -43,7 +43,7 @@ function describe(
         title: `Order ${String(p.status ?? "updated").replace(/_/g, " ")}`,
         subtitle: `#${String(p.id ?? "").slice(-6).toUpperCase()} · ${p.type ?? ""}`,
       };
-    case "ride:dispatch-update": {
+    case "ride:dispatch_update": {
       const status = String(
         p.status ?? p.event ?? "updated",
       ).replace(/_/g, " ");
@@ -125,7 +125,7 @@ function nextId() {
 const FEED_EVENTS: ActivityEventType[] = [
   "order:new",
   "order:update",
-  "ride:dispatch-update",
+  "ride:dispatch_update",
   "rider:sos",
   "rider:status",
   "rider:offline",

@@ -657,7 +657,7 @@ export function emitRiderNewRequest(riderId: string, payload: { type: 'ride' | '
 /** Broadcast chat message to the conversation room */
 export function emitChatMessage(conversationId: string, message: any) {
   if (!_io) return;
-  _io.to(`conversation:${conversationId}`).emit("comm:message", message);
+  _io.to(`conversation:${conversationId}`).emit("comm:message:new", message);
 }
 
 /** Emit ride dispatch update to the relevant ride room and admin-fleet dashboard */

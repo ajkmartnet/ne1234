@@ -429,5 +429,92 @@ router.patch("/orders/:id/status", async (req, res) => {
   sendSuccess(res, { ...updated, total: safeNum(updated.total) });
 });
 
-/* ... Rest of the file ... */
+/* ── GET /vendor/promos ── list promos owned by vendor ── */
+router.get("/promos", async (req, res) => {
+  const vendorId = (req as Request & { vendorId?: string }).vendorId;
+  if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
+  const promos = await db
+    .select()
+    .from(promoCodesTable)
+    .where(eq(promoCodesTable.vendorId, vendorId))
+    .orderBy(desc(promoCodesTable.createdAt));
+  sendSuccess(res, { promos });
+});
+
+/* ── POST /vendor/promos ── create a promo ── */
+router.post("/promos", async (req, res) => {
+  const vendorId = (req as Request & { vendorId?: string }).vendorId;
+  if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
+  const { code, discountPct, discountFlat, minOrderAmount, maxDiscount, usageLimit, expiresAt, description, appliesTo } = req.body as Record<string, unknown>;
+  if (!code || (discountPct === undefined && discountFlat === undefined)) {
+    sendValidationError(res, "code and either discountPct or discountFlat are required");
+    return;
+  }
+  const [promo] = await db.insert(promoCodesTable).values({
+    id:             generateId(),
+    code:           String(code).toUpperCase().trim(),
+    discountPct:    discountPct     !== undefined ? String(discountPct) : null,
+    discountFlat:   discountFlat    !== undefined ? String(discountFlat) : null,
+    minOrderAmount: minOrderAmount  !== undefined ? String(minOrderAmount) : "0",
+    maxDiscount:    maxDiscount     !== undefined ? String(maxDiscount) : null,
+    usageLimit:     usageLimit      !== undefined ? Number(usageLimit) : null,
+    expiresAt:      expiresAt       ? new Date(String(expiresAt)) : null,
+    description:    description     ? String(description) : null,
+    appliesTo:      appliesTo       ? String(appliesTo) : "all",
+    vendorId,
+    isActive:       true,
+  }).returning();
+  sendCreated(res, { promo });
+});
+
+/* ── PATCH /vendor/promos/:id ── update a promo ── */
+router.patch("/promos/:id", async (req, res) => {
+  const vendorId = (req as Request & { vendorId?: string }).vendorId;
+  if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
+  const [existing] = await db.select().from(promoCodesTable)
+    .where(and(eq(promoCodesTable.id, req.params["id"]!), eq(promoCodesTable.vendorId, vendorId)))
+    .limit(1);
+  if (!existing) { sendNotFound(res, "Promo not found"); return; }
+  const { discountPct, discountFlat, minOrderAmount, maxDiscount, usageLimit, expiresAt, description, appliesTo } = req.body as Record<string, unknown>;
+  const updates: Partial<typeof promoCodesTable.$inferInsert> = {};
+  if (discountPct    !== undefined) updates.discountPct    = discountPct ? String(discountPct) : null;
+  if (discountFlat   !== undefined) updates.discountFlat   = discountFlat ? String(discountFlat) : null;
+  if (minOrderAmount !== undefined) updates.minOrderAmount = minOrderAmount ? String(minOrderAmount) : "0";
+  if (maxDiscount    !== undefined) updates.maxDiscount    = maxDiscount ? String(maxDiscount) : null;
+  if (usageLimit     !== undefined) updates.usageLimit     = usageLimit ? Number(usageLimit) : null;
+  if (expiresAt      !== undefined) updates.expiresAt      = expiresAt ? new Date(String(expiresAt)) : null;
+  if (description    !== undefined) updates.description    = description ? String(description) : null;
+  if (appliesTo      !== undefined) updates.appliesTo      = String(appliesTo);
+  const [promo] = await db.update(promoCodesTable).set(updates)
+    .where(eq(promoCodesTable.id, existing.id)).returning();
+  sendSuccess(res, { promo });
+});
+
+/* ── PATCH /vendor/promos/:id/toggle ── activate / deactivate a promo ── */
+router.patch("/promos/:id/toggle", async (req, res) => {
+  const vendorId = (req as Request & { vendorId?: string }).vendorId;
+  if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
+  const [existing] = await db.select().from(promoCodesTable)
+    .where(and(eq(promoCodesTable.id, req.params["id"]!), eq(promoCodesTable.vendorId, vendorId)))
+    .limit(1);
+  if (!existing) { sendNotFound(res, "Promo not found"); return; }
+  const [promo] = await db.update(promoCodesTable)
+    .set({ isActive: !existing.isActive })
+    .where(eq(promoCodesTable.id, existing.id))
+    .returning();
+  sendSuccess(res, { promo });
+});
+
+/* ── DELETE /vendor/promos/:id ── delete a promo ── */
+router.delete("/promos/:id", async (req, res) => {
+  const vendorId = (req as Request & { vendorId?: string }).vendorId;
+  if (!vendorId) { sendForbidden(res, "Vendor auth required"); return; }
+  const [existing] = await db.select().from(promoCodesTable)
+    .where(and(eq(promoCodesTable.id, req.params["id"]!), eq(promoCodesTable.vendorId, vendorId)))
+    .limit(1);
+  if (!existing) { sendNotFound(res, "Promo not found"); return; }
+  await db.delete(promoCodesTable).where(eq(promoCodesTable.id, existing.id));
+  sendSuccess(res, { success: true });
+});
+
 export default router;

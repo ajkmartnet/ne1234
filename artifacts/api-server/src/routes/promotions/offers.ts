@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { db, offersTable, offerRedemptionsTable, offerTemplatesTable, campaignParticipationsTable, ordersTable } from "./helpers.js";
 import { eq, desc, asc, and, count, sum, inArray, sql } from "./helpers.js";
 import type { SQL } from "./helpers.js";
-import { generateId, adminAuth } from "./helpers.js";
+import { generateId, adminAuth, requireRole } from "./helpers.js";
 import { sendSuccess, sendCreated, sendError, sendNotFound, sendValidationError } from "./helpers.js";
 import { nowIso, mapOffer, mapTemplate, marketingAuth, managerAuth, parseDecimal } from "./helpers.js";
 
@@ -449,7 +449,7 @@ router.get("/vendor/participations", adminAuth, async (req, res) => {
   sendSuccess(res, { participations });
 });
 
-router.delete("/vendor/participations/:id", async (req: Request, res) => {
+router.delete("/vendor/participations/:id", requireRole("vendor"), async (req: Request, res) => {
   const vendorId = req.vendorId as string;
   if (!vendorId) { sendValidationError(res, "auth required"); return; }
   const [participation] = await db.select().from(campaignParticipationsTable)

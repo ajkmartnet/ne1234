@@ -125,7 +125,7 @@ const EVENT_LABELS: Record<string, { label: string; color: string }> = {
   "order:new":             { label: "New Order",       color: "bg-green-100 text-green-700 border-green-200" },
   "order:update":          { label: "Order Update",    color: "bg-blue-100 text-blue-700 border-blue-200" },
   "rider:sos":             { label: "Rider SOS",       color: "bg-red-100 text-red-700 border-red-200" },
-  "ride:dispatch-update":  { label: "Ride Update",     color: "bg-violet-100 text-violet-700 border-violet-200" },
+  "ride:dispatch_update":  { label: "Ride Update",     color: "bg-violet-100 text-violet-700 border-violet-200" },
   "rider:status":          { label: "Rider Status",    color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
   "rider:offline":         { label: "Rider Offline",   color: "bg-slate-100 text-slate-600 border-slate-200" },
   "rider:spoof-alert":     { label: "GPS Spoof",       color: "bg-orange-100 text-orange-700 border-orange-200" },

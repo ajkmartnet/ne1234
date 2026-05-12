@@ -531,6 +531,8 @@ router.patch("/withdrawal-requests/:id/approve", async (req, res) => {
     body: t("notifWithdrawalApprovedBody" as TranslationKey, wdLang).replace("{amount}", amt.toFixed(0)).replace("{ref}", wdRef).replace("{note}", wdNote),
     type: "wallet", icon: "checkmark-circle-outline",
   }).catch(() => {});
+  const wdIo = getIO();
+  if (wdIo) wdIo.to("admin-fleet").emit("wallet:withdrawal-approved", { txId, userId: tx.userId, amount: amt });
   sendSuccess(res, { txId, status: "paid", refNo: refNo || "manual" });
 });
 
@@ -583,6 +585,8 @@ router.patch("/withdrawal-requests/:id/reject", async (req, res) => {
     body: t("notifWithdrawalRejectedBody" as TranslationKey, wdRejLang).replace("{amount}", amt.toFixed(0)).replace("{reason}", rejReason),
     type: "wallet", icon: "close-circle-outline",
   }).catch(() => {});
+  const wdRejIo = getIO();
+  if (wdRejIo) wdRejIo.to("admin-fleet").emit("wallet:withdrawal-rejected", { txId, userId: tx.userId, amount: amt, reason: rejReason });
   sendSuccess(res, { txId, status: "rejected", reason: rejReason, refunded: amt });
 });
 

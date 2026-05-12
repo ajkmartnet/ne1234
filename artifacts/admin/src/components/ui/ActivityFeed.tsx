@@ -20,7 +20,7 @@ const EVENT_META: Record<
 > = {
   "order:new":            { icon: ShoppingBag,  color: "text-indigo-600",  bg: "bg-indigo-50",   dot: "bg-indigo-500" },
   "order:update":         { icon: ShoppingBag,  color: "text-blue-600",    bg: "bg-blue-50",     dot: "bg-blue-500" },
-  "ride:dispatch-update": { icon: Car,           color: "text-emerald-600", bg: "bg-emerald-50",  dot: "bg-emerald-500" },
+  "ride:dispatch_update": { icon: Car,           color: "text-emerald-600", bg: "bg-emerald-50",  dot: "bg-emerald-500" },
   "rider:sos":            { icon: AlertTriangle, color: "text-red-600",     bg: "bg-red-50",      dot: "bg-red-500" },
   "rider:status":         { icon: Radio,         color: "text-violet-600",  bg: "bg-violet-50",   dot: "bg-violet-500" },
   "rider:offline":        { icon: Radio,         color: "text-gray-500",    bg: "bg-gray-50",     dot: "bg-gray-400" },

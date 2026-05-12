@@ -990,6 +990,7 @@ function MaintenanceScheduleSection({ apiFetch, toast }: { apiFetch: (path: stri
       setEnd(data.scheduledEnd || "");
       setMsg(data.scheduledMsg || "");
     }).catch((err) => {
+      console.error("[settings-system] maintenance-schedule fetch failed:", err instanceof Error ? err.message : err);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -1077,6 +1078,7 @@ function DataRetentionSection({ apiFetch, toast }: { apiFetch: (path: string, op
       const data = d.data ?? d;
       setPolicies({ locationDays: data.locationDays, chatDays: data.chatDays, auditDays: data.auditDays, notificationsDays: data.notificationsDays, lastCleanup: data.lastCleanup });
     }).catch((err) => {
+      console.error("[settings-system] retention-policies fetch failed:", err instanceof Error ? err.message : err);
     }).finally(() => setLoading(false));
   }, []);
 

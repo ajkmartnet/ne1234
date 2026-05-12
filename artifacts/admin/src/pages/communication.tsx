@@ -453,6 +453,7 @@ function ConversationsTab() {
   const [selectedConv, setSelectedConv] = useState<ConversationItem | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [viewError, setViewError] = useState("");
+  const [listError, setListError] = useState("");
   const LIMIT = 20;
 
   useEffect(() => {
@@ -465,9 +466,13 @@ function ConversationsTab() {
   }, [debouncedSearch]);
 
   useEffect(() => {
+    setListError("");
     fetchAdmin(`/communication/conversations?search=${encodeURIComponent(debouncedSearch)}&page=${page}&limit=${LIMIT}`)
       .then((d) => { setConversations((d.data as ConversationItem[]) || []); setTotal((d.total as number) || 0); })
-      .catch((err: unknown) => { console.error("[communication] conversations fetch failed:", err); });
+      .catch((err: unknown) => {
+        console.error("[communication] conversations fetch failed:", err);
+        setListError("Failed to load conversations. Please try again.");
+      });
   }, [debouncedSearch, page]);
 
   const viewMessages = async (conv: ConversationItem) => {
@@ -488,6 +493,8 @@ function ConversationsTab() {
         <Input placeholder="Search by AJK ID or name..." value={search} onChange={e => setSearch(e.target.value)} className="max-w-sm" />
         <Button variant="outline" onClick={() => window.open(`/api/admin/communication/export/messages`, "_blank")}><Download className="h-4 w-4 mr-2" />Export CSV</Button>
       </div>
+
+      {listError && <p className="text-sm text-destructive">{listError}</p>}
 
       {selectedConv ? (
         <Card>
@@ -598,12 +605,17 @@ function CallHistoryTab() {
   const [calls, setCalls] = useState<CallItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [listError, setListError] = useState("");
   const LIMIT = 20;
 
   useEffect(() => {
+    setListError("");
     fetchAdmin(`/communication/calls?page=${page}&limit=${LIMIT}`)
       .then((d) => { setCalls((d.data as CallItem[]) || []); setTotal((d.total as number) || 0); })
-      .catch((err: unknown) => { console.error("[communication] calls fetch failed:", err); });
+      .catch((err: unknown) => {
+        console.error("[communication] calls fetch failed:", err);
+        setListError("Failed to load call history. Please try again.");
+      });
   }, [page]);
 
   const statusColor: Record<string, string> = { completed: "default", missed: "destructive", rejected: "secondary", answered: "default", initiated: "outline" };
@@ -613,6 +625,7 @@ function CallHistoryTab() {
       <div className="flex justify-end">
         <Button variant="outline" onClick={() => window.open(`/api/admin/communication/export/calls`, "_blank")}><Download className="h-4 w-4 mr-2" />Export CSV</Button>
       </div>
+      {listError && <p className="text-sm text-destructive">{listError}</p>}
       {/* Mobile card list */}
       <section className="md:hidden space-y-3" aria-label="Call history">
         {calls.length === 0 ? (
@@ -670,12 +683,17 @@ function AILogsTab() {
   const [logs, setLogs] = useState<AILogItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [listError, setListError] = useState("");
   const LIMIT = 20;
 
   useEffect(() => {
+    setListError("");
     fetchAdmin(`/communication/ai-logs?page=${page}&limit=${LIMIT}`)
       .then((d) => { setLogs((d.data as AILogItem[]) || []); setTotal((d.total as number) || 0); })
-      .catch((err: unknown) => { console.error("[communication] ai-logs fetch failed:", err); });
+      .catch((err: unknown) => {
+        console.error("[communication] ai-logs fetch failed:", err);
+        setListError("Failed to load AI logs. Please try again.");
+      });
   }, [page]);
 
   return (
@@ -683,6 +701,7 @@ function AILogsTab() {
       <div className="flex justify-end">
         <Button variant="outline" onClick={() => window.open(`/api/admin/communication/export/ai-logs`, "_blank")}><Download className="h-4 w-4 mr-2" />Export CSV</Button>
       </div>
+      {listError && <p className="text-sm text-destructive">{listError}</p>}
       {/* Mobile card list */}
       <section className="md:hidden space-y-3" aria-label="AI logs">
         {logs.length === 0 ? (
@@ -1081,11 +1100,16 @@ function RoleTemplatesTab() {
   const [creating, setCreating] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleItem | null>(null);
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [listError, setListError] = useState("");
 
   const loadRoles = () => {
+    setListError("");
     adminFetch("/communication/roles")
       .then((d: RoleItem[] | { data: RoleItem[] }) => setRoles(Array.isArray(d) ? d : d.data))
-      .catch((err: unknown) => { console.error("[communication] roles fetch failed:", err); });
+      .catch((err: unknown) => {
+        console.error("[communication] roles fetch failed:", err);
+        setListError("Failed to load role templates. Please try again.");
+      });
   };
 
   useEffect(() => { loadRoles(); }, []);
@@ -1106,6 +1130,8 @@ function RoleTemplatesTab() {
         <h3 className="text-lg font-semibold">Communication Role Templates</h3>
         <Button onClick={() => setCreating(true)}>Create Role</Button>
       </div>
+
+      {listError && <p className="text-sm text-destructive">{listError}</p>}
 
       <RoleFormDialog
         open={creating}

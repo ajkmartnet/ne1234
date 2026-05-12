@@ -154,6 +154,11 @@ export default function Chat() {
     onCallOffer: (data: CallSignal) => Promise<void>;
     onCallAnswer: (data: CallSignal) => Promise<void>;
     onCallIce: (data: CallSignal) => Promise<void>;
+    onCallAnswered: (data: { callId: string }) => void;
+    onRequestCancelled: () => void;
+    onRequestRejected: () => void;
+    onMessageSent: (data: { id: string; conversationId: string }) => void;
+    onMessagesReadAll: (data: { conversationId: string }) => void;
   } | null>(null);
 
   /* Socket event listeners - keyed on user?.id to rebind on user change */
@@ -199,7 +204,22 @@ export default function Chat() {
       await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
     };
 
-    handlersRef.current = { onMessageNew, onTypingStart, onTypingStop, onMessageRead, onRequestNew, onRequestAccepted, onCallIncoming, onCallEnded, onCallRejected, onCallOffer, onCallAnswer, onCallIce };
+    const onCallAnswered = (_data: { callId: string }) => {
+      setCallActive(true);
+      setCallTimer(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => setCallTimer(t => t + 1), 1000);
+    };
+    const onRequestCancelled = () => loadRequests();
+    const onRequestRejected  = () => loadRequests();
+    const onMessageSent = (data: { id: string; conversationId: string }) => {
+      setMessages(prev => prev.map(m => m.id === data.id ? { ...m, deliveryStatus: "sent" } : m));
+    };
+    const onMessagesReadAll = (_data: { conversationId: string }) => {
+      setMessages(prev => prev.map(m => ({ ...m, deliveryStatus: "read" })));
+    };
+
+    handlersRef.current = { onMessageNew, onTypingStart, onTypingStop, onMessageRead, onRequestNew, onRequestAccepted, onCallIncoming, onCallEnded, onCallRejected, onCallOffer, onCallAnswer, onCallIce, onCallAnswered, onRequestCancelled, onRequestRejected, onMessageSent, onMessagesReadAll };
 
     socket.on("comm:message:new", onMessageNew);
     socket.on("comm:typing:start", onTypingStart);
@@ -213,6 +233,11 @@ export default function Chat() {
     socket.on("comm:call:offer", onCallOffer);
     socket.on("comm:call:answer", onCallAnswer);
     socket.on("comm:call:ice-candidate", onCallIce);
+    socket.on("comm:call:answered", onCallAnswered);
+    socket.on("comm:request:cancelled", onRequestCancelled);
+    socket.on("comm:request:rejected", onRequestRejected);
+    socket.on("comm:message:sent", onMessageSent);
+    socket.on("comm:messages:read-all", onMessagesReadAll);
 
     return () => {
       const h = handlersRef.current;
@@ -229,6 +254,11 @@ export default function Chat() {
       socket.off("comm:call:offer", h.onCallOffer);
       socket.off("comm:call:answer", h.onCallAnswer);
       socket.off("comm:call:ice-candidate", h.onCallIce);
+      socket.off("comm:call:answered", h.onCallAnswered);
+      socket.off("comm:request:cancelled", h.onRequestCancelled);
+      socket.off("comm:request:rejected", h.onRequestRejected);
+      socket.off("comm:message:sent", h.onMessageSent);
+      socket.off("comm:messages:read-all", h.onMessagesReadAll);
       handlersRef.current = null;
     };
   }, [socket, user?.id, loadConversations, loadRequests]);

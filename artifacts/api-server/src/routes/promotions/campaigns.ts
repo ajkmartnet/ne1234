@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, campaignsTable, offersTable, offerRedemptionsTable, campaignParticipationsTable, requireRole } from "./helpers.js";
 import { eq, desc, asc, count, sum, inArray } from "./helpers.js";
 import { generateId, adminAuth } from "./helpers.js";
-import { sendSuccess, sendCreated, sendNotFound, sendValidationError } from "./helpers.js";
+import { sendSuccess, sendCreated, sendNotFound, sendValidationError, sendForbidden } from "./helpers.js";
 import { nowIso, mapCampaign, mapOffer, marketingAuth } from "./helpers.js";
 
 const router = Router();
@@ -86,7 +86,17 @@ router.delete("/campaigns/:id", marketingAuth, async (req, res) => {
 
 /* ── GET /vendor/campaigns/:id/performance ── vendor campaign performance ── */
 router.get("/vendor/campaigns/:id/performance", requireRole("vendor"), async (req, res) => {
+  const vendorId = req.vendorId as string | undefined;
   const campaignId = req.params["id"]!;
+
+  const vendorParticipations = await db.select({ vendorId: campaignParticipationsTable.vendorId })
+    .from(campaignParticipationsTable)
+    .where(eq(campaignParticipationsTable.campaignId, campaignId));
+  if (!vendorParticipations.some(p => p.vendorId === vendorId)) {
+    sendForbidden(res, "You do not have access to this campaign's performance data");
+    return;
+  }
+
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId)).limit(1);
   if (!campaign) { sendNotFound(res, "Campaign not found"); return; }
 

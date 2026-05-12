@@ -359,9 +359,23 @@ export default function Chat() {
     });
     socket.on("comm:request:new", () => loadRequests());
     socket.on("comm:request:accepted", () => { loadConversations(); loadRequests(); });
+    socket.on("comm:request:cancelled", () => loadRequests());
+    socket.on("comm:request:rejected", () => loadRequests());
     socket.on("comm:call:incoming", (data: IncomingCallData) => setIncomingCall(data));
     socket.on("comm:call:ended", () => endCall());
     socket.on("comm:call:rejected", () => endCall());
+    socket.on("comm:call:answered", () => {
+      setCallActive(true);
+      setCallTimer(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => setCallTimer((t) => t + 1), 1000);
+    });
+    socket.on("comm:message:sent", (data: { id: string }) => {
+      setMessages(prev => prev.map(m => m.id === data.id ? { ...m, deliveryStatus: "sent" } : m));
+    });
+    socket.on("comm:messages:read-all", () => {
+      setMessages(prev => prev.map(m => ({ ...m, deliveryStatus: "read" })));
+    });
     socket.on("comm:call:offer", async (data: CallSignal) => {
       if (!pcRef.current || !data.sdp) return;
       await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));

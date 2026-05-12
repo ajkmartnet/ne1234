@@ -792,6 +792,21 @@ export default function Active() {
     };
   }, [sharedSocket, qc]);
 
+  useEffect(() => {
+    if (!sharedSocket) return;
+    const onRideOtp = (data: { rideId: string; otp: string }) => {
+      if (!isMountedRef.current) return;
+      qc.setQueryData(["rider-active"], (old: any) => {
+        if (!old) return old;
+        const rides = Array.isArray(old?.rides) ? old.rides : Array.isArray(old) ? old : [];
+        const updated = rides.map((r: any) => r.id === data.rideId ? { ...r, otp: data.otp } : r);
+        return Array.isArray(old) ? updated : { ...old, rides: updated };
+      });
+    };
+    sharedSocket.on("ride:otp", onRideOtp);
+    return () => { sharedSocket.off("ride:otp", onRideOtp); };
+  }, [sharedSocket, qc]);
+
   type QueuedUpdate = { kind: "location" | "status"; run: () => Promise<unknown> };
   const pendingUpdatesRef                          = useRef<QueuedUpdate[]>([]);
   /* Replace or add queued updates — deduplicate by kind to keep only latest */

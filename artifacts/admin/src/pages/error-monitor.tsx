@@ -3,6 +3,7 @@ import { adminFetch } from "@/lib/adminFetcher";
 import { LastUpdated } from "@/components/ui/LastUpdated";
 import { PageHeader } from "@/components/shared";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { safeCopyToClipboard } from "@/lib/safeClipboard";
 import {
   AlertTriangle, Bug, Server, Monitor, Code, Zap,
@@ -392,6 +393,7 @@ function useTabCount(tab: Exclude<Tab, "customers" | "filescan">, sourceApp: str
 
 export default function ErrorMonitor() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>("new");
   const [page, setPage] = useState(1);
   const [sourceApp, setSourceApp] = useState("");
@@ -523,6 +525,7 @@ export default function ErrorMonitor() {
     },
     onError: (err: unknown) => {
       console.error("[error-monitor] updateMutation failed:", err instanceof Error ? err.message : err);
+      toast({ title: "Failed to update report status", description: err instanceof Error ? err.message : "An unexpected error occurred.", variant: "destructive" });
     },
   });
 
@@ -538,6 +541,7 @@ export default function ErrorMonitor() {
     },
     onError: (err: unknown) => {
       console.error("[error-monitor] updateCustomerReportMutation failed:", err instanceof Error ? err.message : err);
+      toast({ title: "Failed to update customer report", description: err instanceof Error ? err.message : "An unexpected error occurred.", variant: "destructive" });
     },
   });
 
@@ -553,6 +557,7 @@ export default function ErrorMonitor() {
     },
     onError: (err: unknown) => {
       console.error("[error-monitor] resolveMutation failed:", err instanceof Error ? err.message : err);
+      toast({ title: "Failed to resolve report", description: err instanceof Error ? err.message : "An unexpected error occurred.", variant: "destructive" });
     },
   });
 
@@ -565,6 +570,7 @@ export default function ErrorMonitor() {
     },
     onError: (err: unknown) => {
       console.error("[error-monitor] undoMutation failed:", err instanceof Error ? err.message : err);
+      toast({ title: "Failed to undo report change", description: err instanceof Error ? err.message : "An unexpected error occurred.", variant: "destructive" });
     },
   });
 
@@ -585,6 +591,7 @@ export default function ErrorMonitor() {
     },
     onError: (err: unknown) => {
       console.error("[error-monitor] updateAutoSettingsMutation failed:", err instanceof Error ? err.message : err);
+      toast({ title: "Failed to save auto-resolve settings", description: err instanceof Error ? err.message : "An unexpected error occurred.", variant: "destructive" });
     },
   });
 
@@ -604,6 +611,7 @@ export default function ErrorMonitor() {
     },
     onError: (err: unknown) => {
       console.error("[error-monitor] runAutoResolveMutation failed:", err instanceof Error ? err.message : err);
+      toast({ title: "Auto-resolve run failed", description: err instanceof Error ? err.message : "An unexpected error occurred.", variant: "destructive" });
     },
   });
 

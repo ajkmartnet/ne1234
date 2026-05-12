@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "@workspace/db/schema";
 import { buildPgPoolConfig } from "@workspace/db/connection-url";
@@ -11,8 +12,7 @@ const databaseUrl = process.env.DATABASE_URL;
 const isProduction = ["production", "staging"].includes(process.env.NODE_ENV ?? "");
 const isDevMock = !process.env.VAULT_UNLOCKED && !isProduction && !databaseUrl;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let db: any;
+let db: NodePgDatabase<typeof schema>;
 let pool: Pool | undefined;
 
 if (isDevMock) {
@@ -21,16 +21,24 @@ if (isDevMock) {
     "          Run `pnpm --filter @workspace/scripts run decrypt-env` to unlock the full vault.\n" +
     "          Limited features available without a real PostgreSQL database.\n"
   );
+
+  let sqliteDb: NodePgDatabase<typeof schema>;
   try {
     const BetterSqlite = _require("better-sqlite3");
     const { drizzle: drizzleSqlite } = _require("drizzle-orm/better-sqlite3");
     const sqlite = new BetterSqlite("./dev.db");
-    db = drizzleSqlite(sqlite, { schema });
+    sqliteDb = drizzleSqlite(sqlite, { schema }) as unknown as NodePgDatabase<typeof schema>;
     logger.info("[DEV MODE] SQLite mock database initialised at ./dev.db");
   } catch (e) {
-    logger.warn({ err: e }, "[DEV MODE] better-sqlite3 not available — db will be a no-op stub. Some routes may error.");
-    db = {};
+    logger.fatal(
+      { err: e },
+      "[DEV MODE] better-sqlite3 failed to load. " +
+      "Run `pnpm approve-builds` to allow native build scripts, then `pnpm install`. " +
+      "Or unlock the vault with `pnpm --filter @workspace/scripts run decrypt-env` and set DATABASE_URL."
+    );
+    process.exit(1);
   }
+  db = sqliteDb!;
 } else {
   if (!databaseUrl) {
     logger.fatal("❌ DATABASE_URL not set");

@@ -10,6 +10,12 @@ const VAULT_FILE = path.join(import.meta.dirname, "..", ".env.enc");
 
 const MAX_ATTEMPTS = 10;
 
+/** In --auto mode the script is non-interactive. It exits 0 immediately if the
+ *  environment is already configured (DATABASE_URL or VAULT_UNLOCKED is set),
+ *  allowing the Project workflow to proceed without blocking on user input. If
+ *  neither is set it prints a reminder and exits 0 so apps boot in dev mode. */
+const AUTO_MODE = process.argv.includes("--auto");
+
 function promptPassword(prompt: string): Promise<string> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
@@ -65,6 +71,27 @@ function tryDecrypt(password: string, vault: {
 }
 
 async function main() {
+  /* ── Auto mode: used by the Project workflow ────────────────────────────────
+     If the environment is already configured (Replit Secrets or previous
+     decrypt), skip everything and exit 0 so services can start immediately. */
+  if (AUTO_MODE) {
+    if (process.env.DATABASE_URL || process.env.VAULT_UNLOCKED) {
+      process.stdout.write("[Setup] Environment already configured — skipping vault decrypt.\n");
+      process.exit(0);
+    }
+    if (fs.existsSync(ENV_FILE) && fs.readFileSync(ENV_FILE, "utf8").includes("VAULT_UNLOCKED=1")) {
+      process.stdout.write("[Setup] .env already unlocked — skipping vault decrypt.\n");
+      process.exit(0);
+    }
+    process.stdout.write(
+      "[Setup] Vault not unlocked and DATABASE_URL not set.\n" +
+      "        Run the Setup workflow or `pnpm --filter @workspace/scripts run decrypt-env`\n" +
+      "        to unlock. Services will start in dev mode (SQLite, placeholder secrets).\n"
+    );
+    process.exit(0);
+  }
+
+  /* ── Interactive mode ───────────────────────────────────────────────────── */
   if (!fs.existsSync(VAULT_FILE)) {
     console.error(`❌  Vault file not found: ${VAULT_FILE}`);
     console.error("    Run the encrypt-env script first to create it.");

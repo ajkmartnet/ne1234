@@ -433,8 +433,9 @@ export class FleetService {
           }
         }
       });
-    } catch (txErr) {
-      throw new Error("Cancellation transaction failed");
+    } catch (txErr: any) {
+      logger.error({ err: txErr }, "cancelRide transaction failed");
+      throw txErr;
     }
 
     // Notifications
@@ -512,7 +513,8 @@ export class FleetService {
       if (txErr.message === "ALREADY_REFUNDED") {
         throw new Error("This ride has already been refunded");
       }
-      throw new Error("Refund transaction failed");
+      logger.error({ err: txErr }, "refundRide transaction failed");
+      throw txErr;
     }
 
     try {

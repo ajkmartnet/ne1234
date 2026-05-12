@@ -19,7 +19,7 @@ import {
   signAdminJwt, verifyAdminJwt, invalidateSettingsCache, getCachedSettings,
   ADMIN_TOKEN_TTL_HRS, verifyTotpToken, verifyAdminSecret,
   formatSvc,
-  type AdminRequest, auditLog,
+  type AdminRequest,
 } from "../../admin-shared.js";
 import {
   ensureDefaultRideServices,
@@ -58,91 +58,24 @@ const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
 };
 
 router.get("/rides-enriched", async (req: Request, res: Response) => {
-  const page = Math.max(1, parseInt(req.query["page"] as string || "1", 10));
-  const limit = Math.min(500, Math.max(1, parseInt(req.query["limit"] as string || "50", 10)));
-  const offset = (page - 1) * limit;
-  const statusQ = req.query["status"] as string | undefined;
-  const typeQ = req.query["type"] as string | undefined;
-  const searchQ = (req.query["search"] as string || "").trim().toLowerCase();
-  const customerQ = (req.query["customer"] as string || "").trim().toLowerCase();
-  const riderQ = (req.query["rider"] as string || "").trim().toLowerCase();
-  const dateFromQ = req.query["dateFrom"] as string | undefined;
-  const dateToQ = req.query["dateTo"] as string | undefined;
-  const sortByQ = (req.query["sortBy"] as string) === "fare" ? "fare" : "date";
-  const sortDirQ = (req.query["sortDir"] as string) === "asc" ? "asc" : "desc";
-
-  const conditions: ReturnType<typeof eq>[] = [];
-  if (statusQ && statusQ !== "all") conditions.push(eq(ridesTable.status, statusQ));
-  if (typeQ && typeQ !== "all") conditions.push(eq(ridesTable.type, typeQ));
-  if (dateFromQ) conditions.push(gte(ridesTable.createdAt, new Date(dateFromQ)) as ReturnType<typeof eq>);
-  if (dateToQ) {
-    const toDate = new Date(dateToQ);
-    toDate.setHours(23, 59, 59, 999);
-    conditions.push(lte(ridesTable.createdAt, toDate) as ReturnType<typeof eq>);
+  try {
+    const result = await FleetService.getRidesEnriched({
+      page:     Math.max(1, parseInt(req.query["page"] as string || "1", 10)),
+      limit:    Math.min(500, Math.max(1, parseInt(req.query["limit"] as string || "50", 10))),
+      status:   req.query["status"] as string | undefined,
+      type:     req.query["type"] as string | undefined,
+      search:   (req.query["search"] as string || "").trim().toLowerCase() || undefined,
+      customer: (req.query["customer"] as string || "").trim().toLowerCase() || undefined,
+      rider:    (req.query["rider"] as string || "").trim().toLowerCase() || undefined,
+      dateFrom: req.query["dateFrom"] as string | undefined,
+      dateTo:   req.query["dateTo"] as string | undefined,
+      sortBy:   (req.query["sortBy"] as string) === "fare" ? "fare" : "date",
+      sortDir:  (req.query["sortDir"] as string) === "asc" ? "asc" : "desc",
+    });
+    sendSuccess(res, result);
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch enriched rides", 500);
   }
-  if (searchQ) {
-    conditions.push(or(
-      ilike(ridesTable.id, `%${searchQ}%`),
-      ilike(ridesTable.pickupAddress, `%${searchQ}%`),
-      ilike(ridesTable.dropAddress, `%${searchQ}%`),
-      ilike(ridesTable.riderName, `%${searchQ}%`),
-    )! as ReturnType<typeof eq>);
-  }
-  if (riderQ) {
-    conditions.push(or(
-      ilike(ridesTable.riderName, `%${riderQ}%`),
-      ilike(ridesTable.riderPhone, `%${riderQ}%`),
-    )! as ReturnType<typeof eq>);
-  }
-  if (customerQ) {
-    conditions.push(sql`${ridesTable.userId} IN (SELECT ${usersTable.id} FROM ${usersTable} WHERE LOWER(${usersTable.name}) LIKE ${'%' + customerQ + '%'} OR LOWER(${usersTable.phone}) LIKE ${'%' + customerQ + '%'})` as ReturnType<typeof eq>);
-  }
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-  const [totalResult] = await db.select({ cnt: count() }).from(ridesTable).where(whereClause);
-  const total = Number(totalResult?.cnt ?? 0);
-
-  const orderCol = sortByQ === "fare" ? ridesTable.fare : ridesTable.createdAt;
-  const orderFn = sortDirQ === "asc" ? asc : desc;
-  const rides = await db.select().from(ridesTable).where(whereClause).orderBy(orderFn(orderCol)).limit(limit).offset(offset);
-
-  type RideRow = typeof rides[number];
-  const userIds = [...new Set(rides.map((r: RideRow) => r.userId).concat(rides.map((r: RideRow) => r.riderId).filter((id: any): id is string => id != null)))];    
-  const users = userIds.length > 0
-    ? await db.select({ id: usersTable.id, name: usersTable.name, phone: usersTable.phone }).from(usersTable)
-        .where(sql`${usersTable.id} = ANY(ARRAY[${sql.join(userIds.map((id: string) => sql`${id}`), sql`, `)}]::text[])`)
-    : [];
-  const userMap = Object.fromEntries(users.map((u: any) => [u.id, u]));
-
-  const rideIds = rides.map((r: RideRow) => r.id);
-  const bidCounts = rideIds.length > 0
-    ? await db.select({ rideId: rideBidsTable.rideId, total: count(rideBidsTable.id) })
-        .from(rideBidsTable)
-        .where(sql`${rideBidsTable.rideId} = ANY(ARRAY[${sql.join(rideIds.map((id: string) => sql`${id}`), sql`, `)}]::text[])`)
-        .groupBy(rideBidsTable.rideId)
-    : [];
-  const bidCountMap = Object.fromEntries(bidCounts.map((b: any) => [b.rideId, Number(b.total)]));
-
-  sendSuccess(res, {
-    rides: rides.map((r: RideRow) => ({
-      ...r,
-      fare:        parseFloat(r.fare),
-      distance:    parseFloat(r.distance),
-      offeredFare: r.offeredFare ? parseFloat(r.offeredFare) : null,
-      counterFare: r.counterFare ? parseFloat(r.counterFare) : null,
-      createdAt:   r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
-      updatedAt:   r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
-      userName:    userMap[r.userId]?.name  || null,
-      userPhone:   userMap[r.userId]?.phone || null,
-      riderName:   r.riderName || (r.riderId ? userMap[r.riderId]?.name : null) || null,
-      riderPhone:  r.riderPhone || (r.riderId ? userMap[r.riderId]?.phone : null) || null,
-      totalBids:   bidCountMap[r.id] ?? 0,
-    })),
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
-  });
 });
 
 router.patch("/rides/:id/status", async (req: Request, res: Response) => {
@@ -200,68 +133,84 @@ router.patch("/rides/:id/status", async (req: Request, res: Response) => {
   }
 });
 router.get("/ride-services", async (_req: Request, res: Response) => {
-  await ensureDefaultRideServices();
-  const services = await db.select().from(rideServiceTypesTable).orderBy(asc(rideServiceTypesTable.sortOrder));
-  sendSuccess(res, { services: services.map(formatSvc) });
+  try {
+    await ensureDefaultRideServices();
+    const services = await db.select().from(rideServiceTypesTable).orderBy(asc(rideServiceTypesTable.sortOrder));
+    sendSuccess(res, { services: services.map(formatSvc) });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch ride services", 500);
+  }
 });
 
 /* POST /admin/ride-services — create custom service */
 router.post("/ride-services", async (req: Request, res: Response) => {
   const { key, name, nameUrdu, icon, description, color, baseFare, perKm, minFare, maxPassengers, allowBargaining, sortOrder } = req.body;
   if (!key || !name || !icon) { sendValidationError(res, "key, name, icon are required"); return; }
-  const existing = await db.select({ id: rideServiceTypesTable.id }).from(rideServiceTypesTable).where(eq(rideServiceTypesTable.key, String(key))).limit(1);
-  if (existing.length > 0) { sendError(res, `Service key "${key}" already exists`, 409); return; }
-  const [created] = await db.insert(rideServiceTypesTable).values({
-    id: `svc_${generateId()}`,
-    key: String(key).toLowerCase().replace(/\s+/g, "_"),
-    name: String(name),
-    nameUrdu:      nameUrdu      || null,
-    icon:          String(icon),
-    description:   description   || null,
-    color:         color         || "#6B7280",
-    isEnabled:     true,
-    isCustom:      true,
-    baseFare:      String(baseFare  ?? 15),
-    perKm:         String(perKm     ?? 8),
-    minFare:       String(minFare   ?? 50),
-    maxPassengers: Number(maxPassengers ?? 1),
-    allowBargaining: allowBargaining !== false,
-    sortOrder:     Number(sortOrder ?? 99),
-  }).returning();
-  sendCreated(res, { service: formatSvc(created) });
+  try {
+    const existing = await db.select({ id: rideServiceTypesTable.id }).from(rideServiceTypesTable).where(eq(rideServiceTypesTable.key, String(key))).limit(1);
+    if (existing.length > 0) { sendError(res, `Service key "${key}" already exists`, 409); return; }
+    const [created] = await db.insert(rideServiceTypesTable).values({
+      id: `svc_${generateId()}`,
+      key: String(key).toLowerCase().replace(/\s+/g, "_"),
+      name: String(name),
+      nameUrdu:      nameUrdu      || null,
+      icon:          String(icon),
+      description:   description   || null,
+      color:         color         || "#6B7280",
+      isEnabled:     true,
+      isCustom:      true,
+      baseFare:      String(baseFare  ?? 15),
+      perKm:         String(perKm     ?? 8),
+      minFare:       String(minFare   ?? 50),
+      maxPassengers: Number(maxPassengers ?? 1),
+      allowBargaining: allowBargaining !== false,
+      sortOrder:     Number(sortOrder ?? 99),
+    }).returning();
+    sendCreated(res, { service: formatSvc(created) });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to create ride service", 500);
+  }
 });
 
 /* PATCH /admin/ride-services/:id — update any field */
 router.patch("/ride-services/:id", async (req: Request, res: Response) => {
   const svcId = req.params["id"]!;
-  const [existing] = await db.select().from(rideServiceTypesTable).where(eq(rideServiceTypesTable.id, svcId)).limit(1);
-  if (!existing) { sendNotFound(res, "Service not found"); return; }
-  const { name, nameUrdu, icon, description, color, isEnabled, baseFare, perKm, minFare, maxPassengers, allowBargaining, sortOrder } = req.body;
-  const patch: Record<string, unknown> = { updatedAt: new Date() };
-  if (name          !== undefined) patch["name"]           = String(name);
-  if (nameUrdu      !== undefined) patch["nameUrdu"]       = nameUrdu;
-  if (icon          !== undefined) patch["icon"]           = String(icon);
-  if (description   !== undefined) patch["description"]    = description;
-  if (color         !== undefined) patch["color"]          = String(color);
-  if (isEnabled     !== undefined) patch["isEnabled"]      = Boolean(isEnabled);
-  if (baseFare      !== undefined) patch["baseFare"]       = String(baseFare);
-  if (perKm         !== undefined) patch["perKm"]          = String(perKm);
-  if (minFare       !== undefined) patch["minFare"]        = String(minFare);
-  if (maxPassengers !== undefined) patch["maxPassengers"]  = Number(maxPassengers);
-  if (allowBargaining !== undefined) patch["allowBargaining"] = Boolean(allowBargaining);
-  if (sortOrder     !== undefined) patch["sortOrder"]      = Number(sortOrder);
-  const [updated] = await db.update(rideServiceTypesTable).set(patch as Partial<typeof rideServiceTypesTable.$inferInsert>).where(eq(rideServiceTypesTable.id, svcId)).returning();
-  sendSuccess(res, { service: formatSvc(updated) });
+  try {
+    const [existing] = await db.select().from(rideServiceTypesTable).where(eq(rideServiceTypesTable.id, svcId)).limit(1);
+    if (!existing) { sendNotFound(res, "Service not found"); return; }
+    const { name, nameUrdu, icon, description, color, isEnabled, baseFare, perKm, minFare, maxPassengers, allowBargaining, sortOrder } = req.body;
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (name          !== undefined) patch["name"]           = String(name);
+    if (nameUrdu      !== undefined) patch["nameUrdu"]       = nameUrdu;
+    if (icon          !== undefined) patch["icon"]           = String(icon);
+    if (description   !== undefined) patch["description"]    = description;
+    if (color         !== undefined) patch["color"]          = String(color);
+    if (isEnabled     !== undefined) patch["isEnabled"]      = Boolean(isEnabled);
+    if (baseFare      !== undefined) patch["baseFare"]       = String(baseFare);
+    if (perKm         !== undefined) patch["perKm"]          = String(perKm);
+    if (minFare       !== undefined) patch["minFare"]        = String(minFare);
+    if (maxPassengers !== undefined) patch["maxPassengers"]  = Number(maxPassengers);
+    if (allowBargaining !== undefined) patch["allowBargaining"] = Boolean(allowBargaining);
+    if (sortOrder     !== undefined) patch["sortOrder"]      = Number(sortOrder);
+    const [updated] = await db.update(rideServiceTypesTable).set(patch as Partial<typeof rideServiceTypesTable.$inferInsert>).where(eq(rideServiceTypesTable.id, svcId)).returning();
+    sendSuccess(res, { service: formatSvc(updated) });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to update ride service", 500);
+  }
 });
 
 /* DELETE /admin/ride-services/:id — only custom services */
 router.delete("/ride-services/:id", async (req: Request, res: Response) => {
   const svcId = req.params["id"]!;
-  const [existing] = await db.select().from(rideServiceTypesTable).where(eq(rideServiceTypesTable.id, svcId)).limit(1);
-  if (!existing) { sendNotFound(res, "Service not found"); return; }
-  if (!existing.isCustom) { sendValidationError(res, "Built-in services cannot be deleted. Disable them instead."); return; }
-  await db.delete(rideServiceTypesTable).where(eq(rideServiceTypesTable.id, svcId));
-  sendSuccess(res);
+  try {
+    const [existing] = await db.select().from(rideServiceTypesTable).where(eq(rideServiceTypesTable.id, svcId)).limit(1);
+    if (!existing) { sendNotFound(res, "Service not found"); return; }
+    if (!existing.isCustom) { sendValidationError(res, "Built-in services cannot be deleted. Disable them instead."); return; }
+    await db.delete(rideServiceTypesTable).where(eq(rideServiceTypesTable.id, svcId));
+    sendSuccess(res);
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to delete ride service", 500);
+  }
 });
 
 /* ══════════════════════════════════════════════════════
@@ -275,51 +224,67 @@ router.delete("/ride-services/:id", async (req: Request, res: Response) => {
 export { ensureDefaultLocations };
 
 router.get("/locations", async (_req: Request, res: Response) => {
-  await ensureDefaultLocations();
-  const locs = await db.select().from(popularLocationsTable)
-    .orderBy(asc(popularLocationsTable.sortOrder), asc(popularLocationsTable.name));
-  sendSuccess(res, {
-    locations: locs.map((l: any) => ({
-      ...l,
-      lat: parseFloat(String(l.lat)),
-      lng: parseFloat(String(l.lng)),
-    })),
-  });
+  try {
+    await ensureDefaultLocations();
+    const locs = await db.select().from(popularLocationsTable)
+      .orderBy(asc(popularLocationsTable.sortOrder), asc(popularLocationsTable.name));
+    sendSuccess(res, {
+      locations: locs.map((l: any) => ({
+        ...l,
+        lat: parseFloat(String(l.lat)),
+        lng: parseFloat(String(l.lng)),
+      })),
+    });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch locations", 500);
+  }
 });
 
 router.post("/locations", async (req: Request, res: Response) => {
   const { name, nameUrdu, lat, lng, category = "general", icon = "📍", isActive = true, sortOrder = 0 } = req.body;
   if (!name || !lat || !lng) { sendValidationError(res, "name, lat, lng required"); return; }
-  const [loc] = await db.insert(popularLocationsTable).values({
-    id: generateId(), name, nameUrdu: nameUrdu || null,
-    lat: String(lat), lng: String(lng), category, icon,
-    isActive: Boolean(isActive), sortOrder: Number(sortOrder),
-  }).returning();
-  sendCreated(res, { ...loc, lat: parseFloat(String(loc!.lat)), lng: parseFloat(String(loc!.lng)) });
+  try {
+    const [loc] = await db.insert(popularLocationsTable).values({
+      id: generateId(), name, nameUrdu: nameUrdu || null,
+      lat: String(lat), lng: String(lng), category, icon,
+      isActive: Boolean(isActive), sortOrder: Number(sortOrder),
+    }).returning();
+    sendCreated(res, { ...loc, lat: parseFloat(String(loc!.lat)), lng: parseFloat(String(loc!.lng)) });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to create location", 500);
+  }
 });
 
 router.patch("/locations/:id", async (req: Request, res: Response) => {
-  const { name, nameUrdu, lat, lng, category, icon, isActive, sortOrder } = req.body;
-  const patch: Record<string, unknown> = { updatedAt: new Date() };
-  if (name      !== undefined) patch.name      = name;
-  if (nameUrdu  !== undefined) patch.nameUrdu  = nameUrdu || null;
-  if (lat       !== undefined) patch.lat       = String(lat);
-  if (lng       !== undefined) patch.lng       = String(lng);
-  if (category  !== undefined) patch.category  = category;
-  if (icon      !== undefined) patch.icon      = icon;
-  if (isActive  !== undefined) patch.isActive  = Boolean(isActive);
-  if (sortOrder !== undefined) patch.sortOrder = Number(sortOrder);
-  const [updated] = await db.update(popularLocationsTable).set(patch).where(eq(popularLocationsTable.id, req.params["id"]!)).returning();
-  if (!updated) { sendNotFound(res, "Location not found"); return; }
-  sendSuccess(res, { ...updated, lat: parseFloat(String(updated.lat)), lng: parseFloat(String(updated.lng)) });
+  try {
+    const { name, nameUrdu, lat, lng, category, icon, isActive, sortOrder } = req.body;
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (name      !== undefined) patch.name      = name;
+    if (nameUrdu  !== undefined) patch.nameUrdu  = nameUrdu || null;
+    if (lat       !== undefined) patch.lat       = String(lat);
+    if (lng       !== undefined) patch.lng       = String(lng);
+    if (category  !== undefined) patch.category  = category;
+    if (icon      !== undefined) patch.icon      = icon;
+    if (isActive  !== undefined) patch.isActive  = Boolean(isActive);
+    if (sortOrder !== undefined) patch.sortOrder = Number(sortOrder);
+    const [updated] = await db.update(popularLocationsTable).set(patch).where(eq(popularLocationsTable.id, req.params["id"]!)).returning();
+    if (!updated) { sendNotFound(res, "Location not found"); return; }
+    sendSuccess(res, { ...updated, lat: parseFloat(String(updated.lat)), lng: parseFloat(String(updated.lng)) });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to update location", 500);
+  }
 });
 
 router.delete("/locations/:id", async (req: Request, res: Response) => {
-  const [existing] = await db.select({ id: popularLocationsTable.id })
-    .from(popularLocationsTable).where(eq(popularLocationsTable.id, req.params["id"]!)).limit(1);
-  if (!existing) { sendNotFound(res, "Location not found"); return; }
-  await db.delete(popularLocationsTable).where(eq(popularLocationsTable.id, req.params["id"]!));
-  sendSuccess(res);
+  try {
+    const [existing] = await db.select({ id: popularLocationsTable.id })
+      .from(popularLocationsTable).where(eq(popularLocationsTable.id, req.params["id"]!)).limit(1);
+    if (!existing) { sendNotFound(res, "Location not found"); return; }
+    await db.delete(popularLocationsTable).where(eq(popularLocationsTable.id, req.params["id"]!));
+    sendSuccess(res);
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to delete location", 500);
+  }
 });
 
 /* ══════════════════════════════════════════════════════
@@ -345,9 +310,13 @@ function fmtRoute(r: Record<string, unknown>) {
 }
 
 router.get("/school-routes", async (_req: Request, res: Response) => {
-  const routes = await db.select().from(schoolRoutesTable)
-    .orderBy(asc(schoolRoutesTable.sortOrder), asc(schoolRoutesTable.schoolName));
-  sendSuccess(res, { routes: routes.map(fmtRoute) });
+  try {
+    const routes = await db.select().from(schoolRoutesTable)
+      .orderBy(asc(schoolRoutesTable.sortOrder), asc(schoolRoutesTable.schoolName));
+    sendSuccess(res, { routes: routes.map(fmtRoute) });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch school routes", 500);
+  }
 });
 
 router.post("/school-routes", async (req: Request, res: Response) => {
@@ -359,94 +328,110 @@ router.post("/school-routes", async (req: Request, res: Response) => {
   if (!routeName || !schoolName || !fromArea || !toAddress || !monthlyPrice) {
     sendValidationError(res, "routeName, schoolName, fromArea, toAddress, monthlyPrice required"); return;
   }
-  const [route] = await db.insert(schoolRoutesTable).values({
-    id: generateId(), routeName, schoolName, schoolNameUrdu: schoolNameUrdu || null,
-    fromArea, fromAreaUrdu: fromAreaUrdu || null, toAddress,
-    fromLat: fromLat ? String(fromLat) : null, fromLng: fromLng ? String(fromLng) : null,
-    toLat:   toLat   ? String(toLat)   : null, toLng:   toLng   ? String(toLng)   : null,
-    monthlyPrice: String(parseFloat(monthlyPrice)),
-    morningTime: morningTime || "7:30 AM",
-    afternoonTime: afternoonTime || null,
-    capacity: Number(capacity), enrolledCount: 0,
-    vehicleType, notes: notes || null,
-    isActive: Boolean(isActive), sortOrder: Number(sortOrder),
-  }).returning();
-  sendCreated(res, fmtRoute(route!));
+  try {
+    const [route] = await db.insert(schoolRoutesTable).values({
+      id: generateId(), routeName, schoolName, schoolNameUrdu: schoolNameUrdu || null,
+      fromArea, fromAreaUrdu: fromAreaUrdu || null, toAddress,
+      fromLat: fromLat ? String(fromLat) : null, fromLng: fromLng ? String(fromLng) : null,
+      toLat:   toLat   ? String(toLat)   : null, toLng:   toLng   ? String(toLng)   : null,
+      monthlyPrice: String(parseFloat(monthlyPrice)),
+      morningTime: morningTime || "7:30 AM",
+      afternoonTime: afternoonTime || null,
+      capacity: Number(capacity), enrolledCount: 0,
+      vehicleType, notes: notes || null,
+      isActive: Boolean(isActive), sortOrder: Number(sortOrder),
+    }).returning();
+    sendCreated(res, fmtRoute(route!));
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to create school route", 500);
+  }
 });
 
 router.patch("/school-routes/:id", async (req: Request, res: Response) => {
   const routeId = req.params["id"]!;
-  const {
-    routeName, schoolName, schoolNameUrdu, fromArea, fromAreaUrdu, toAddress,
-    fromLat, fromLng, toLat, toLng, monthlyPrice, morningTime, afternoonTime,
-    capacity, vehicleType, notes, isActive, sortOrder,
-  } = req.body;
-  const patch: Record<string, unknown> = { updatedAt: new Date() };
-  if (routeName      !== undefined) patch.routeName      = routeName;
-  if (schoolName     !== undefined) patch.schoolName     = schoolName;
-  if (schoolNameUrdu !== undefined) patch.schoolNameUrdu = schoolNameUrdu || null;
-  if (fromArea       !== undefined) patch.fromArea       = fromArea;
-  if (fromAreaUrdu   !== undefined) patch.fromAreaUrdu   = fromAreaUrdu || null;
-  if (toAddress      !== undefined) patch.toAddress      = toAddress;
-  if (fromLat        !== undefined) patch.fromLat        = fromLat ? String(fromLat) : null;
-  if (fromLng        !== undefined) patch.fromLng        = fromLng ? String(fromLng) : null;
-  if (toLat          !== undefined) patch.toLat          = toLat   ? String(toLat)   : null;
-  if (toLng          !== undefined) patch.toLng          = toLng   ? String(toLng)   : null;
-  if (monthlyPrice   !== undefined) patch.monthlyPrice   = String(parseFloat(monthlyPrice));
-  if (morningTime    !== undefined) patch.morningTime    = morningTime;
-  if (afternoonTime  !== undefined) patch.afternoonTime  = afternoonTime || null;
-  if (capacity       !== undefined) patch.capacity       = Number(capacity);
-  if (vehicleType    !== undefined) patch.vehicleType    = vehicleType;
-  if (notes          !== undefined) patch.notes          = notes || null;
-  if (isActive       !== undefined) patch.isActive       = Boolean(isActive);
-  if (sortOrder      !== undefined) patch.sortOrder      = Number(sortOrder);
-  const [updated] = await db.update(schoolRoutesTable).set(patch).where(eq(schoolRoutesTable.id, routeId)).returning();
-  if (!updated) { sendNotFound(res, "Route not found"); return; }
-  sendSuccess(res, fmtRoute(updated));
+  try {
+    const {
+      routeName, schoolName, schoolNameUrdu, fromArea, fromAreaUrdu, toAddress,
+      fromLat, fromLng, toLat, toLng, monthlyPrice, morningTime, afternoonTime,
+      capacity, vehicleType, notes, isActive, sortOrder,
+    } = req.body;
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (routeName      !== undefined) patch.routeName      = routeName;
+    if (schoolName     !== undefined) patch.schoolName     = schoolName;
+    if (schoolNameUrdu !== undefined) patch.schoolNameUrdu = schoolNameUrdu || null;
+    if (fromArea       !== undefined) patch.fromArea       = fromArea;
+    if (fromAreaUrdu   !== undefined) patch.fromAreaUrdu   = fromAreaUrdu || null;
+    if (toAddress      !== undefined) patch.toAddress      = toAddress;
+    if (fromLat        !== undefined) patch.fromLat        = fromLat ? String(fromLat) : null;
+    if (fromLng        !== undefined) patch.fromLng        = fromLng ? String(fromLng) : null;
+    if (toLat          !== undefined) patch.toLat          = toLat   ? String(toLat)   : null;
+    if (toLng          !== undefined) patch.toLng          = toLng   ? String(toLng)   : null;
+    if (monthlyPrice   !== undefined) patch.monthlyPrice   = String(parseFloat(monthlyPrice));
+    if (morningTime    !== undefined) patch.morningTime    = morningTime;
+    if (afternoonTime  !== undefined) patch.afternoonTime  = afternoonTime || null;
+    if (capacity       !== undefined) patch.capacity       = Number(capacity);
+    if (vehicleType    !== undefined) patch.vehicleType    = vehicleType;
+    if (notes          !== undefined) patch.notes          = notes || null;
+    if (isActive       !== undefined) patch.isActive       = Boolean(isActive);
+    if (sortOrder      !== undefined) patch.sortOrder      = Number(sortOrder);
+    const [updated] = await db.update(schoolRoutesTable).set(patch).where(eq(schoolRoutesTable.id, routeId)).returning();
+    if (!updated) { sendNotFound(res, "Route not found"); return; }
+    sendSuccess(res, fmtRoute(updated));
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to update school route", 500);
+  }
 });
 
 router.delete("/school-routes/:id", async (req: Request, res: Response) => {
   const routeId = req.params["id"]!;
-  /* Only delete if no active subscriptions */
-  const [activeSub] = await db.select({ id: schoolSubscriptionsTable.id })
-    .from(schoolSubscriptionsTable)
-    .where(and(eq(schoolSubscriptionsTable.routeId, routeId), eq(schoolSubscriptionsTable.status, "active")))
-    .limit(1);
-  if (activeSub) {
-    sendError(res, "Cannot delete route with active subscriptions. Disable it instead.", 409); return;
+  try {
+    /* Only delete if no active subscriptions */
+    const [activeSub] = await db.select({ id: schoolSubscriptionsTable.id })
+      .from(schoolSubscriptionsTable)
+      .where(and(eq(schoolSubscriptionsTable.routeId, routeId), eq(schoolSubscriptionsTable.status, "active")))
+      .limit(1);
+    if (activeSub) {
+      sendError(res, "Cannot delete route with active subscriptions. Disable it instead.", 409); return;
+    }
+    const [existing] = await db.select({ id: schoolRoutesTable.id })
+      .from(schoolRoutesTable).where(eq(schoolRoutesTable.id, routeId)).limit(1);
+    if (!existing) { sendNotFound(res, "Route not found"); return; }
+    await db.delete(schoolRoutesTable).where(eq(schoolRoutesTable.id, routeId));
+    sendSuccess(res);
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to delete school route", 500);
   }
-  const [existing] = await db.select({ id: schoolRoutesTable.id })
-    .from(schoolRoutesTable).where(eq(schoolRoutesTable.id, routeId)).limit(1);
-  if (!existing) { sendNotFound(res, "Route not found"); return; }
-  await db.delete(schoolRoutesTable).where(eq(schoolRoutesTable.id, routeId));
-  sendSuccess(res);
 });
 
 router.get("/school-subscriptions", async (req: Request, res: Response) => {
-  const routeIdFilter = req.query["routeId"] as string | undefined;
-  const query = routeIdFilter
-    ? db.select().from(schoolSubscriptionsTable).where(eq(schoolSubscriptionsTable.routeId, routeIdFilter))
-    : db.select().from(schoolSubscriptionsTable);
-  const subs = await query.orderBy(desc(schoolSubscriptionsTable.createdAt));
-  /* Enrich with user info */
-  const enriched = await Promise.all(subs.map(async (sub: any) => {
-    const [user] = await db.select({ name: usersTable.name, phone: usersTable.phone })
-      .from(usersTable).where(eq(usersTable.id, sub.userId)).limit(1);
-    const [route] = await db.select({ routeName: schoolRoutesTable.routeName, schoolName: schoolRoutesTable.schoolName })
-      .from(schoolRoutesTable).where(eq(schoolRoutesTable.id, sub.routeId)).limit(1);
-    return {
-      ...sub,
-      monthlyAmount:   parseFloat(String(sub.monthlyAmount ?? "0")),
-      userName:        user?.name  || null,
-      userPhone:       user?.phone || null,
-      routeName:       route?.routeName   || null,
-      schoolName:      route?.schoolName  || null,
-      startDate:       sub.startDate instanceof Date       ? sub.startDate.toISOString()       : sub.startDate,
-      nextBillingDate: sub.nextBillingDate instanceof Date ? sub.nextBillingDate.toISOString() : sub.nextBillingDate,
-      createdAt:       sub.createdAt instanceof Date       ? sub.createdAt.toISOString()       : sub.createdAt,
-    };
-  }));
-  sendSuccess(res, { subscriptions: enriched, total: enriched.length });
+  try {
+    const routeIdFilter = req.query["routeId"] as string | undefined;
+    const query = routeIdFilter
+      ? db.select().from(schoolSubscriptionsTable).where(eq(schoolSubscriptionsTable.routeId, routeIdFilter))
+      : db.select().from(schoolSubscriptionsTable);
+    const subs = await query.orderBy(desc(schoolSubscriptionsTable.createdAt));
+    /* Enrich with user info */
+    const enriched = await Promise.all(subs.map(async (sub: any) => {
+      const [user] = await db.select({ name: usersTable.name, phone: usersTable.phone })
+        .from(usersTable).where(eq(usersTable.id, sub.userId)).limit(1);
+      const [route] = await db.select({ routeName: schoolRoutesTable.routeName, schoolName: schoolRoutesTable.schoolName })
+        .from(schoolRoutesTable).where(eq(schoolRoutesTable.id, sub.routeId)).limit(1);
+      return {
+        ...sub,
+        monthlyAmount:   parseFloat(String(sub.monthlyAmount ?? "0")),
+        userName:        user?.name  || null,
+        userPhone:       user?.phone || null,
+        routeName:       route?.routeName   || null,
+        schoolName:      route?.schoolName  || null,
+        startDate:       sub.startDate instanceof Date       ? sub.startDate.toISOString()       : sub.startDate,
+        nextBillingDate: sub.nextBillingDate instanceof Date ? sub.nextBillingDate.toISOString() : sub.nextBillingDate,
+        createdAt:       sub.createdAt instanceof Date       ? sub.createdAt.toISOString()       : sub.createdAt,
+      };
+    }));
+    sendSuccess(res, { subscriptions: enriched, total: enriched.length });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch school subscriptions", 500);
+  }
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -456,6 +441,7 @@ router.get("/school-subscriptions", async (req: Request, res: Response) => {
    "Fresh" = updated within last 5 minutes.
 ══════════════════════════════════════════════════════════ */
 router.get("/live-riders", async (_req: Request, res: Response) => {
+  try {
   const settings = await getCachedSettings();
   const staleTimeoutSec = parseInt(settings["gps_stale_timeout_sec"] ?? "300", 10);
   const STALE_MS = staleTimeoutSec * 1000;
@@ -522,6 +508,9 @@ router.get("/live-riders", async (_req: Request, res: Response) => {
     freshCount: enriched.filter((r: any) => r.isFresh).length,
     staleTimeoutSec,
   });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch live riders", 500);
+  }
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -531,45 +520,49 @@ router.get("/live-riders", async (_req: Request, res: Response) => {
    "Fresh" = updated within last 2 hours.
 ══════════════════════════════════════════════════════════ */
 router.get("/customer-locations", async (_req: Request, res: Response) => {
-  const STALE_MS = 2 * 60 * 60 * 1000; /* 2 hours */
-  const cutoff   = new Date(Date.now() - STALE_MS);
+  try {
+    const STALE_MS = 2 * 60 * 60 * 1000; /* 2 hours */
+    const cutoff   = new Date(Date.now() - STALE_MS);
 
-  /* Single JOIN query — eliminates N+1 per-customer lookups */
-  const locs = await db
-    .select({
-      userId:    liveLocationsTable.userId,
-      latitude:  liveLocationsTable.latitude,
-      longitude: liveLocationsTable.longitude,
-      action:    liveLocationsTable.action,
-      updatedAt: liveLocationsTable.updatedAt,
-      name:      usersTable.name,
-      phone:     usersTable.phone,
-      email:     usersTable.email,
-    })
-    .from(liveLocationsTable)
-    .leftJoin(usersTable, eq(liveLocationsTable.userId, usersTable.id))
-    .where(eq(liveLocationsTable.role, "customer"))
-    .orderBy(desc(liveLocationsTable.updatedAt));
+    /* Single JOIN query — eliminates N+1 per-customer lookups */
+    const locs = await db
+      .select({
+        userId:    liveLocationsTable.userId,
+        latitude:  liveLocationsTable.latitude,
+        longitude: liveLocationsTable.longitude,
+        action:    liveLocationsTable.action,
+        updatedAt: liveLocationsTable.updatedAt,
+        name:      usersTable.name,
+        phone:     usersTable.phone,
+        email:     usersTable.email,
+      })
+      .from(liveLocationsTable)
+      .leftJoin(usersTable, eq(liveLocationsTable.userId, usersTable.id))
+      .where(eq(liveLocationsTable.role, "customer"))
+      .orderBy(desc(liveLocationsTable.updatedAt));
 
-  const enriched = locs.map((loc: any) => {
-    const updatedAt  = loc.updatedAt instanceof Date ? loc.updatedAt : new Date(loc.updatedAt as string);
-    const ageSeconds = Math.floor((Date.now() - updatedAt.getTime()) / 1000);
-    const isFresh    = updatedAt >= cutoff;
-    return {
-      userId:    loc.userId,
-      name:      loc.name  ?? "Unknown User",
-      phone:     loc.phone ?? null,
-      email:     loc.email ?? null,
-      lat:       parseFloat(String(loc.latitude)),
-      lng:       parseFloat(String(loc.longitude)),
-      action:    loc.action ?? null,
-      updatedAt: updatedAt.toISOString(),
-      ageSeconds,
-      isFresh,
-    };
-  });
+    const enriched = locs.map((loc: any) => {
+      const updatedAt  = loc.updatedAt instanceof Date ? loc.updatedAt : new Date(loc.updatedAt as string);
+      const ageSeconds = Math.floor((Date.now() - updatedAt.getTime()) / 1000);
+      const isFresh    = updatedAt >= cutoff;
+      return {
+        userId:    loc.userId,
+        name:      loc.name  ?? "Unknown User",
+        phone:     loc.phone ?? null,
+        email:     loc.email ?? null,
+        lat:       parseFloat(String(loc.latitude)),
+        lng:       parseFloat(String(loc.longitude)),
+        action:    loc.action ?? null,
+        updatedAt: updatedAt.toISOString(),
+        ageSeconds,
+        isFresh,
+      };
+    });
 
-  sendSuccess(res, { customers: enriched, total: enriched.length, freshCount: enriched.filter((c: any) => c.isFresh).length });
+    sendSuccess(res, { customers: enriched, total: enriched.length, freshCount: enriched.filter((c: any) => c.isFresh).length });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch customer locations", 500);
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -579,17 +572,22 @@ router.get("/customer-locations", async (_req: Request, res: Response) => {
 ══════════════════════════════════════════════════════════════════════════════ */
 router.patch("/riders/:id/online", async (req: Request, res: Response) => {
   const { isOnline } = req.body as { isOnline: boolean };
-  const [rider] = await db.update(usersTable)
-    .set({ isOnline, updatedAt: new Date() })
-    .where(eq(usersTable.id, req.params["id"]!))
-    .returning();
-  if (!rider) { sendNotFound(res, "Rider not found"); return; }
-  addAuditEntry({ action: "rider_online_toggle", ip: getClientIp(req), adminId: (req as AdminReq).adminId, details: `Rider ${req.params["id"]} set ${isOnline ? "online" : "offline"} by admin`, result: "success" });
-  sendSuccess(res, { isOnline });
+  try {
+    const [rider] = await db.update(usersTable)
+      .set({ isOnline, updatedAt: new Date() })
+      .where(eq(usersTable.id, req.params["id"]!))
+      .returning();
+    if (!rider) { sendNotFound(res, "Rider not found"); return; }
+    addAuditEntry({ action: "rider_online_toggle", ip: getClientIp(req), adminId: (req as AdminReq).adminId, details: `Rider ${req.params["id"]} set ${isOnline ? "online" : "offline"} by admin`, result: "success" });
+    sendSuccess(res, { isOnline });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to update rider online status", 500);
+  }
 });
 
 /* ── GET /admin/revenue-trend — 7-day rolling revenue + counts for dashboard sparklines ── */
 router.get("/revenue-trend", async (_req: Request, res: Response) => {
+  try {
   const now = new Date();
   const dayPromises = Array.from({ length: 7 }, (_, idx) => {
     const i = 6 - idx;
@@ -647,10 +645,14 @@ router.get("/revenue-trend", async (_req: Request, res: Response) => {
   });
   const days = await Promise.all(dayPromises);
   sendSuccess(res, { trend: days });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch revenue trend", 500);
+  }
 });
 
 /* ── GET /admin/leaderboard — top-5 vendors and riders ── */
 router.get("/leaderboard", async (_req: Request, res: Response) => {
+  try {
   const vendors = await db.select({
     id:     usersTable.id,
     name:   vendorProfilesTable.storeName,
@@ -684,10 +686,14 @@ router.get("/leaderboard", async (_req: Request, res: Response) => {
     vendors: vendors.map((v: any) => ({ ...v, totalRevenue: parseFloat(String(v.totalRevenue)), totalOrders: Number(v.totalOrders) })),
     riders:  riders.map((r: any)  => ({ ...r,  totalEarned: parseFloat(String(r.totalEarned)),  completedTrips: Number(r.completedTrips) })),
   });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch leaderboard", 500);
+  }
 });
 
 /* ── GET /admin/dashboard-export (+ /fleet/dashboard-export alias) ── */
 async function dashboardExportHandler(_req: Request, res: Response) {
+  try {
   const now = new Date();
   const [[userCount], [orderCount], [rideCount], [revenue], [rideRev]] = await Promise.all([
     db.select({ count: count() }).from(usersTable).where(isNull(usersTable.deletedAt)),
@@ -737,6 +743,9 @@ async function dashboardExportHandler(_req: Request, res: Response) {
   };
   res.setHeader("Content-Disposition", `attachment; filename="dashboard-${now.toISOString().slice(0, 10)}.tson"`);
   sendSuccess(res, snapshot);
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to generate dashboard export", 500);
+  }
 }
 
 router.get("/dashboard-export", dashboardExportHandler);
@@ -853,17 +862,24 @@ router.post("/rides/:id/reassign", async (req: Request, res: Response) => {
 
 router.get("/rides/:id/audit-trail", async (req: Request, res: Response) => {
   const rideId = req.params["id"]!;
-  const shortId = rideId.slice(-6).toUpperCase();
-  const trail = auditLog.filter((e) => e.details?.includes(rideId) || e.details?.includes(shortId)).map((e) => ({
-    action: e.action,
-    details: e.details,
-    ip: e.ip,
-    adminId: e.adminId,
-    result: e.result,
-    timestamp: e.timestamp,
-  }));
-  trail.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  sendSuccess(res, { trail, rideId });
+  try {
+    const events = await db
+      .select()
+      .from(rideEventLogsTable)
+      .where(eq(rideEventLogsTable.rideId, rideId))
+      .orderBy(desc(rideEventLogsTable.createdAt));
+    const trail = events.map((e: any) => ({
+      action:    e.event,
+      details:   e.notes,
+      ip:        null,
+      adminId:   e.adminId,
+      result:    "success",
+      timestamp: e.createdAt instanceof Date ? e.createdAt.toISOString() : e.createdAt,
+    }));
+    sendSuccess(res, { trail, rideId });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch audit trail", 500);
+  }
 });
 
 router.get("/rides/:id/detail", async (req: Request, res: Response) => {
@@ -935,6 +951,7 @@ router.get("/rides/:id/detail", async (req: Request, res: Response) => {
 });
 
 router.get("/dispatch-monitor", async (_req: Request, res: Response) => {
+  try {
   const activeRides = await db.select().from(ridesTable)
     .where(or(eq(ridesTable.status, "searching"), eq(ridesTable.status, "bargaining")))
     .orderBy(desc(ridesTable.createdAt));
@@ -987,6 +1004,9 @@ router.get("/dispatch-monitor", async (_req: Request, res: Response) => {
     })),
     total: activeRides.length,
   });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch dispatch monitor", 500);
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -998,6 +1018,7 @@ router.get("/dispatch-monitor", async (_req: Request, res: Response) => {
    - riderDistances: total estimated distance per rider (haversine over log trail)
 ══════════════════════════════════════════════════════════════════════════════ */
 router.get("/fleet-analytics", async (req: Request, res: Response) => {
+  try {
   const fromParam = req.query["from"] as string | undefined;
   const toParam   = req.query["to"]   as string | undefined;
 
@@ -1174,6 +1195,9 @@ router.get("/fleet-analytics", async (req: Request, res: Response) => {
     from: from.toISOString().slice(0, 10),
     to: to.toISOString().slice(0, 10),
   });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch fleet analytics", 500);
+  }
 });
 
 /* ── GET /admin/riders/:userId/route?date=YYYY-MM-DD&sinceOnline=true — fleet history for admin ──
@@ -1181,6 +1205,7 @@ router.get("/fleet-analytics", async (req: Request, res: Response) => {
    it uses the rider's live_locations.lastSeen timestamp as the session start boundary,
    giving "current shift to now" semantics rather than calendar midnight. */
 router.get("/riders/:userId/route", async (req: Request, res: Response) => {
+  try {
   const { userId } = req.params;
   const dateParam   = req.query["date"]        as string | undefined;
   const sinceOnline = req.query["sinceOnline"]  === "true";
@@ -1236,6 +1261,9 @@ router.get("/riders/:userId/route", async (req: Request, res: Response) => {
   const lastLocation   = points[points.length - 1] ?? null;
 
   sendSuccess(res, { userId, date: dateParam ?? "today", loginLocation, lastLocation, route: points, total: points.length });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch rider route", 500);
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════

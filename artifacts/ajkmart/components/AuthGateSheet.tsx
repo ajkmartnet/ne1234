@@ -50,7 +50,10 @@ export function AuthGateSheet({ visible, onClose, returnTo, message }: AuthGateS
           <Text style={s.signInTxt}>{T("signInRegister")}</Text>
         </Pressable>
 
-        <Pressable onPress={onClose} style={s.browseBtn} accessibilityRole="button">
+        <Pressable onPress={async () => {
+          await AsyncStorage.removeItem("@ajkmart_auth_return_to").catch((e: unknown) => console.warn("[AuthGateSheet] Failed to clear return_to:", e));
+          onClose();
+        }} style={s.browseBtn} accessibilityRole="button">
           <Text style={s.browseTxt}>{T("continueBrowsing")}</Text>
         </Pressable>
       </View>
@@ -109,12 +112,19 @@ export function useAuthGate() {
 
   const isGuest = !user;
 
+  const handleClose = useCallback(() => {
+    setSheetVisible(false);
+    setSheetMessage(undefined);
+    setSheetReturnTo(undefined);
+    AsyncStorage.removeItem("@ajkmart_auth_return_to").catch((e: unknown) => console.warn("[AuthGateSheet] Failed to clear return_to:", e));
+  }, []);
+
   const gate = {
     requireAuth,
     isGuest,
     sheetProps: {
       visible: sheetVisible,
-      onClose: () => setSheetVisible(false),
+      onClose: handleClose,
       message: sheetMessage,
       returnTo: sheetReturnTo,
     },

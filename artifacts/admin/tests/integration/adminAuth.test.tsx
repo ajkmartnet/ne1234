@@ -26,8 +26,8 @@ function AuthHarness() {
       <button
         type="button"
         data-testid="login-btn"
-        onClick={() => {
-          void login("admin", "secret123").catch(() => {});
+        onClick={async () => {
+          await login("admin", "secret123");
         }}
       >
         login
@@ -35,8 +35,8 @@ function AuthHarness() {
       <button
         type="button"
         data-testid="refresh-btn"
-        onClick={() => {
-          void refreshAccessToken().catch(() => {});
+        onClick={async () => {
+          await refreshAccessToken();
         }}
       >
         refresh

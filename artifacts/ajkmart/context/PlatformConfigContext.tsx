@@ -466,6 +466,12 @@ export function PlatformConfigProvider({ children }: { children: React.ReactNode
         currencySymbol?: string;
       }
       const raw = unwrapApiResponse(await res.json()) as RawPlatformConfigResponse;
+      if (
+        !raw || typeof raw !== "object" || Array.isArray(raw) ||
+        typeof raw.features !== "object" || Array.isArray(raw.features) ||
+        typeof raw.content !== "object" || Array.isArray(raw.content) ||
+        typeof raw.platform !== "object" || Array.isArray(raw.platform)
+      ) throw new Error("Invalid platform config response: missing required top-level sections (features/content/platform)");
       const parsed: PlatformConfig = {
         appStatus: raw.platform?.appStatus === "maintenance"
           ? "maintenance"
@@ -724,8 +730,11 @@ export function PlatformConfigProvider({ children }: { children: React.ReactNode
       if (parsed.branding?.mapCenterLat != null && parsed.branding?.mapCenterLng != null) {
         setDefaultMapCenter(parsed.branding.mapCenterLat, parsed.branding.mapCenterLng);
       }
-    } catch {
-      if (_cached) setConfig(_cached);
+    } catch (err) {
+      if (_cached) {
+        console.warn("[PlatformConfig] Fetch failed — using cached config:", err);
+        setConfig(_cached);
+      }
     } finally {
       setFetching(false);
       fetchingRef.current = false;

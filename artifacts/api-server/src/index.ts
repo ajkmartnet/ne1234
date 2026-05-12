@@ -87,7 +87,7 @@ function checkEnv(): void {
   /* Warn loudly (fatal in production) if dev placeholder JWT secrets are in use */
   if (isProduction) {
     const placeholderVars = JWT_SECRET_VARS.filter(
-      (k) => process.env[k] && DEV_PLACEHOLDER_SECRETS.has(process.env[k]!),
+      (k) => process.env[k] && DEV_PLACEHOLDER_SECRETS.has(process.env[k]!.toLowerCase()),
     );
     if (placeholderVars.length > 0) {
       logger.fatal(

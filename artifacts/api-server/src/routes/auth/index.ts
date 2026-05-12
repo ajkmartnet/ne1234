@@ -506,7 +506,7 @@ router.post("/check-identifier", checkIdentifierLimiter, sharedValidateBody(chec
    Stores OTP on the authenticated user's record.
    Body: { identifier }
 ───────────────────────────────────────────────────────────── */
-router.post("/send-merge-otp", async (req, res) => {
+router.post("/send-merge-otp", otpLimiter, async (req, res) => {
   const auth = extractAuthUser(req);
   if (!auth) { sendUnauthorized(res, "Authentication required"); return; }
 
@@ -1831,7 +1831,7 @@ router.post("/check-available", async (req, res) => {
    Send OTP to email address (only for existing accounts with that email)
    Body: { email }
 ══════════════════════════════════════════════════════════════ */
-router.post("/send-email-otp", verifyCaptcha, async (req, res) => {
+router.post("/send-email-otp", otpLimiter, verifyCaptcha, async (req, res) => {
   const { email } = req.body;
   if (!email || !email.includes("@")) {
     sendError(res, "Valid email address required", 400); return;
@@ -1935,7 +1935,7 @@ router.post("/send-email-otp", verifyCaptcha, async (req, res) => {
    POST /auth/verify-email-otp
    Login via email OTP. Body: { email, otp }
 ══════════════════════════════════════════════════════════════ */
-router.post("/verify-email-otp", verifyCaptcha, async (req, res) => {
+router.post("/verify-email-otp", otpLimiter, verifyCaptcha, async (req, res) => {
   const { email, otp } = req.body;
   if (!email || !otp) { sendError(res, "Email and OTP are required", 400); return; }
 
@@ -2287,7 +2287,7 @@ router.post("/login", loginLimiter, verifyCaptcha, handleUnifiedLogin);
    Body: { tempToken: string, otp: string }
    Returns JWT token on success.
 ══════════════════════════════════════════════════════════════ */
-router.post("/login/verify-otp", async (req, res) => {
+router.post("/login/verify-otp", otpLimiter, async (req, res) => {
   const { tempToken, otp } = req.body ?? {};
   if (!tempToken || !otp) {
     sendError(res, "tempToken and otp are required", 400); return;
@@ -3010,7 +3010,7 @@ router.post("/forgot-password", verifyCaptcha, sharedValidateBody(forgotPassword
    Body: { phone?, email?, otp }
    Returns: { valid: true } or 400/422 with error
 ══════════════════════════════════════════════════════════════ */
-router.post("/verify-reset-otp", verifyCaptcha, async (req, res) => {
+router.post("/verify-reset-otp", otpLimiter, verifyCaptcha, async (req, res) => {
   let { phone, email, otp } = req.body;
   const ip = getClientIp(req);
 

@@ -1,4 +1,4 @@
-import { Component, type ReactNode, useEffect, useState, useRef } from "react";
+import React, { Component, type ReactNode, useEffect, useState, useRef } from "react";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -127,7 +127,7 @@ function AppRoutes() {
     } else if (pending) {
       navigate("/orders");
     }
-  }, [user?.id]);
+  }, [user?.id, navigate]);
 
   /* ── Push registration error state: shown as a dismissable banner ── */
   const [pushError, setPushError] = useState<"permission_denied" | "registration_failed" | "network_error" | null>(null);
@@ -248,7 +248,7 @@ function AppRoutes() {
       navigator.serviceWorker?.removeEventListener("message", onSwMessage);
     };
 
-  }, [user?.id]);
+  }, [user?.id, navigate]);
 
   const MAINTENANCE_GRACE_MS = 5 * 60 * 1000; /* 5-minute grace period */
   const maintenanceSince = useRef<number | null>(null);
@@ -392,10 +392,10 @@ function AppRoutes() {
   );
 }
 
-function VersionCheckInit() {
+const VersionCheckInit = React.memo(function VersionCheckInit() {
   useVersionCheck();
   return null;
-}
+});
 
 export default function App() {
   return (

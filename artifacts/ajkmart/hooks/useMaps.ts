@@ -113,7 +113,7 @@ export async function resolveLocation(
       // Continue to fallback attempt
     } else {
       const d: GeocodeResult = await r.json();
-      if (d.lat && d.lng) return { lat: d.lat, lng: d.lng, address: d.formattedAddress };
+      if (d.lat && d.lng) return { lat: d.lat, lng: d.lng, address: d.formattedAddress ?? prediction.description };
     }
     
     /* place_id lookup failed — retry with address text (Nominatim fallback path) */

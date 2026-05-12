@@ -311,9 +311,10 @@ export function PopupEngine({ apiBase, triggerKey = "app_open" }: PopupEnginePro
         const show = await shouldShowPopup(popup);
         if (show) eligible.push(popup);
       }
-      if (eligible.length > 0) {
-        setQueue(eligible);
-        showNext(eligible, 0);
+      const capped = eligible.slice(0, 10);
+      if (capped.length > 0) {
+        setQueue(capped);
+        showNext(capped, 0);
       }
     } catch {}
   };

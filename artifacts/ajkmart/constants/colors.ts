@@ -452,3 +452,7 @@ export default {
   light: lightTheme,
   dark: darkTheme,
 };
+
+export function getTheme(colorScheme: "light" | "dark" | null | undefined): typeof lightTheme {
+  return colorScheme === "dark" ? darkTheme : lightTheme;
+}

@@ -415,7 +415,8 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
         setServicesError(false);
         setRideType((prev) => (data.services as unknown as ServiceType[]).find((s: ServiceType) => s.key === prev) ? prev : data.services[0]!.key);
       })
-      .catch(() => {
+      .catch((err) => {
+        log.error("Failed to load ride services:", err);
         setServicesError(true);
       })
       .finally(() => setServicesLoading(false));
@@ -667,15 +668,15 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
     if (payMethod === "wallet" && Number(user?.walletBalance ?? 0) < effectiveFare) {
       showToast(`Wallet balance Rs. ${user?.walletBalance ?? 0} — insufficient. Please top up.`, "error"); return;
     }
+    if (isScheduled) {
+      const scheduledDt = new Date(`${scheduledDate}T${scheduledTime}:00`);
+      const fiveMinFromNow = new Date(Date.now() + 5 * 60_000);
+      if (isNaN(scheduledDt.getTime()) || scheduledDt <= fiveMinFromNow) {
+        showToast("Scheduled time must be at least 5 minutes in the future.", "error"); return;
+      }
+    }
     setBooking(true);
     try {
-      if (isScheduled) {
-        const scheduledDt = new Date(`${scheduledDate}T${scheduledTime}:00`);
-        const fiveMinFromNow = new Date(Date.now() + 5 * 60_000);
-        if (isNaN(scheduledDt.getTime()) || scheduledDt <= fiveMinFromNow) {
-          showToast("Scheduled time must be at least 5 minutes in the future.", "error"); setBooking(false); return;
-        }
-      }
       const rideData = await bookRide({
         type: rideType,
         pickupAddress: pickup, dropAddress: drop,
@@ -701,7 +702,7 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
           if (perm.status !== "granted") return;
           const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           await updateLocation({ userId: user?.id ?? "", latitude: pos.coords.latitude, longitude: pos.coords.longitude, role: "customer" });
-        } catch {}
+        } catch (locationErr) { log.warn("Background location update after booking failed:", locationErr); }
       })();
     } catch (err: any) {
       const errData = err?.response?.data || err?.data;

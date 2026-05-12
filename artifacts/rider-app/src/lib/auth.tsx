@@ -233,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     clearRefreshTimer();
     executeLogoutSequence(api, () => {
+      try { sessionStorage.clear(); } catch (e) { console.warn("[auth] sessionStorage.clear failed:", e); }
       setToken(null);
       setUser(null);
       queryClient.clear();

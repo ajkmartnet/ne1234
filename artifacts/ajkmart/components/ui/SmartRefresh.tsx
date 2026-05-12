@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { spacing } from "@/constants/colors";
 import { useTheme } from "@/context/ThemeContext";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[SmartRefresh]");
 import Svg, { Circle } from "react-native-svg";
 
 interface SmartRefreshProps extends ScrollViewProps {
@@ -241,7 +243,7 @@ export function SmartRefresh({
     try {
       await onRefresh();
       if (mountedRef.current) setLastTime(new Date());
-    } catch {}
+    } catch (err) { log.warn("SmartRefresh: onRefresh threw:", err); }
     if (!mountedRef.current) return;
     setRefreshing(false);
     setPhase("success");
@@ -297,7 +299,7 @@ export function SmartRefresh({
     try {
       await onRefresh();
       if (mountedRef.current) setLastTime(new Date());
-    } catch {}
+    } catch (err) { log.warn("SmartRefresh: onRefresh threw:", err); }
     if (!mountedRef.current) return;
     setRefreshing(false);
     setPhase("success");

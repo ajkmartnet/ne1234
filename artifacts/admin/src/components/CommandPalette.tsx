@@ -165,7 +165,15 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         method: "POST",
         body: JSON.stringify({ command: cmdText }),
       }) as { data?: CmdResult };
-      const result = data.data ?? (data as unknown as CmdResult);
+      const raw = data.data ?? (data as unknown as CmdResult);
+      if (
+        !raw || typeof raw !== "object" || Array.isArray(raw) ||
+        typeof (raw as CmdResult).executed !== "boolean" ||
+        typeof (raw as CmdResult).type !== "string"
+      ) {
+        throw new Error("Unexpected response shape from command endpoint");
+      }
+      const result = raw as CmdResult;
       setCmdResult(result);
       if (result.executed) {
         toast({
@@ -180,41 +188,41 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       }
     } catch (err) {
       log.error("command execution failed:", err);
-      
-      // Parse error type and provide specific guidance
+
       let title = "Command failed";
       let description = "An unexpected error occurred.";
-      let guidance = "";
-      
-      if (err instanceof Error) {
-        const message = err.message.toLowerCase();
-        if (message.includes("network") || message.includes("fetch") || message.includes("timeout")) {
-          title = "Network Error";
-          description = "Could not reach the server.";
-          guidance = "Check your connection and try again.";
-        } else if (message.includes("401") || message.includes("unauthorized")) {
-          title = "Permission Denied";
-          description = "You don't have permission for this command.";
-          guidance = "Contact an admin to grant access.";
-        } else if (message.includes("400") || message.includes("validation") || message.includes("invalid")) {
-          title = "Invalid Command";
-          description = "The command was not recognized or has invalid parameters.";
-          guidance = "Check the command syntax and try again.";
-        } else if (message.includes("404")) {
-          title = "Command Not Found";
-          description = "This command is not available.";
-          guidance = "Try a different command or check documentation.";
-        } else if (message.includes("429") || message.includes("rate limit")) {
-          title = "Rate Limited";
-          description = "Too many requests. Please wait before trying again.";
-          guidance = "Try again in a few moments.";
-        } else {
-          description = err.message || "Command could not be executed.";
-        }
+
+      // Discriminate by structured HTTP status, then fall back to message content
+      const status: number | undefined =
+        (err as { status?: number }).status ??
+        (err as { response?: { status?: number } }).response?.status;
+
+      if (status === 401 || status === 403) {
+        title = "Permission Denied";
+        description = "You don't have permission for this command. Contact an admin to grant access.";
+      } else if (status === 400) {
+        title = "Invalid Command";
+        description = "The command was not recognized or has invalid parameters. Check the syntax and try again.";
+      } else if (status === 404) {
+        title = "Command Not Found";
+        description = "This command is not available. Try a different command or check documentation.";
+      } else if (status === 429) {
+        title = "Rate Limited";
+        description = "Too many requests. Please wait a moment before trying again.";
+      } else if (status != null && status >= 500) {
+        title = "Server Error";
+        description = "The server encountered an error. Please try again later.";
+      } else if (!navigator.onLine) {
+        title = "No Connection";
+        description = "Check your internet connection and try again.";
+      } else if (err instanceof TypeError && err.message === "Failed to fetch") {
+        title = "Network Error";
+        description = "Could not reach the server. Check your connection and try again.";
+      } else {
+        description = err instanceof Error ? err.message : "Command could not be executed.";
       }
-      
-      const fullDescription = guidance ? `${description}\n\n${guidance}` : description;
-      toast({ title, description: fullDescription, variant: "destructive" });
+
+      toast({ title, description, variant: "destructive" });
     } finally {
       setCmdExecuting(false);
     }
@@ -297,14 +305,15 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   /* ── Local static search (transliteration + fuzzy) ── */
   const q = query.trim().toLowerCase();
 
-  const localStaticItems: SearchEntry[] = q.length < 1
+  const localStaticItems = useMemo<SearchEntry[]>(() => q.length < 1
     ? SEARCH_INDEX.filter(e => e.category === "Actions").slice(0, 6)
         .concat(SEARCH_INDEX.filter(e => e.category === "Pages").slice(0, 6))
     : SEARCH_INDEX.filter(e =>
         e.title.toLowerCase().includes(q) ||
         (e.subtitle ?? "").toLowerCase().includes(q) ||
         matchesKeywords(q, e.keywords, e.urduKeywords, e.romanUrduKeywords)
-      );
+      ),
+  [q]);
 
   /* Apply category filter to static items */
   const filteredStaticItems =

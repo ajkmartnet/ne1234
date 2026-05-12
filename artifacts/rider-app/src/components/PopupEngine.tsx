@@ -167,7 +167,7 @@ export function PopupEngine() {
         if (!res.ok) return;
         const data = await res.json();
         const popups: Popup[] = data?.data?.popups ?? data?.popups ?? [];
-        const eligible = popups.filter(p => shouldShowPopup(p));
+        const eligible = popups.filter(p => shouldShowPopup(p)).slice(0, 10);
         if (eligible.length > 0) {
           queueRef.current = eligible;
           setQueue(eligible);

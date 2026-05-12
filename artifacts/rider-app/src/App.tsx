@@ -317,8 +317,7 @@ function AppRoutes() {
         <div className="text-5xl mb-4">🔐</div>
         <h2 className="text-xl font-bold text-gray-800 mb-2">Secure Storage Unavailable</h2>
         <p className="text-gray-500 text-sm leading-relaxed mb-6">
-          Your device's secure storage could not be accessed. This is required to safely store your
-          login credentials. Please clear the app's data or reinstall and try again.
+          Login credentials cannot be stored safely on this device. Please clear the app's data or reinstall and try again.
         </p>
         <button onClick={() => window.location.reload()}
           className="w-full py-3 rounded-2xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-colors">

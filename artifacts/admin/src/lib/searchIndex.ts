@@ -344,7 +344,7 @@ export const SEARCH_INDEX: SearchEntry[] = [
     keywords: ["communication", "templates", "messaging", "sms campaigns", "email campaigns"],
     urduKeywords: ["مواصلات", "ٹیمپلیٹس", "پیغام رسانی"],
     romanUrduKeywords: ["communication", "templates", "messaging", "campaign"],
-    category: "Pages", path: "/communication", icon: Radio, group: "Pages",
+    category: "Pages", path: "/communications", icon: Radio, group: "Pages",
   },
   {
     id: "page-chat-monitor",

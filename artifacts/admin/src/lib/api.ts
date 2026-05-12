@@ -11,12 +11,12 @@
  * to using adminFetcher/useAdminAuth directly.
  */
 
-import { fetchAdmin, fetchAdminAbsolute, fetchAdminAbsoluteResponse, getAdminAccessToken, setupAdminFetcherHandlers } from './adminFetcher.js';
+import { fetchAdmin, fetchAdminAbsolute, fetchAdminAbsoluteResponse, getAdminAccessToken, setupAdminFetcherHandlers } from './adminFetcher';
 import { createLogger } from "@/lib/logger";
 const log = createLogger("[api]");
 export { fetchAdminAbsoluteResponse };
 
-export { getAdminAccessToken } from './adminFetcher.js';
+export { getAdminAccessToken } from './adminFetcher';
 
 // ============================================================================
 // Legacy Auth State (now no-ops - state is in adminAuthContext)

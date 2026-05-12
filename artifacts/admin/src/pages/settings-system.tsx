@@ -23,7 +23,21 @@ function fmtCountdown(expiresAt: string, now: number): string {
 
 type CustomFormType = "user" | "product" | "order" | "promo" | "banner" | null;
 
-export function SystemSection() {
+interface Setting { key: string; value: string; label: string; category: string; }
+
+export function SystemSection({
+  localValues = {},
+  dirtyKeys = new Set<string>(),
+  handleChange = () => {},
+  handleToggle = () => {},
+  settings = [],
+}: {
+  localValues?: Record<string, string>;
+  dirtyKeys?: Set<string>;
+  handleChange?: (k: string, v: string) => void;
+  handleToggle?: (k: string, v: boolean) => void;
+  settings?: Setting[];
+} = {}) {
   const { toast } = useToast();
   const [stats, setStats] = useState<Record<string, number> | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);

@@ -7,12 +7,12 @@
  */
 
 export interface AuthConfig {
-  auth_mode: string;
-  firebase_enabled?: string;
-  auth_otp_enabled?: string;
-  auth_email_enabled?: string;
-  auth_google_enabled?: string;
-  auth_facebook_enabled?: string;
+  authMode: string;
+  firebaseEnabled?: string;
+  otpEnabled?: string;
+  emailLoginEnabled?: string;
+  googleEnabled?: string;
+  facebookEnabled?: string;
   otpBypassActive: boolean;
   otpBypassExpiresAt?: string | null;
   bypassMessage?: string | null;

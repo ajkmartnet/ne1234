@@ -24,6 +24,19 @@ export interface AuthConfig {
   loaded: boolean;
 }
 
+/* Raw API response shape — snake_case, matches /api/auth/config */
+interface AuthConfigApiResponse {
+  auth_mode?: string;
+  firebase_enabled?: string;
+  auth_otp_enabled?: string;
+  auth_email_enabled?: string;
+  auth_google_enabled?: string;
+  auth_facebook_enabled?: string;
+  otpBypassActive?: boolean;
+  otpBypassExpiresAt?: string | null;
+  bypassMessage?: string | null;
+}
+
 const DEFAULT_CONFIG: AuthConfig = {
   authMode: "OTP",
   firebaseEnabled: false,
@@ -46,15 +59,15 @@ async function fetchAuthConfig(apiBase: string): Promise<AuthConfig> {
     try {
       const res = await fetch(`${apiBase}/auth/config`, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) return DEFAULT_CONFIG;
-      const data = await res.json() as Record<string, string>;
+      const data = await res.json() as AuthConfigApiResponse;
 
       const config: AuthConfig = {
-        authMode: (data["auth_mode"] as AuthConfig["authMode"]) ?? "OTP",
-        firebaseEnabled: data["firebase_enabled"] === "on",
-        otpEnabled: data["auth_otp_enabled"] !== "off",
-        emailLoginEnabled: data["auth_email_enabled"] !== "off",
-        googleEnabled: data["auth_google_enabled"] !== "off",
-        facebookEnabled: data["auth_facebook_enabled"] === "on",
+        authMode: (data.auth_mode as AuthConfig["authMode"]) ?? "OTP",
+        firebaseEnabled: data.firebase_enabled === "on",
+        otpEnabled: data.auth_otp_enabled !== "off",
+        emailLoginEnabled: data.auth_email_enabled !== "off",
+        googleEnabled: data.auth_google_enabled !== "off",
+        facebookEnabled: data.auth_facebook_enabled === "on",
         loaded: true,
       };
       _cache = config;

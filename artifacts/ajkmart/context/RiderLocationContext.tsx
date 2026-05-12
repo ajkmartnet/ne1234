@@ -26,7 +26,7 @@ import * as Battery from "expo-battery";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState, AppStateStatus, Platform } from "react-native";
 import { useAuth } from "./AuthContext";
-import { unwrapApiResponse } from "../utils/api";
+import { unwrapApiResponse, API_BASE } from "../utils/api";
 
 const BACKGROUND_LOCATION_TASK = "RIDER_BACKGROUND_LOCATION";
 const MIN_DISTANCE_METERS = 25;
@@ -97,8 +97,6 @@ export function RiderLocationProvider({ children }: { children: React.ReactNode 
 
   const hasActiveTaskRef = useRef(false);
   hasActiveTaskRef.current = hasActiveTask;
-
-  const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN ?? ""}/api`;
 
   /* ── Poll for active orders/rides to determine dual-mode ── */
   useEffect(() => {

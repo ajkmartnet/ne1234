@@ -508,8 +508,20 @@ export default function SettingsPage() {
       );
     }
 
-    if (cat === "system") return <SystemSection />;
-    if (cat === "weather") return <WeatherSection />;
+    if (cat === "system") return (
+      <SystemSection
+        localValues={localValues} dirtyKeys={dirtyKeys}
+        handleChange={handleChange} handleToggle={handleToggle}
+        settings={settings}
+      />
+    );
+    if (cat === "weather") return (
+      <WeatherSection
+        localValues={localValues} dirtyKeys={dirtyKeys}
+        handleChange={handleChange} handleToggle={handleToggle}
+        settings={settings}
+      />
+    );
     const childSettings = grouped[cat] ?? [];
     if (childSettings.length === 0) {
       return (

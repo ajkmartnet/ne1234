@@ -865,7 +865,7 @@ export const GetWalletQueryParams = zod.object({
 });
 
 export const GetWalletResponse = zod.object({
-  balance: zod.string(),
+  balance: zod.number(),
   transactions: zod.array(
     zod.object({
       id: zod.string(),
@@ -875,6 +875,10 @@ export const GetWalletResponse = zod.object({
       createdAt: zod.string(),
     }),
   ),
+  pinSetup: zod.boolean().optional(),
+  walletHidden: zod.boolean().optional(),
+  nextCursor: zod.string().nullable().optional(),
+  hasMore: zod.boolean().optional(),
 });
 
 /**

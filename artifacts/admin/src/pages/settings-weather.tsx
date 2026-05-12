@@ -15,7 +15,21 @@ function useWeatherConfig() {
   });
 }
 
-export function WeatherSection() {
+interface Setting { key: string; value: string; label: string; category: string; }
+
+export function WeatherSection({
+  localValues = {},
+  dirtyKeys = new Set<string>(),
+  handleChange = () => {},
+  handleToggle = () => {},
+  settings = [],
+}: {
+  localValues?: Record<string, string>;
+  dirtyKeys?: Set<string>;
+  handleChange?: (k: string, v: string) => void;
+  handleToggle?: (k: string, v: boolean) => void;
+  settings?: Setting[];
+} = {}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data, isLoading } = useWeatherConfig();

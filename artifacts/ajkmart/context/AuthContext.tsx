@@ -150,7 +150,8 @@ function decodeJwtClaims(tok: string): JwtClaims | null {
       const bytes = new Uint8Array(atob(b64Padded).split("").map(c => c.charCodeAt(0)));
       jsonStr = new TextDecoder().decode(bytes);
     } else {
-      jsonStr = Buffer.from(b64Padded, "base64").toString("utf8");
+      // Node environment - Buffer is available
+      jsonStr = (globalThis as any).Buffer.from(b64Padded, "base64").toString("utf8");
     }
 
     const payload = JSON.parse(jsonStr);

@@ -167,7 +167,7 @@ function AuthGuard() {
     const inOnboarding = segments[0] === "onboarding";
 
     const isPublicRoute = inAuthGroup || inTabsGroup || inRootIndex || isBrowsable || inOnboarding;
-    const onWrongAppScreen = segments[0] === "auth" && segments[1] === "wrong-app";
+    const onWrongAppScreen = (segments as any)[0] === "auth" && (segments as any)[1] === "wrong-app";
 
     if (!user && !isPublicRoute) {
       hasSeenOnboarding().then(seen => {
@@ -345,7 +345,9 @@ function DeepLinkHandler() {
 
         if (path === "magic-link" || path === "auth") return;
 
-        const params = Object.fromEntries(parsed.searchParams.entries());
+        const params = Object.fromEntries(
+          Array.from(((parsed.searchParams as any).entries?.() || []) as any[])
+        );
 
         const routeMap: Record<string, string> = {
           product: "/product/{id}",

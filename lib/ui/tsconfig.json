@@ -10,7 +10,7 @@
     "lib": ["esnext", "dom", "dom.iterable"],
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": false,
-    "types": ["node"]
+    "types": ["node", "react"]
   },
   "include": ["src"]
 }

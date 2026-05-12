@@ -9,6 +9,9 @@
       ],
       "@/constants/*": [
         "./context/constants/*"
+      ],
+      "@workspace/*": [
+        "../../node_modules/.pnpm/node_modules/@workspace/*/dist"
       ]
     }
   },

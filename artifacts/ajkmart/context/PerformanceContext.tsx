@@ -54,8 +54,8 @@ function detectDeviceTier(): DeviceTier {
   if (density <= 1.5) score += 2;
   else if (density <= 2) score += 1;
 
-  const jsStart = (global as Record<string, unknown>).__BUNDLE_START_TIME__ as number | undefined;
-  const now = global.performance?.now?.() ?? 0;
+  const jsStart = ((globalThis as any).__BUNDLE_START_TIME__) as number | undefined;
+  const now = (globalThis as any).performance?.now?.() ?? 0;
   if (jsStart && now > 0) {
     const startupMs = now - jsStart;
     if (startupMs > 4000) score += 2;

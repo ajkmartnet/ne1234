@@ -17,7 +17,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { unwrapApiResponse } from "@/utils/api";
+import { createLogger } from "@/utils/logger";
 
+const log = createLogger("[CancelModal]");
 const C = Colors.light;
 
 export type CancelTarget = {

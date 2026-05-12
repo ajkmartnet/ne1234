@@ -44,7 +44,7 @@ export function registerErrorHandler(handler: ErrorHandler): void {
 function isDevMode(): boolean {
   if (typeof __DEV__ !== "undefined") return !!__DEV__;
   try {
-    return !!(import.meta?.env?.DEV);
+    return !!((import.meta as any)?.env?.DEV);
   } catch {
     return false;
   }

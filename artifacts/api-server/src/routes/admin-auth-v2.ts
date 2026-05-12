@@ -17,7 +17,7 @@ import { logger } from '../lib/logger.js';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { db } from '@workspace/db';
-import { adminAccountsTable, usersTable, ordersTable, walletTransactionsTable } from '@workspace/db/schema';
+import { adminAccountsTable, usersTable, ordersTable, walletTransactionsTable, productsTable } from '@workspace/db/schema';
 import { eq, count, and, sql } from 'drizzle-orm';
 import {
   adminLogin,
@@ -1011,7 +1011,7 @@ router.get(
   authenticateAdmin,
   async (_req: Request, res: Response) => {
     try {
-      const [[pendingRiders], [pendingOrders], [pendingWithdrawals], [pendingDeposits]] =
+      const [[pendingRiders], [pendingOrders], [pendingWithdrawals], [pendingDeposits], [pendingProducts]] =
         await Promise.all([
           db.select({ count: count() })
             .from(usersTable)
@@ -1034,16 +1034,23 @@ router.get(
               sql`type IN ('topup', 'deposit')`,
               eq(walletTransactionsTable.reference, 'pending'),
             )),
+          db.select({ count: count() })
+            .from(productsTable)
+            .where(and(
+              eq(productsTable.approvalStatus, 'pending'),
+              sql`deleted_at IS NULL`,
+            )),
         ]);
       res.json({
         pendingRiders:     Number(pendingRiders?.count     ?? 0),
         pendingOrders:     Number(pendingOrders?.count     ?? 0),
         pendingWithdrawals: Number(pendingWithdrawals?.count ?? 0),
         pendingDeposits:   Number(pendingDeposits?.count   ?? 0),
+        pendingProducts:   Number(pendingProducts?.count   ?? 0),
       });
     } catch (err) {
       logger.warn({ err }, '[pending-counts] query failed');
-      res.json({ pendingRiders: 0, pendingOrders: 0, pendingWithdrawals: 0, pendingDeposits: 0 });
+      res.json({ pendingRiders: 0, pendingOrders: 0, pendingWithdrawals: 0, pendingDeposits: 0, pendingProducts: 0 });
     }
   }
 );

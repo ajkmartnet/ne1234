@@ -95,6 +95,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [pendingWithdrawalsCount, setPendingWithdrawalsCount] = useState(0);
   const [pendingDepositsCount, setPendingDepositsCount] = useState(0);
+  const [pendingProductsCount, setPendingProductsCount] = useState(0);
   const socketRef = useRef<Socket | null>(null);
   const langRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
@@ -144,11 +145,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     // Fetch all pending badge counts in one round-trip
     const fetchPendingCounts = () => {
       adminFetch("/pending-counts")
-        .then((data: { pendingRiders?: number; pendingOrders?: number; pendingWithdrawals?: number; pendingDeposits?: number }) => {
+        .then((data: { pendingRiders?: number; pendingOrders?: number; pendingWithdrawals?: number; pendingDeposits?: number; pendingProducts?: number }) => {
           if (typeof data.pendingRiders === "number") setPendingRidersCount(data.pendingRiders);
           if (typeof data.pendingOrders === "number") setPendingOrdersCount(data.pendingOrders);
           if (typeof data.pendingWithdrawals === "number") setPendingWithdrawalsCount(data.pendingWithdrawals);
           if (typeof data.pendingDeposits === "number") setPendingDepositsCount(data.pendingDeposits);
+          if (typeof data.pendingProducts === "number") setPendingProductsCount(data.pendingProducts);
         })
         .catch((err) => { log.error("Pending counts fetch failed:", err); });
     };
@@ -194,6 +196,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     socket.on("wallet:deposit-approved", () => { fetchPendingCounts(); });
     socket.on("wallet:withdrawal-approved", () => { fetchPendingCounts(); });
     socket.on("wallet:withdrawal-rejected", () => { fetchPendingCounts(); });
+
+    // Pending product approvals: increment when vendor submits, refresh on approve/reject
+    socket.on("product:submitted", () => { setPendingProductsCount(c => c + 1); });
+    socket.on("product:approved", () => { setPendingProductsCount(c => Math.max(0, c - 1)); });
+    socket.on("product:rejected", () => { setPendingProductsCount(c => Math.max(0, c - 1)); });
 
     return () => { socket.disconnect(); socketRef.current = null; cleanupErrorInterval(); };
   }, [state.accessToken]);
@@ -541,7 +548,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                     const showPendingOrdersBadge = item.pendingOrdersBadge && pendingOrdersCount > 0;
                     const showPendingWithdrawalsBadge = item.pendingWithdrawalsBadge && pendingWithdrawalsCount > 0;
                     const showPendingDepositsBadge = item.pendingDepositsBadge && pendingDepositsCount > 0;
-                    const hasBadge = showSosBadge || showErrorBadge || showPendingRidersBadge || showPendingOrdersBadge || showPendingWithdrawalsBadge || showPendingDepositsBadge;
+                    const showPendingProductsBadge = item.pendingProductsBadge && pendingProductsCount > 0;
+                    const hasBadge = showSosBadge || showErrorBadge || showPendingRidersBadge || showPendingOrdersBadge || showPendingWithdrawalsBadge || showPendingDepositsBadge || showPendingProductsBadge;
                     const isFav = favorites.includes(item.href);
 
                     const itemNode = (
@@ -582,7 +590,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                           <div className="relative shrink-0" style={{ margin: showMini ? 0 : "0 10px 0 6px" }}>
                             <Icon
                               className="w-[18px] h-[18px] transition-colors duration-150"
-                              style={{ color: active ? group.color : showSosBadge ? "#EF4444" : showErrorBadge ? "#F59E0B" : showPendingRidersBadge ? "#3B82F6" : showPendingOrdersBadge ? "#F97316" : showPendingWithdrawalsBadge ? "#22C55E" : showPendingDepositsBadge ? "#06B6D4" : "rgba(255,255,255,0.38)" }}
+                              style={{ color: active ? group.color : showSosBadge ? "#EF4444" : showErrorBadge ? "#F59E0B" : showPendingRidersBadge ? "#3B82F6" : showPendingOrdersBadge ? "#F97316" : showPendingWithdrawalsBadge ? "#22C55E" : showPendingDepositsBadge ? "#06B6D4" : showPendingProductsBadge ? "#8B5CF6" : "rgba(255,255,255,0.38)" }}
                             />
                             {showSosBadge && (
                               <>
@@ -615,6 +623,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                             {showPendingDepositsBadge && !showSosBadge && !showErrorBadge && (
                               <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-cyan-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
                                 {pendingDepositsCount > 99 ? "99+" : pendingDepositsCount}
+                              </span>
+                            )}
+                            {showPendingProductsBadge && !showSosBadge && !showErrorBadge && !showPendingRidersBadge && !showPendingOrdersBadge && !showPendingWithdrawalsBadge && !showPendingDepositsBadge && (
+                              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-violet-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                                {pendingProductsCount > 99 ? "99+" : pendingProductsCount}
                               </span>
                             )}
                           </div>
@@ -658,6 +671,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                               {showPendingDepositsBadge && !showSosBadge && !showErrorBadge && (
                                 <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full" style={{ background: "rgba(6,182,212,0.2)", color: "#67E8F9" }}>
                                   {pendingDepositsCount > 99 ? "99+" : pendingDepositsCount}
+                                </span>
+                              )}
+                              {showPendingProductsBadge && !showSosBadge && !showErrorBadge && !showPendingRidersBadge && !showPendingOrdersBadge && !showPendingWithdrawalsBadge && !showPendingDepositsBadge && (
+                                <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full" style={{ background: "rgba(139,92,246,0.2)", color: "#C4B5FD" }}>
+                                  {pendingProductsCount > 99 ? "99+" : pendingProductsCount}
                                 </span>
                               )}
                               {/* Favorite star — visible on hover, persisted on click. Hidden when mini. */}

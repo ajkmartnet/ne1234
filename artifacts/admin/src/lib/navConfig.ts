@@ -96,6 +96,8 @@ export type NavItem = {
   pendingWithdrawalsBadge?: boolean;
   /** Show teal dot when there are pending deposit/top-up requests. */
   pendingDepositsBadge?: boolean;
+  /** Show purple dot when there are vendor products awaiting approval. */
+  pendingProductsBadge?: boolean;
   /**
    * RBAC permission(s) gating this item; super always sees everything.
    * Layout reads this lazily — kept here so a permission audit can be
@@ -156,7 +158,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     labelKey: "navCatalog" as TranslationKey,
     color: "#8B5CF6",
     items: [
-      { nameKey: "navProducts",                      href: "/products",                   icon: PackageSearch, requirePermission: "content.products.view" },
+      { nameKey: "navProducts",                      href: "/products",                   icon: PackageSearch, requirePermission: "content.products.view", pendingProductsBadge: true },
       { nameKey: "navCategories" as TranslationKey,  href: "/categories",                 icon: Tag,           requirePermission: "content.products.view" },
       { nameKey: "navReviews" as TranslationKey,     href: "/reviews",                    icon: Star,          requirePermission: "content.products.view" },
       { nameKey: "navVendorInventorySettings" as TranslationKey, href: "/vendor-inventory-settings", icon: Boxes, requirePermission: "vendors.view" },

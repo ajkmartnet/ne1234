@@ -153,6 +153,7 @@ router.patch("/products/:id/approve", async (req, res) => {
       }
     } catch (e) { logger.warn({ err: e }, "[back-in-stock] approve notify failed"); }
   }
+  getIO().to("admin-fleet").emit("product:approved", { id: product.id });
   sendSuccess(res, { ...product, price: parseFloat(product.price) });
 });
 
@@ -179,6 +180,7 @@ router.patch("/products/:id/reject", async (req, res) => {
       }).catch(() => {});
     }
   }
+  getIO().to("admin-fleet").emit("product:rejected", { id: product.id });
   sendSuccess(res, { ...product, price: parseFloat(product.price) });
 });
 

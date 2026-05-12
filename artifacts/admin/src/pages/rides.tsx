@@ -498,7 +498,7 @@ function RideDetailModal({
                 {bids.map((b: any) => (
                   <div key={b.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border/30 text-xs">
                     <div>
-                      <span className="font-bold">{formatCurrency(b.amount)}</span>
+                      <span className="font-bold">{formatCurrency(b.fare)}</span>
                       {b.note && <span className="text-muted-foreground ml-2">{b.note}</span>}
                     </div>
                     <Badge variant="outline" className={`text-[10px] ${b.status === "accepted" ? "bg-green-100 text-green-700 border-green-200" : b.status === "rejected" ? "bg-red-100 text-red-700 border-red-200" : "bg-gray-100 text-gray-600"}`}>
@@ -1189,10 +1189,12 @@ function ServicesManager() {
     const swapIdx = dir === "up" ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= sorted.length) return;
     const other = sorted[swapIdx]!;
-    await Promise.all([
-      updateMut.mutateAsync({ id: svc.id, sortOrder: other.sortOrder }),
-      updateMut.mutateAsync({ id: other.id, sortOrder: svc.sortOrder }),
-    ]);
+    try {
+      await updateMut.mutateAsync({ id: svc.id, sortOrder: other.sortOrder });
+      await updateMut.mutateAsync({ id: other.id, sortOrder: svc.sortOrder });
+    } catch (e: any) {
+      toast({ title: "Reorder failed", description: e.message, variant: "destructive" });
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -1384,7 +1386,6 @@ function LocationsManager() {
 
 function SchoolRoutesManager() {
   const { data: routesData, isLoading } = useSchoolRoutes();
-  const { data: subsData } = useSchoolSubscriptions();
   const createMut = useCreateSchoolRoute();
   const updateMut = useUpdateSchoolRoute();
   const deleteMut = useDeleteSchoolRoute();
@@ -1394,7 +1395,6 @@ function SchoolRoutesManager() {
   const [form, setForm] = useState({ routeName: "", schoolName: "", schoolNameUrdu: "", fromArea: "", fromAreaUrdu: "", toAddress: "", monthlyPrice: "", morningTime: "7:30 AM", afternoonTime: "", capacity: "30", vehicleType: "school_shift", notes: "", isActive: true, sortOrder: "0" });
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const routes = routesData?.routes || [];
-  const allSubs = subsData?.subscriptions || [];
 
   const openAdd = () => { setEditing(null); setForm({ routeName: "", schoolName: "", schoolNameUrdu: "", fromArea: "", fromAreaUrdu: "", toAddress: "", monthlyPrice: "", morningTime: "7:30 AM", afternoonTime: "", capacity: "30", vehicleType: "school_shift", notes: "", isActive: true, sortOrder: "0" }); setShowForm(true); };
 

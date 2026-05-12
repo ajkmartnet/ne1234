@@ -883,71 +883,75 @@ router.get("/rides/:id/audit-trail", async (req: Request, res: Response) => {
 });
 
 router.get("/rides/:id/detail", async (req: Request, res: Response) => {
-  const rideId = req.params["id"]!;
-  const [ride] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
-  if (!ride) { sendNotFound(res, "Ride not found"); return; }
+  try {
+    const rideId = req.params["id"]!;
+    const [ride] = await db.select().from(ridesTable).where(eq(ridesTable.id, rideId)).limit(1);
+    if (!ride) { sendNotFound(res, "Ride not found"); return; }
 
-  const [customer] = await db.select({ name: usersTable.name, phone: usersTable.phone, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, ride.userId)).limit(1);
-  let rider = null;
-  if (ride.riderId) {
-    const [r] = await db.select({ name: usersTable.name, phone: usersTable.phone, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, ride.riderId)).limit(1);
-    rider = r ?? null;
+    const [customer] = await db.select({ name: usersTable.name, phone: usersTable.phone, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, ride.userId)).limit(1);
+    let rider = null;
+    if (ride.riderId) {
+      const [r] = await db.select({ name: usersTable.name, phone: usersTable.phone, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, ride.riderId)).limit(1);
+      rider = r ?? null;
+    }
+
+    const eventLogs = await db.select().from(rideEventLogsTable).where(eq(rideEventLogsTable.rideId, rideId)).orderBy(asc(rideEventLogsTable.createdAt));
+
+    const bidRows = await db.select().from(rideBidsTable).where(eq(rideBidsTable.rideId, rideId)).orderBy(desc(rideBidsTable.createdAt));
+
+    const notifiedCount = await db.select({ cnt: count() }).from(rideNotifiedRidersTable).where(eq(rideNotifiedRidersTable.rideId, rideId));
+
+    const s = await getCachedSettings();
+    const gstEnabled = (s["finance_gst_enabled"] ?? "off") === "on";
+    const gstPct = parseFloat(s["finance_gst_pct"] ?? "17");
+    const surgeEnabled = (s["ride_surge_enabled"] ?? "off") === "on";
+    const surgeMultiplier = surgeEnabled ? parseFloat(s["ride_surge_multiplier"] ?? "1.5") : 1;
+    const fare = parseFloat(ride.fare);
+    const gstAmount = gstEnabled ? parseFloat(((fare * gstPct) / (100 + gstPct)).toFixed(2)) : 0;
+    const baseFare = fare - gstAmount;
+
+    sendSuccess(res, {
+      ride: {
+        ...ride,
+        fare,
+        distance: parseFloat(ride.distance),
+        offeredFare: ride.offeredFare ? parseFloat(ride.offeredFare) : null,
+        counterFare: ride.counterFare ? parseFloat(ride.counterFare) : null,
+        createdAt: ride.createdAt.toISOString(),
+        updatedAt: ride.updatedAt.toISOString(),
+        acceptedAt:   ride.acceptedAt   ? ride.acceptedAt.toISOString()   : null,
+        dispatchedAt: ride.dispatchedAt ? ride.dispatchedAt.toISOString() : null,
+        arrivedAt:    ride.arrivedAt    ? ride.arrivedAt.toISOString()    : null,
+        startedAt:    ride.startedAt    ? ride.startedAt.toISOString()    : null,
+        completedAt:  ride.completedAt  ? ride.completedAt.toISOString()  : null,
+        cancelledAt:  ride.cancelledAt  ? ride.cancelledAt.toISOString()  : null,
+        tripOtp:      ride.tripOtp ?? null,
+        otpVerified:  ride.otpVerified ?? false,
+        isParcel:     ride.isParcel ?? false,
+        receiverName: ride.receiverName ?? null,
+        receiverPhone:ride.receiverPhone ?? null,
+        packageType:  ride.packageType ?? null,
+      },
+      customer: customer ?? null,
+      rider: rider ?? null,
+      fareBreakdown: { baseFare, gstAmount, gstPct: gstEnabled ? gstPct : 0, surgeMultiplier, total: fare },
+      eventLogs: eventLogs.map((e: any) => ({
+        ...e,
+        lat: e.lat ? parseFloat(e.lat) : null,
+        lng: e.lng ? parseFloat(e.lng) : null,
+        createdAt: e.createdAt.toISOString(),
+      })),
+      bids: bidRows.map((b: any) => ({
+        ...b,
+        fare: parseFloat(b.fare),
+        createdAt: b.createdAt.toISOString(),
+        updatedAt: b.updatedAt.toISOString(),
+      })),
+      notifiedRiderCount: Number(notifiedCount[0]?.cnt ?? 0),
+    });
+  } catch (error: any) {
+    sendError(res, error.message || "Failed to fetch ride detail", 500);
   }
-
-  const eventLogs = await db.select().from(rideEventLogsTable).where(eq(rideEventLogsTable.rideId, rideId)).orderBy(asc(rideEventLogsTable.createdAt));
-
-  const bidRows = await db.select().from(rideBidsTable).where(eq(rideBidsTable.rideId, rideId)).orderBy(desc(rideBidsTable.createdAt));
-
-  const notifiedCount = await db.select({ cnt: count() }).from(rideNotifiedRidersTable).where(eq(rideNotifiedRidersTable.rideId, rideId));
-
-  const s = await getCachedSettings();
-  const gstEnabled = (s["finance_gst_enabled"] ?? "off") === "on";
-  const gstPct = parseFloat(s["finance_gst_pct"] ?? "17");
-  const surgeEnabled = (s["ride_surge_enabled"] ?? "off") === "on";
-  const surgeMultiplier = surgeEnabled ? parseFloat(s["ride_surge_multiplier"] ?? "1.5") : 1;
-  const fare = parseFloat(ride.fare);
-  const gstAmount = gstEnabled ? parseFloat(((fare * gstPct) / (100 + gstPct)).toFixed(2)) : 0;
-  const baseFare = fare - gstAmount;
-
-  sendSuccess(res, {
-    ride: {
-      ...ride,
-      fare,
-      distance: parseFloat(ride.distance),
-      offeredFare: ride.offeredFare ? parseFloat(ride.offeredFare) : null,
-      counterFare: ride.counterFare ? parseFloat(ride.counterFare) : null,
-      createdAt: ride.createdAt.toISOString(),
-      updatedAt: ride.updatedAt.toISOString(),
-      acceptedAt:   ride.acceptedAt   ? ride.acceptedAt.toISOString()   : null,
-      dispatchedAt: ride.dispatchedAt ? ride.dispatchedAt.toISOString() : null,
-      arrivedAt:    ride.arrivedAt    ? ride.arrivedAt.toISOString()    : null,
-      startedAt:    ride.startedAt    ? ride.startedAt.toISOString()    : null,
-      completedAt:  ride.completedAt  ? ride.completedAt.toISOString()  : null,
-      cancelledAt:  ride.cancelledAt  ? ride.cancelledAt.toISOString()  : null,
-      tripOtp:      ride.tripOtp ?? null,
-      otpVerified:  ride.otpVerified ?? false,
-      isParcel:     ride.isParcel ?? false,
-      receiverName: ride.receiverName ?? null,
-      receiverPhone:ride.receiverPhone ?? null,
-      packageType:  ride.packageType ?? null,
-    },
-    customer: customer ?? null,
-    rider: rider ?? null,
-    fareBreakdown: { baseFare, gstAmount, gstPct: gstEnabled ? gstPct : 0, surgeMultiplier, total: fare },
-    eventLogs: eventLogs.map((e: any) => ({
-      ...e,
-      lat: e.lat ? parseFloat(e.lat) : null,
-      lng: e.lng ? parseFloat(e.lng) : null,
-      createdAt: e.createdAt.toISOString(),
-    })),
-    bids: bidRows.map((b: any) => ({
-      ...b,
-      fare: parseFloat(b.fare),
-      createdAt: b.createdAt.toISOString(),
-      updatedAt: b.updatedAt.toISOString(),
-    })),
-    notifiedRiderCount: Number(notifiedCount[0]?.cnt ?? 0),
-  });
 });
 
 router.get("/dispatch-monitor", async (_req: Request, res: Response) => {

@@ -44,7 +44,7 @@ const ENTRIES: SchemaEntry[] = [
  *
  * Behaviour by environment:
  *   development — throws `ApiValidationError` on mismatch (caught by error boundary)
- *   production  — `console.warn` only; the raw data is still returned so the
+ *   production  — `log.warn` only; the raw data is still returned so the
  *                 UI degrades gracefully rather than crashing
  */
 export function createCustomerValidator(

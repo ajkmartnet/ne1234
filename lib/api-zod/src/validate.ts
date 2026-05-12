@@ -29,7 +29,7 @@ export class ApiValidationError extends Error {
 export interface ValidationOptions {
   /**
    * When true, throw ApiValidationError on mismatch.
-   * When false, console.warn and pass through raw data.
+   * When false, log.warn and pass through raw data.
    * Default: auto-detected from NODE_ENV (true in development, false in production).
    */
   strict?: boolean;
@@ -55,7 +55,7 @@ function isDevEnv(): boolean {
  * Validate a raw API response against a Zod schema.
  *
  * - In strict mode (dev by default): throws `ApiValidationError`.
- * - In non-strict mode (prod by default): `console.warn` and returns raw data cast to T.
+ * - In non-strict mode (prod by default): `log.warn` and returns raw data cast to T.
  *
  * `options.onFailure` is always called so mismatches reach your error reporter regardless
  * of the strict setting.

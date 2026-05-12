@@ -21,7 +21,7 @@ runButton = "Project"
 [[workflows.workflow]]
 name = "Project"
 mode = "parallel"
-author = "user"
+author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
@@ -42,6 +42,10 @@ args = "Rider App"
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "Customer App"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Setup"
 
 # --- INDIVIDUAL CLEAN WORKFLOWS ---
 
@@ -84,6 +88,17 @@ author = "user"
 task = "shell.exec"
 args = "PORT=20716 pnpm --filter @workspace/ajkmart run dev:web"
 waitForPort = 20716
+
+[[workflows.workflow]]
+name = "Setup"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/scripts run decrypt-env"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [[ports]]
 localPort = 3000

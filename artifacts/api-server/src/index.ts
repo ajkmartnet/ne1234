@@ -57,11 +57,12 @@ const JWT_SECRET_VARS = [
   "VENDOR_JWT_SECRET", "RIDER_JWT_SECRET",
 ];
 
+const DEV_PLACEHOLDER_JWT = "dev-placeholder-jwt-secret";
+
 function checkEnv(): void {
   const nodeEnv = process.env.NODE_ENV ?? "";
   const isProduction = ["production", "staging"].includes(nodeEnv);
-  const missing = CRITICAL_VARS.filter((k) => !process.env[k]);
-  const empty   = IMPORTANT_VARS.filter((k) => !process.env[k]);
+  const isDevMock = !process.env.VAULT_UNLOCKED && !isProduction;
 
   /* Warn loudly (fatal in production) if dev placeholder JWT secrets are in use */
   if (isProduction) {
@@ -78,6 +79,45 @@ function checkEnv(): void {
       process.exit(1);
     }
   }
+
+  /* ── Dev-mock mode: vault not unlocked, not production ─────────────────────
+     Substitute deterministic placeholder values for missing JWT secrets so
+     Express middleware can initialise without throwing. DATABASE_URL is handled
+     by db.ts which falls back to SQLite. Skip the fatal exit for missing vars. */
+  if (isDevMock) {
+    const substituted: string[] = [];
+    for (const k of JWT_SECRET_VARS) {
+      if (!process.env[k]) {
+        process.env[k] = DEV_PLACEHOLDER_JWT;
+        substituted.push(k);
+      }
+    }
+    if (!process.env.ENCRYPTION_MASTER_KEY) {
+      process.env.ENCRYPTION_MASTER_KEY = "dev-placeholder-master-key-16ch";
+      substituted.push("ENCRYPTION_MASTER_KEY");
+    }
+
+    const hr  = "═".repeat(66);
+    const pad = (s: string) => `║  ${s.padEnd(63)}║`;
+    const lines = [
+      `╔${hr}╗`,
+      pad("\x1b[33m[DEV MODE]\x1b[0m AJKMart API — running without vault"),
+      `╠${hr}╣`,
+      pad("Vault is locked. Placeholder values substituted for:"),
+      ...substituted.map((k) => pad(`  • ${k}`)),
+      pad(""),
+      pad("Features limited: no real DB, no SMS/email, no push notifications."),
+      pad(""),
+      pad("To unlock: pnpm --filter @workspace/scripts run decrypt-env"),
+      pad("           (or use the Setup workflow in Replit)"),
+      `╚${hr}╝`,
+    ];
+    logger.warn("\n" + lines.join("\n") + "\n");
+    return;
+  }
+
+  const missing = CRITICAL_VARS.filter((k) => !process.env[k]);
+  const empty   = IMPORTANT_VARS.filter((k) => !process.env[k]);
 
   if (missing.length === 0 && empty.length === 0) return;
 

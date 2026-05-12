@@ -55,6 +55,16 @@ Thumbs.db
 # Backup files (may contain secrets)
 *.backup
 
+# Local env overrides (never commit)
+.env.local
+.env.*.local
+
+# SQLite dev mock database files
+dev.db
+dev.db-shm
+dev.db-wal
+
 # Config files that must be committed
 !.replit
 !replit.nix
+!.env.template

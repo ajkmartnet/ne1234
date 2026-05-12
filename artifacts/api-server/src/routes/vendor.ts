@@ -125,8 +125,7 @@ router.patch("/profile", validateBody(patchProfileSchema), async (req, res) => {
 
 /* ── GET /vendor/profile/quick-replies ── */
 router.get("/profile/quick-replies", async (req, res) => {
-  try {
-  const vendorId = req.vendorId!;
+endorId = req.vendorId!;
   const [profile] = await db
     .select({ quickReplies: vendorProfilesTable.quickReplies })
     .from(vendorProfilesTable)
@@ -143,9 +142,6 @@ router.get("/profile/quick-replies", async (req, res) => {
     }
   }
   sendSuccess(res, { quickReplies: shortcuts });
-  } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
 });
 
 /* ── PATCH /vendor/profile/quick-replies ── */
@@ -262,8 +258,7 @@ router.get("/orders", async (req, res) => {
 
 /* ── PATCH /vendor/orders/:id/status ── */
 router.patch("/orders/:id/status", async (req, res) => {
-  try {
-  const vendorId = req.vendorId!;
+endorId = req.vendorId!;
   /* Strict: only status and note accepted — reject price/total etc. explicitly */
   const allowedKeys = new Set(["status", "note"]);
   const extraKeys = Object.keys(req.body).filter(k => !allowedKeys.has(k));
@@ -460,9 +455,6 @@ router.patch("/orders/:id/status", async (req, res) => {
     })();
   }
   sendSuccess(res, { ...updated, total: safeNum(updated.total) });
-  } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
 });
 
 /* ── GET /vendor/promos ── list promos owned by vendor ── */

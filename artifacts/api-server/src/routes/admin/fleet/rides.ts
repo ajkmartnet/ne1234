@@ -1134,12 +1134,43 @@ router.get("/fleet-analytics", async (req: Request, res: Response) => {
     .slice(0, 10)
     .map(z => ({ lat: z.lat, lng: z.lng, pings: z.count }));
 
+  /* Per-type daily revenue: GROUP BY date + type over completed rides */
+  const revenueByTypeRaw = await db
+    .select({
+      date:      sql<string>`DATE(${ridesTable.createdAt})::text`,
+      type:      ridesTable.type,
+      revenue:   sql<number>`COALESCE(SUM(${ridesTable.fare}::numeric), 0)`,
+      rideCount: sql<number>`COUNT(*)::int`,
+    })
+    .from(ridesTable)
+    .where(and(
+      eq(ridesTable.status, "completed"),
+      gte(ridesTable.createdAt, from),
+      lte(ridesTable.createdAt, to),
+    ))
+    .groupBy(sql`DATE(${ridesTable.createdAt})`, ridesTable.type)
+    .orderBy(sql`DATE(${ridesTable.createdAt}) ASC`);
+
+  /* Build [{date, bike, car, rickshaw, ...}, ...] rows, one per calendar day */
+  const revByDateMap = new Map<string, Record<string, number>>();
+  for (const row of revenueByTypeRaw) {
+    if (!revByDateMap.has(row.date)) revByDateMap.set(row.date, {});
+    revByDateMap.get(row.date)![row.type] = Number(row.revenue);
+  }
+  const revenueTrend = [...revByDateMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, byType]) => ({ date, ...byType }));
+
+  const revenueServiceTypes = [...new Set(revenueByTypeRaw.map((r: any) => r.type))].sort() as string[];
+
   sendSuccess(res, {
     heatmap,
     avgResponseTimeMin,
     riderDistances,
     peakZones,
     totalPings: heatmap.length,
+    revenueTrend,
+    revenueServiceTypes,
     from: from.toISOString().slice(0, 10),
     to: to.toISOString().slice(0, 10),
   });

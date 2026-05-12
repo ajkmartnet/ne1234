@@ -37,7 +37,7 @@ import {
   Eye, ChevronLeft, ChevronRight, ArrowUpDown, Radio, Shield, Save,
   Filter, Info, BarChart2,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, Legend } from "recharts";
 import { useLanguage } from "@/lib/useLanguage";
 import { tDual, type TranslationKey } from "@workspace/i18n";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -1499,10 +1499,30 @@ function FleetAnalyticsTab() {
   const heatPoints: Array<{ lat: number; lng: number; weight: number }> = data?.heatmap ?? [];
   const riderDistances: Array<{ userId: string; name: string; distanceKm: number }> = data?.riderDistances ?? [];
   const peakZones: Array<{ lat: number; lng: number; pings: number }> = data?.peakZones ?? [];
+  const revenueTrend: Array<Record<string, any>> = data?.revenueTrend ?? [];
+  const revenueServiceTypes: string[] = data?.revenueServiceTypes ?? [];
 
   const mapCenter: [number, number] = heatPoints.length > 0
     ? [heatPoints[0].lat, heatPoints[0].lng]
     : [33.7294, 73.0931];
+
+  /* Stable color palette per service type */
+  const SVC_COLORS: Record<string, string> = {
+    bike:         "#f97316",
+    car:          "#3b82f6",
+    rickshaw:     "#eab308",
+    daba:         "#8b5cf6",
+    school_shift: "#10b981",
+    parcel:       "#ec4899",
+    van:          "#06b6d4",
+  };
+  const svcColor = (type: string, idx: number) =>
+    SVC_COLORS[type] ?? ["#6366f1","#14b8a6","#f43f5e","#a3e635","#fb923c"][idx % 5];
+
+  const totalRevenue = revenueTrend.reduce((sum, day) => {
+    const dayTotal = revenueServiceTypes.reduce((s, t) => s + (day[t] ?? 0), 0);
+    return sum + dayTotal;
+  }, 0);
 
   return (
     <div className="space-y-5">
@@ -1533,13 +1553,13 @@ function FleetAnalyticsTab() {
       </Card>
 
       {/* Summary Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card className="p-5 rounded-2xl border-border/50 shadow-sm">
           <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Total GPS Pings</p>
           <p className="text-3xl font-black text-foreground">
             {isLoading ? <span className="text-muted-foreground text-xl animate-pulse">—</span> : (data?.totalPings ?? 0).toLocaleString()}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">Rider location updates in period</p>
+          <p className="text-xs text-muted-foreground mt-1">Rider location updates</p>
         </Card>
         <Card className="p-5 rounded-2xl border-border/50 shadow-sm">
           <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Avg Response Time</p>
@@ -1547,7 +1567,7 @@ function FleetAnalyticsTab() {
             {isLoading ? <span className="text-muted-foreground text-xl animate-pulse">—</span>
               : data?.avgResponseTimeMin != null ? `${data.avgResponseTimeMin}m` : "—"}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">Ride request → acceptance</p>
+          <p className="text-xs text-muted-foreground mt-1">Request → acceptance</p>
         </Card>
         <Card className="p-5 rounded-2xl border-border/50 shadow-sm">
           <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Active Riders</p>
@@ -1555,6 +1575,14 @@ function FleetAnalyticsTab() {
             {isLoading ? <span className="text-muted-foreground text-xl animate-pulse">—</span> : riderDistances.length}
           </p>
           <p className="text-xs text-muted-foreground mt-1">With tracked GPS distance</p>
+        </Card>
+        <Card className="p-5 rounded-2xl border-border/50 shadow-sm bg-green-50/60 border-green-200/60">
+          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Total Revenue</p>
+          <p className="text-3xl font-black text-green-700">
+            {isLoading ? <span className="text-muted-foreground text-xl animate-pulse">—</span>
+              : `Rs ${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Completed rides in period</p>
         </Card>
       </div>
 
@@ -1617,6 +1645,76 @@ function FleetAnalyticsTab() {
           </div>
         </Card>
       </div>
+
+      {/* Revenue Trend by Service Type */}
+      <Card className="rounded-2xl border-border/50 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-border/40 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-green-500" />
+            <h3 className="font-bold text-sm">Revenue Trend by Service Type</h3>
+            {!isLoading && revenueTrend.length > 0 && (
+              <span className="text-xs text-muted-foreground ml-1">(completed rides · Rs)</span>
+            )}
+          </div>
+          {!isLoading && revenueServiceTypes.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {revenueServiceTypes.map((t, i) => (
+                <span key={t} className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: svcColor(t, i) }} />
+                  {t.replace(/_/g, " ")}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="p-4" style={{ height: 320 }}>
+          {isLoading ? (
+            <div className="w-full h-full flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : revenueTrend.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={revenueTrend} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                <defs>
+                  {revenueServiceTypes.map((t, i) => (
+                    <linearGradient key={t} id={`grad-${t}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={svcColor(t, i)} stopOpacity={0.25} />
+                      <stop offset="95%" stopColor={svcColor(t, i)} stopOpacity={0.03} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => d.slice(5)} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `Rs ${(v as number).toLocaleString()}`} width={72} />
+                <Tooltip
+                  formatter={(value: any, name: string) => [`Rs ${Number(value).toLocaleString()}`, name.replace(/_/g, " ")]}
+                  labelFormatter={l => `Date: ${l}`}
+                  contentStyle={{ fontSize: 12, borderRadius: 10 }}
+                />
+                <Legend formatter={v => v.replace(/_/g, " ")} iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                {revenueServiceTypes.map((t, i) => (
+                  <Area
+                    key={t}
+                    type="monotone"
+                    dataKey={t}
+                    name={t}
+                    stroke={svcColor(t, i)}
+                    strokeWidth={2}
+                    fill={`url(#grad-${t})`}
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                    stackId="revenue"
+                  />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+              <DollarSign className="w-8 h-8 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">No completed rides in selected period</p>
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* Peak Activity Zones */}
       {(isLoading || peakZones.length > 0) && (

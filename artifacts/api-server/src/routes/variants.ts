@@ -104,6 +104,23 @@ router.post("/", adminAuth, async (req, res) => {
 router.patch("/:id", adminAuth, async (req, res) => {
   try {
     const variantId = req.params["id"]!;
+
+    if (req.body.label !== undefined && (typeof req.body.label !== "string" || !String(req.body.label).trim())) {
+      res.status(400).json({ error: "label must be a non-empty string" }); return;
+    }
+    if (req.body.price !== undefined && (isNaN(Number(req.body.price)) || Number(req.body.price) < 0)) {
+      res.status(400).json({ error: "price must be a non-negative number" }); return;
+    }
+    if (req.body.originalPrice !== undefined && req.body.originalPrice !== null && (isNaN(Number(req.body.originalPrice)) || Number(req.body.originalPrice) < 0)) {
+      res.status(400).json({ error: "originalPrice must be a non-negative number" }); return;
+    }
+    if (req.body.stock !== undefined && req.body.stock !== null && !Number.isInteger(Number(req.body.stock))) {
+      res.status(400).json({ error: "stock must be an integer" }); return;
+    }
+    if (req.body.sortOrder !== undefined && !Number.isInteger(Number(req.body.sortOrder))) {
+      res.status(400).json({ error: "sortOrder must be an integer" }); return;
+    }
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (req.body.label !== undefined) updates.label = req.body.label;
     if (req.body.type !== undefined) updates.type = req.body.type;

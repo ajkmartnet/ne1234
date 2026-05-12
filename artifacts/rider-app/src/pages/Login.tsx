@@ -293,7 +293,7 @@ export default function Login() {
         setLoading(true);
         try {
           const captchaToken = await getCaptchaToken(auth.captchaEnabled, captchaSiteKey, "login_phone_otp");
-          const r = await api.sendOtp(formatPhoneForApi(normalized), captchaToken);
+          const r = await api.sendOtp(formatPhoneForApi(normalized), captchaToken, undefined, checkIdentifierAbort.current?.signal ?? undefined);
           if (r.otpRequired === false) {
             if (r.token) { await doLogin(r as AuthResponse); setLoading(false); return; }
             setStep("otp");

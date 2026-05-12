@@ -272,7 +272,8 @@ router.post("/products", async (req, res) => {
     reviewCount: 0,
     image: image || null,
   }).returning();
-  sendCreated(res, { ...product!, price: parseFloat(product!.price) });
+  if (!product) { sendError(res, "Failed to create product", 500); return; }
+  sendCreated(res, { ...product, price: parseFloat(product.price) });
 });
 
 /* ── POST /products/bulk-refill-reminder — notify vendors of selected low-stock products ── */

@@ -74,7 +74,7 @@ export function isFirebaseConfigured(): boolean {
 export async function isFirebaseAvailable(): Promise<boolean> {
   const auth = await getFirebaseAuth();
   const available = auth !== null;
-  if (!available && !log) {
+  if (!available) {
     log?.warn("Firebase features unavailable — falling back to phone OTP only");
   }
   return available;

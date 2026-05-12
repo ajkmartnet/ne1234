@@ -1593,7 +1593,7 @@ function WalletScreenInner() {
     }
     const res = await refetch();
     if (res.data?.balance !== undefined) {
-      updateUser({ walletBalance: res.data.balance });
+      updateUser({ walletBalance: String(res.data.balance) });
     }
     setLastRefreshed(new Date());
   }, [refetch, updateUser, token, socket]);

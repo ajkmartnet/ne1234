@@ -221,6 +221,7 @@ export default function OffersScreen() {
     queryKey: ["public-offers"],
     queryFn: async () => {
       const r = await fetch(`${API_BASE}/promotions/public`);
+      if (!r.ok) throw new Error(`Failed to load offers (${r.status})`);
       const json = await r.json();
       return json?.data ?? json;
     },
@@ -234,6 +235,7 @@ export default function OffersScreen() {
       const r = await fetch(`${API_BASE}/promotions/for-you`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!r.ok) throw new Error(`Failed to load personalized offers (${r.status})`);
       const json = await r.json();
       return json?.data ?? json;
     },
@@ -248,6 +250,7 @@ export default function OffersScreen() {
       const r = await fetch(`${API_BASE}/promotions/bookmarks`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!r.ok) throw new Error(`Failed to load bookmarks (${r.status})`);
       const json = await r.json();
       return json?.data ?? json;
     },
@@ -264,6 +267,7 @@ export default function OffersScreen() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!r.ok) throw new Error(`Failed to toggle bookmark (${r.status})`);
       return r.json();
     },
     onSuccess: () => {

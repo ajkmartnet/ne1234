@@ -245,7 +245,7 @@ export default function AuthMethodsPage() {
     )) return;
     setRotatingSecret(true);
     try {
-      const data = await adminFetch("/admin/system/rotate-secret", { method: "POST" });
+      const data = await adminFetch("/system/rotate-secret", { method: "POST" });
       toast({
         title: "Master secret rotated",
         description: data?.message ?? "New secret is now active. All admins notified.",

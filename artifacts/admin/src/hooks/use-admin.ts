@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminFetch, adminAbsoluteFetch } from "@/lib/adminFetcher";
 import { useToast } from "@/hooks/use-toast";
@@ -27,19 +28,19 @@ export const useAdminLogin = () => {
 // Dashboard Stats
 export const useStats = () => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-stats"],
     queryFn: () => adminFetch("/stats"),
     refetchInterval: REFETCH_INTERVAL,
     staleTime: 30_000,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load stats',
-        description: error?.message || 'Unable to fetch admin statistics',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load stats', description: (query.error as any)?.message || 'Unable to fetch admin statistics', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 // Users
@@ -65,51 +66,51 @@ export const useUsers = (params?: {
   qs.set("page", String(page));
   qs.set("limit", String(limit));
   const qsStr = qs.toString();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-users", conditionTier || "", status || "", search || "", role || "", dateFrom || "", dateTo || "", page, limit],
     queryFn: () => adminFetch(`/users${qsStr ? `?${qsStr}` : ""}`),
     refetchInterval: REFETCH_INTERVAL,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load users',
-        description: error?.message || 'Unable to fetch user list',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load users', description: (query.error as any)?.message || 'Unable to fetch user list', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 export const useSearchRiders = (q: string, onlineOnly = true) => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-search-riders", q, onlineOnly],
     queryFn: () => adminFetch(`/users/search-riders?q=${encodeURIComponent(q)}&limit=20&onlineOnly=${onlineOnly}`),
     enabled: true,
     staleTime: 10_000,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to search riders',
-        description: error?.message || 'Unable to search for riders',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to search riders', description: (query.error as any)?.message || 'Unable to search for riders', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 export const usePendingUsers = () => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-users-pending"],
     queryFn: () => adminFetch("/users/pending"),
     refetchInterval: 15_000,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load pending users',
-        description: error?.message || 'Unable to fetch pending user approvals',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load pending users', description: (query.error as any)?.message || 'Unable to fetch pending user approvals', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 /** Snapshot all matching cache entries for a query key prefix, for rollback. */
@@ -274,18 +275,18 @@ export const useWalletTopup = () => {
 // Orders
 export const useOrders = () => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-orders"],
     queryFn: () => adminFetch("/orders"),
     refetchInterval: REFETCH_INTERVAL,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load orders',
-        description: error?.message || 'Unable to fetch orders',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load orders', description: (query.error as any)?.message || 'Unable to fetch orders', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 export const useUpdateOrder = () => {
@@ -343,18 +344,18 @@ export const useUpdateOrder = () => {
 // Rides
 export const useRides = () => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-rides"],
     queryFn: () => adminFetch("/rides"),
     refetchInterval: RIDES_REFETCH_INTERVAL,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load rides',
-        description: error?.message || 'Unable to fetch rides',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load rides', description: (query.error as any)?.message || 'Unable to fetch rides', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 export const useUpdateRide = () => {
@@ -384,18 +385,18 @@ export const useUpdateRide = () => {
 // Pharmacy Orders
 export const usePharmacyOrders = () => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-pharmacy"],
     queryFn: () => adminFetch("/pharmacy-enriched"),
     refetchInterval: REFETCH_INTERVAL,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load pharmacy orders',
-        description: error?.message || 'Unable to fetch pharmacy orders',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load pharmacy orders', description: (query.error as any)?.message || 'Unable to fetch pharmacy orders', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 export const useUpdatePharmacyOrder = () => {
@@ -424,18 +425,18 @@ export const useUpdatePharmacyOrder = () => {
 // Parcel Bookings
 export const useParcelBookings = () => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-parcel"],
     queryFn: () => adminFetch("/parcel-enriched"),
     refetchInterval: REFETCH_INTERVAL,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load parcel bookings',
-        description: error?.message || 'Unable to fetch parcel bookings',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load parcel bookings', description: (query.error as any)?.message || 'Unable to fetch parcel bookings', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 export const useUpdateParcelBooking = () => {
@@ -539,24 +540,24 @@ export const useDeleteUser = () => {
 // User Activity
 export const useUserActivity = (userId: string | null) => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-user-activity", userId],
     queryFn: () => adminFetch(`/users/${userId}/activity`),
     enabled: !!userId,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load user activity',
-        description: error?.message || 'Unable to fetch user activity',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load user activity', description: (query.error as any)?.message || 'Unable to fetch user activity', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 // Products
 export const useCategories = () => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
       const apiBase = window.location.origin;
@@ -572,30 +573,30 @@ export const useCategories = () => {
       })) as { id: string; name: string; icon?: string }[];
     },
     staleTime: 5 * 60 * 1000,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load categories',
-        description: error?.message || 'Unable to fetch categories',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load categories', description: (query.error as any)?.message || 'Unable to fetch categories', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 export const useProducts = () => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-products"],
     queryFn: () => adminFetch("/products"),
     refetchInterval: REFETCH_INTERVAL,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load products',
-        description: error?.message || 'Unable to fetch products',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load products', description: (query.error as any)?.message || 'Unable to fetch products', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 export const useCreateProduct = () => {
@@ -665,18 +666,18 @@ export const useDeleteProduct = () => {
 
 export const usePendingProducts = () => {
   const { toast } = useToast();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["admin-products-pending"],
     queryFn: () => adminFetch("/products/pending"),
     refetchInterval: 30_000,
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to load pending products',
-        description: error?.message || 'Unable to fetch pending products',
-        variant: 'destructive',
-      });
-    },
   });
+  useEffect(() => {
+    if (query.isError) {
+      toast({ title: 'Failed to load pending products', description: (query.error as any)?.message || 'Unable to fetch pending products', variant: 'destructive' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isError]);
+  return query;
 };
 
 export const useApproveProduct = () => {

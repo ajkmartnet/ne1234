@@ -199,6 +199,20 @@ ADMIN_SEED_PASSWORD = "Admin@123"
 # Keep all your other SECRET keys below this line as they were
 LOG_LEVEL = "debug"
 
+[userenv.development]
+JWT_SECRET = "dev-jwt-secret-replace-before-prod-min32chars!!"
+ADMIN_JWT_SECRET = "dev-admin-jwt-secret-replace-before-prod-min32!!"
+ADMIN_REFRESH_SECRET = "dev-admin-refresh-secret-replace-before-prod-x!!"
+ADMIN_SECRET = "dev-admin-secret-replace-before-prod-min32chars!!"
+ADMIN_ACCESS_TOKEN_SECRET = "dev-admin-access-token-secret-replace-prod-32c!!"
+ADMIN_REFRESH_TOKEN_SECRET = "dev-admin-refresh-token-secret-replace-prod-32c!!"
+ADMIN_CSRF_SECRET = "dev-admin-csrf-secret-replace-before-prod-min32!!"
+VENDOR_JWT_SECRET = "dev-vendor-jwt-secret-replace-before-prod-min32!!"
+RIDER_JWT_SECRET = "dev-rider-jwt-secret-replace-before-prod-min32c!!"
+ERROR_REPORT_HMAC_SECRET = "dev-error-report-hmac-secret-replace-before-prod!!"
+ADMIN_LEGACY_AUTH_DISABLED = "false"
+ADMIN_PASSWORD_RESET_TOKEN_TTL_MIN = "60"
+
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 120000

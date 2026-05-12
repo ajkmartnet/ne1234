@@ -413,10 +413,14 @@ export default function OtpControl() {
   };
 
   const cancelBypass = async (userId: string) => {
-    await api("DELETE", `/users/${userId}/otp/bypass`);
-    toast({ title: "Bypass Removed" });
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, otpBypassUntil: null } : u));
-    loadStatus();
+    try {
+      await api("DELETE", `/users/${userId}/otp/bypass`);
+      toast({ title: "Bypass Removed" });
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, otpBypassUntil: null } : u));
+      loadStatus();
+    } catch (e: unknown) {
+      toast({ title: "Error", description: errorMessage(e, "Failed to remove bypass."), variant: "destructive" });
+    }
   };
 
   const eventLabel: Record<OtpAuditEvent, string> = {
@@ -515,7 +519,7 @@ export default function OtpControl() {
                 </div>
                 <p className="text-xs text-red-600 mt-0.5">All users can log in without OTP. Auto-restores when the timer expires.</p>
               </div>
-              <Button size="sm" variant="destructive" onClick={() => api("DELETE", "/otp/disable").then(() => { toast({ title: "OTPs Restored", description: "Global OTP suspension lifted." }); loadStatus(); loadAudit(); })} className="shrink-0 rounded-xl">
+              <Button size="sm" variant="destructive" onClick={() => api("DELETE", "/otp/disable").then(() => { toast({ title: "OTPs Restored", description: "Global OTP suspension lifted." }); loadStatus(); loadAudit(); }).catch((e: unknown) => { toast({ title: "Error", description: errorMessage(e, "Failed to restore OTPs."), variant: "destructive" }); })} className="shrink-0 rounded-xl">
                 Restore Now
               </Button>
             </div>

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import { storageUpload } from "../../lib/storage.js";
@@ -248,12 +249,27 @@ async function ensureSystemVendor(): Promise<void> {
   }
 }
 
+const createProductSchema = z.object({
+  name: z.string().min(1, "name is required"),
+  price: z.number({ coerce: true }).positive("price must be a positive number"),
+  category: z.string().min(1, "category is required"),
+  description: z.string().optional().nullable(),
+  originalPrice: z.number({ coerce: true }).positive().optional().nullable(),
+  type: z.string().optional(),
+  unit: z.string().optional().nullable(),
+  vendorName: z.string().optional(),
+  inStock: z.boolean().optional(),
+  deliveryTime: z.string().optional(),
+  image: z.string().optional().nullable(),
+});
+
 router.post("/products", async (req, res) => {
-  const { name, description, price, originalPrice, category, type, unit, vendorName, inStock, deliveryTime, image } = req.body;
-  if (!name || !price || !category) {
-    sendValidationError(res, "name, price, and category are required");
+  const parsed = createProductSchema.safeParse(req.body);
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error.errors[0]?.message ?? "Invalid request body");
     return;
   }
+  const { name, description, price, originalPrice, category, type, unit, vendorName, inStock, deliveryTime, image } = parsed.data;
   await ensureSystemVendor();
   const [product] = await db.insert(productsTable).values({
     id: generateId(),

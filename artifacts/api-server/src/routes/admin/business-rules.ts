@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import { businessRulesTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
@@ -61,33 +62,38 @@ router.get("/", async (req, res) => {
   sendSuccess(res, { rules });
 });
 
+const createBusinessRuleSchema = z.object({
+  name: z.string().min(1, "name is required"),
+  description: z.string().optional().default(""),
+  trigger: z.string().min(1, "trigger is required"),
+  conditions: z.record(z.unknown()).optional().default({}),
+  actions: z.record(z.unknown()).optional().default({}),
+  priority: z.number({ coerce: true }).int().nonnegative().optional().default(0),
+  isActive: z.boolean().optional().default(true),
+});
+
 router.post("/", async (req, res) => {
-  const body = {
-    name: req.body.name,
-    description: req.body.description,
-    trigger: req.body.trigger,
+  const parsed = createBusinessRuleSchema.safeParse({
+    ...req.body,
     conditions: parseJsonField(req.body.conditions),
     actions: parseJsonField(req.body.actions),
-    priority: req.body.priority ?? 0,
-    isActive: req.body.isActive ?? true,
-  };
-
-  const errors = validateBusinessRule(body);
-  if (errors.length > 0) {
-    sendValidationError(res, "Invalid business rule payload", JSON.stringify(errors));
+  });
+  if (!parsed.success) {
+    sendValidationError(res, "Invalid business rule payload", parsed.error.errors.map(e => e.message).join("; "));
     return;
   }
+  const body = parsed.data;
 
   const id = generateId();
   const [created] = await db.insert(businessRulesTable).values({
     id,
-    name: String(body.name ?? ""),
-    description: String(body.description ?? ""),
-    trigger: String(body.trigger ?? ""),
+    name: body.name,
+    description: body.description,
+    trigger: body.trigger,
     conditions: body.conditions as Record<string, unknown>,
     actions: body.actions as Record<string, unknown>,
-    priority: Number(body.priority),
-    isActive: Boolean(body.isActive),
+    priority: body.priority,
+    isActive: body.isActive,
   }).returning();
 
   addAuditEntry({

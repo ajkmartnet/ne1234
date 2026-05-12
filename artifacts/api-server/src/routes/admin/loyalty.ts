@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable, loyaltyCampaignsTable, loyaltyRewardsTable } from "@workspace/db/schema";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
@@ -93,22 +94,21 @@ router.get("/loyalty/users", async (req, res) => {
   sendSuccess(res, { users: enrichedUsers, total: enrichedUsers.length });
 });
 
+const adjustLoyaltySchema = z.object({
+  amount: z.number({ coerce: true }).int().positive("A positive whole number amount is required"),
+  reason: z.string().min(1, "A reason is required for loyalty point adjustments"),
+  type: z.enum(["credit", "debit"], { message: "Type must be 'credit' or 'debit'" }),
+});
+
 router.post("/loyalty/users/:id/adjust", async (req, res) => {
   const userId = req.params["id"]!;
-  const { amount, reason, type } = req.body as { amount?: number; reason?: string; type?: string };
 
-  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0 || !Number.isInteger(Number(amount))) {
-    sendValidationError(res, "A positive whole number amount is required");
+  const parsed = adjustLoyaltySchema.safeParse(req.body);
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error.errors[0]?.message ?? "Invalid request body");
     return;
   }
-  if (!reason || typeof reason !== "string" || reason.trim().length === 0) {
-    sendValidationError(res, "A reason is required for loyalty point adjustments");
-    return;
-  }
-  if (type !== "credit" && type !== "debit") {
-    sendValidationError(res, "Type must be 'credit' or 'debit'");
-    return;
-  }
+  const { amount, reason, type } = parsed.data;
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) {

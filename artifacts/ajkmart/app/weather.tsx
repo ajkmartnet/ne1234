@@ -249,9 +249,11 @@ export default function WeatherDetailScreen() {
   const handleSearchCity = useCallback(async () => {
     if (!cityQuery.trim()) return;
     setSearching(true);
+    setError(null);
     try {
       const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityQuery.trim())}&count=5&language=en&format=json`;
       const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`City search failed (${resp.status})`);
       const data = await resp.json();
       if (data.results?.length) {
         setSearchResults(data.results.map((r: any) => ({
@@ -261,9 +263,12 @@ export default function WeatherDetailScreen() {
         })));
       } else {
         setSearchResults([]);
+        setError("No cities found. Try a different name.");
       }
-    } catch {
+    } catch (e) {
+      log.warn("City search failed:", e instanceof Error ? e.message : String(e));
       setSearchResults([]);
+      setError("Search failed. Please check your connection and try again.");
     }
     setSearching(false);
   }, [cityQuery]);

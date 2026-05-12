@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import { productVariantsTable, productsTable } from "@workspace/db/schema";
 import { eq, and, asc, ilike, SQL, inArray, desc } from "drizzle-orm";
@@ -101,36 +102,39 @@ router.post("/", adminAuth, async (req, res) => {
   }
 });
 
+const patchVariantSchema = z.object({
+  label: z.string().min(1, "label must be a non-empty string").optional(),
+  type: z.string().optional(),
+  price: z.number({ coerce: true }).nonnegative("price must be a non-negative number").optional(),
+  originalPrice: z.number({ coerce: true }).nonnegative("originalPrice must be a non-negative number").nullable().optional(),
+  sku: z.string().nullable().optional(),
+  stock: z.number({ coerce: true }).int("stock must be an integer").nullable().optional(),
+  inStock: z.boolean().optional(),
+  sortOrder: z.number({ coerce: true }).int("sortOrder must be an integer").optional(),
+  attributes: z.record(z.unknown()).nullable().optional(),
+});
+
 router.patch("/:id", adminAuth, async (req, res) => {
   try {
     const variantId = req.params["id"]!;
 
-    if (req.body.label !== undefined && (typeof req.body.label !== "string" || !String(req.body.label).trim())) {
-      res.status(400).json({ error: "label must be a non-empty string" }); return;
+    const parsed = patchVariantSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.errors[0]?.message ?? "Invalid request body" });
+      return;
     }
-    if (req.body.price !== undefined && (isNaN(Number(req.body.price)) || Number(req.body.price) < 0)) {
-      res.status(400).json({ error: "price must be a non-negative number" }); return;
-    }
-    if (req.body.originalPrice !== undefined && req.body.originalPrice !== null && (isNaN(Number(req.body.originalPrice)) || Number(req.body.originalPrice) < 0)) {
-      res.status(400).json({ error: "originalPrice must be a non-negative number" }); return;
-    }
-    if (req.body.stock !== undefined && req.body.stock !== null && !Number.isInteger(Number(req.body.stock))) {
-      res.status(400).json({ error: "stock must be an integer" }); return;
-    }
-    if (req.body.sortOrder !== undefined && !Number.isInteger(Number(req.body.sortOrder))) {
-      res.status(400).json({ error: "sortOrder must be an integer" }); return;
-    }
+    const fields = parsed.data;
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
-    if (req.body.label !== undefined) updates.label = req.body.label;
-    if (req.body.type !== undefined) updates.type = req.body.type;
-    if (req.body.price !== undefined) updates.price = String(req.body.price);
-    if (req.body.originalPrice !== undefined) updates.originalPrice = req.body.originalPrice ? String(req.body.originalPrice) : null;
-    if (req.body.sku !== undefined) updates.sku = req.body.sku;
-    if (req.body.stock !== undefined) updates.stock = req.body.stock;
-    if (req.body.inStock !== undefined) updates.inStock = req.body.inStock;
-    if (req.body.sortOrder !== undefined) updates.sortOrder = req.body.sortOrder;
-    if (req.body.attributes !== undefined) updates.attributes = req.body.attributes ? JSON.stringify(req.body.attributes) : null;
+    if (fields.label !== undefined) updates.label = fields.label;
+    if (fields.type !== undefined) updates.type = fields.type;
+    if (fields.price !== undefined) updates.price = String(fields.price);
+    if (fields.originalPrice !== undefined) updates.originalPrice = fields.originalPrice != null ? String(fields.originalPrice) : null;
+    if (fields.sku !== undefined) updates.sku = fields.sku;
+    if (fields.stock !== undefined) updates.stock = fields.stock;
+    if (fields.inStock !== undefined) updates.inStock = fields.inStock;
+    if (fields.sortOrder !== undefined) updates.sortOrder = fields.sortOrder;
+    if (fields.attributes !== undefined) updates.attributes = fields.attributes ? JSON.stringify(fields.attributes) : null;
 
     const [updated] = await db.update(productVariantsTable).set(updates).where(eq(productVariantsTable.id, variantId)).returning();
     if (!updated) {

@@ -29,15 +29,13 @@ function resolveAdminSecret(envVar: string): string {
   return val;
 }
 import { randomBytes } from "crypto";
-import { eq, count } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { redisClient } from "../lib/redis.js";
 import {
   db,
   adminAccountsTable,
   adminActionAuditLogTable,
   notificationsTable,
-  rideServiceTypesTable,
-  popularLocationsTable,
 } from "@workspace/db";
 import { generateId as _generateId } from "../lib/id.js";
 
@@ -491,55 +489,10 @@ export async function sendUserNotification(
 
 /* ── RIDE SERVICES / LOCATIONS SEEDING ─────────────────────────────────── */
 
-let _rideServicesSeedInProgress = false;
-
-export async function ensureDefaultRideServices(): Promise<void> {
-  if (_rideServicesSeedInProgress) return;
-  _rideServicesSeedInProgress = true;
-  try {
-    const [row] = await db.select({ c: count() }).from(rideServiceTypesTable);
-    if ((row?.c ?? 0) > 0) return;
-    await db.insert(rideServiceTypesTable).values(
-      DEFAULT_RIDE_SERVICES.map((s, idx) => ({
-        id:           `svc_${s.id}`,
-        key:          s.id,
-        name:         s.name,
-        icon:         s.icon,
-        baseFare:     s.baseFare,
-        perKm:        s.perKm,
-        minFare:      "50",
-        isEnabled:    true,
-        isCustom:     false,
-        allowBargaining: true,
-        sortOrder:    idx + 1,
-      })),
-    ).onConflictDoNothing();
-  } catch (err) {
-    pinoLogger.error({ err }, "[admin-shared] ensureDefaultRideServices failed");
-  } finally {
-    _rideServicesSeedInProgress = false;
-  }
-}
-
-let _locationsSeedInProgress = false;
-
-export async function ensureDefaultLocations(): Promise<void> {
-  if (_locationsSeedInProgress) return;
-  _locationsSeedInProgress = true;
-  try {
-    const [row] = await db.select({ c: count() }).from(popularLocationsTable);
-    if ((row?.c ?? 0) > 0) return;
-    await db.insert(popularLocationsTable).values([
-      { id: "loc_muzaffarabad", name: "Muzaffarabad", nameUrdu: "مظفرآباد", lat: "34.3557", lng: "73.4711", category: "chowk", icon: "🏙️", sortOrder: 1 },
-      { id: "loc_mirpur",       name: "Mirpur",       nameUrdu: "میرپور",   lat: "33.1478", lng: "73.7517", category: "chowk", icon: "🏙️", sortOrder: 2 },
-      { id: "loc_rawalakot",    name: "Rawalakot",    nameUrdu: "راولاکوٹ", lat: "33.8573", lng: "73.7617", category: "chowk", icon: "🏙️", sortOrder: 3 },
-    ]).onConflictDoNothing();
-  } catch (err) {
-    pinoLogger.error({ err }, "[admin-shared] ensureDefaultLocations failed");
-  } finally {
-    _locationsSeedInProgress = false;
-  }
-}
+export {
+  ensureDefaultRideServices,
+  ensureDefaultLocations,
+} from "../lib/seedDefaults.js";
 
 export function formatSvc(svc: unknown): unknown { return svc; }
 

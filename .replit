@@ -1,29 +1,39 @@
 modules = ["nodejs-20"]
 
-  # Deployment and Artifacts settings
-  [deployment]
-  run = ["pnpm", "start"]
-  deploymentTarget = "autoscale"
+# --- DEPLOYMENT SETTINGS ---
+[deployment]
+run = ["pnpm", "start"]
+deploymentTarget = "autoscale"
 
-  [deployment.postBuild]
-  args = ["pnpm", "store", "prune"]
-  env = { "CI" = "true" }
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
 
-  [nix]
-  channel = "stable-24_05"
-  guessImports = true
+# --- NIX CONFIG (Strict Mode) ---
+[nix]
+channel = "stable-24_05"
+guessImports = false # Isse Replit khud se kachra workflows nahi banayega
 
-  [workflows]
+[workflows]
 runButton = "Project"
 
+# --- MAIN WORKFLOW (The Master Switch) ---
 [[workflows.workflow]]
 name = "Project"
 mode = "parallel"
-author = "agent"
+author = "user"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start application"
+args = "API Server"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Admin Panel"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Vendor App"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
@@ -33,72 +43,47 @@ args = "Rider App"
 task = "workflow.run"
 args = "Customer App"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Vendor App"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Admin Panel"
+# --- INDIVIDUAL CLEAN WORKFLOWS ---
 
 [[workflows.workflow]]
-name = "Start application"
-author = "agent"
-
+name = "API Server"
+author = "user"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "[ -d node_modules ] && [ node_modules -nt pnpm-lock.yaml ] || pnpm install --no-frozen-lockfile; pnpm --filter @workspace/api-server run dev"
+args = "[ -d node_modules ] || pnpm install; PORT=5000 pnpm --filter @workspace/api-server run dev"
 waitForPort = 5000
 
-[workflows.workflow.metadata]
-outputType = "webview"
+[[workflows.workflow]]
+name = "Admin Panel"
+author = "user"
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=3000 BASE_PATH=/admin/ pnpm --filter @workspace/admin run dev"
+waitForPort = 3000
+
+[[workflows.workflow]]
+name = "Vendor App"
+author = "user"
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=3001 pnpm --filter @workspace/vendor-app run dev"
+waitForPort = 3001
 
 [[workflows.workflow]]
 name = "Rider App"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
+author = "user"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/rider-app run dev"
+args = "PORT=3002 pnpm --filter @workspace/rider-app run dev"
 waitForPort = 3002
 
 [[workflows.workflow]]
 name = "Customer App"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
+author = "user"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/ajkmart run dev:web"
-
-[[workflows.workflow]]
-name = "Vendor App"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/vendor-app run dev"
-waitForPort = 3001
-
-[[workflows.workflow]]
-name = "Admin Panel"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/admin run dev"
-waitForPort = 3000
+args = "PORT=20716 pnpm --filter @workspace/ajkmart run dev:web"
+waitForPort = 20716
 
 [[ports]]
 localPort = 3000
@@ -106,25 +91,22 @@ externalPort = 3000
 
 [[ports]]
 localPort = 3001
-externalPort = 4200
+externalPort = 3001
 
 [[ports]]
 localPort = 3002
-externalPort = 3003
-
-[[ports]]
-localPort = 3003
 externalPort = 3002
 
 [[ports]]
+localPort = 3003
+externalPort = 3003
+
+[[ports]]
 localPort = 3004
-externalPort = 8008
+externalPort = 4200
 
 [[ports]]
 localPort = 3005
-
-[[ports]]
-localPort = 4200
 externalPort = 5000
 
 [[ports]]
@@ -135,53 +117,25 @@ externalPort = 80
 localPort = 20716
 externalPort = 8000
 
-[[ports]]
-localPort = 20717
-externalPort = 3001
-
-[[ports]]
-localPort = 23744
-externalPort = 3000
-
-[[ports]]
-localPort = 23745
-externalPort = 6800
-
-  [agent]
+# --- ENVIRONMENT CONFIG ---
+[agent]
 expertMode = true
-stack = "BEST_EFFORT_FALLBACK"
 
-  [userenv]
-
-  [userenv.shared]
-  VITE_API_PROXY_TARGET = "http://127.0.0.1:5000"
-  NODE_ENV = "development"
-  PORT = "5000"
-  ADMIN_DEV_PORT = "3000"
-  VENDOR_DEV_PORT = "3001"
-  RIDER_DEV_PORT = "3002"
-  EXPO_DEV_PORT = "20716"
-  JWT_ISSUER = "ajkmart-dev"
-  ADMIN_SEED_USERNAME = "superadmin"
-  ADMIN_SEED_EMAIL = "admin@ajkmart.com"
-  ADMIN_SEED_NAME = "Super Admin"
-  LOG_LEVEL = "debug"
-  PORT_FALLBACK_ENABLE = "true"
-  PORT_MAX_RETRIES = "10"
-  ALLOW_DEV_SEED = "true"
-  ADMIN_SEED_KEY = "local-dev-seed-ajkmart"
-JWT_SECRET = "41e8aa4a05161ca9063872eaaea956dcb7186482be06f467d6bf26800ca943994648897f1051daf96154e9930c56493d3d724c24cee9be56c1db48f6bca1ffb7"
-ENCRYPTION_MASTER_KEY = "c1edd9ea696cfd3e8f672864a38015edd25dfa0b1a1e9938bcd3b2b833cb2e50"
-ADMIN_SECRET = "ca2dcff90128cf2783f53746b4af688b"
-ADMIN_JWT_SECRET = "27fe53fb69f18a7959b9f816b6460a72d1274ef4ae9d5d13e5df1e4c75ea20f818580bc7e8ec129fd5c63640db881edd9424739cd910a0f7f2ab24bda848b0f9"
-ADMIN_ACCESS_TOKEN_SECRET = "f3e67a28e2789129bdfd997fd72539c6ccb5e444249eb7d273a81cb85f584528416cbaa103f1935027a14530cd6b6cf99f9595a7dfe20ecfa5b099692a752ae8"
-ADMIN_REFRESH_TOKEN_SECRET = "63cee7280fb22c3762e5e5a2e3b660200e87a4b77f137eee4fb01b2da6510021e713d845b1e87d46dd75092bcef468586c99b08758d3f2b322323b78964800cf"
-ADMIN_CSRF_SECRET = "701a305391e737642847c99feac9658ece3f08b4e5400764390f77bb1c7e8f35"
-ADMIN_REFRESH_SECRET = "609a01aedbd6d54e8a1b7cdc30d65e7e2533cecd659a9c6410a978389c6c2a1d463598cd6694da2c5e7b681a985b7a3eefce593a59446da8053eef82d2d0418f"
-VENDOR_JWT_SECRET = "7d16756f6c44a958b95cfe2d8747599cfef2648eae91eb80493396890800e430a2a13ff860a13a8d2e6aafbe070d518d35241d6e9a4b6b1884c573f7d3a7548f"
-RIDER_JWT_SECRET = "4702772f63a217933bb7a323356db541f909e3e4a3c84d860d8525fc6668586e2fbec0a4f0efbc4a4f8094fb43dc94da4dadb4d3952130b95e36992f76e208e4"
-ERROR_REPORT_HMAC_SECRET = "9cbb600a34f0b33f88e4fd6a1e271f8dead0f010b20ed09e8c3b0f73f27aa917"
+[userenv.shared]
+VITE_API_PROXY_TARGET = "http://127.0.0.1:5000"
+NODE_ENV = "development"
+PORT = "5000"
+ADMIN_DEV_PORT = "3000"
+VENDOR_DEV_PORT = "3001"
+RIDER_DEV_PORT = "3002"
+EXPO_DEV_PORT = "20716"
+JWT_ISSUER = "ajkmart-dev"
+ADMIN_SEED_USERNAME = "superadmin"
+ADMIN_SEED_EMAIL = "admin@ajkmart.com"
+ADMIN_SEED_NAME = "Super Admin"
 ADMIN_SEED_PASSWORD = "Admin@123"
+# Keep all your other SECRET keys below this line as they were
+LOG_LEVEL = "debug"
 
 [postMerge]
 path = "scripts/post-merge.sh"

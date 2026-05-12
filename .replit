@@ -179,6 +179,10 @@ externalPort = 80
 localPort = 20716
 externalPort = 3003
 
+[[ports]]
+localPort = 20717
+externalPort = 6800
+
 # --- ENVIRONMENT CONFIG ---
 [agent]
 expertMode = true

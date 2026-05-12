@@ -125,7 +125,7 @@ export function WalletAdjustModal({ mode, subject, onClose }: WalletAdjustModalP
           </div>
 
           {options.length > 1 && (
-            <div className={`grid grid-cols-${options.length} gap-2`}>
+            <div className="grid grid-cols-2 gap-2">
               {options.map(opt => {
                 const Icon = opt.icon;
                 const active = action === opt.key;

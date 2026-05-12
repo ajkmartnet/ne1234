@@ -20,6 +20,9 @@ import {
   type AdminRequest, revokeAllUserSessions,
 } from "../admin-shared.js";
 import { sendSuccess, sendCreated, sendError, sendNotFound, sendValidationError, sendErrorWithData } from "../../lib/response.js";
+import { requirePermission } from "../../middleware/require-permission.js";
+import { validateBody } from "../../middleware/validate.js";
+import { z } from "zod";
 import { buildCursorPage, decodeCursor } from "../../lib/pagination/cursor.js";
 import {
   ORDER_VALID_STATUSES, RIDE_VALID_STATUSES, PARCEL_VALID_STATUSES, PHARMACY_ORDER_VALID_STATUSES,
@@ -693,32 +696,85 @@ router.get("/orders-stats", async (_req, res) => {
   }
 });
 
+const vendorInviteSchema = z.object({
+  email: z.string().email().optional(),
+  phone: z.string().min(7).max(20).optional(),
+  name:  z.string().max(200).optional(),
+}).refine(d => d.email || d.phone, { message: "email or phone is required" });
+
+const vendorTierSchema = z.object({
+  tier: z.enum(["bronze", "silver", "gold"]),
+});
+
 /* ── POST /admin/vendors/invite — invite a vendor by email/phone ── */
-router.post("/vendors/invite", async (req, res) => {
+router.post("/vendors/invite", requirePermission("vendors.edit"), validateBody(vendorInviteSchema), async (req, res) => {
   try {
-    const { email, phone, name, message } = req.body as { email?: string; phone?: string; name?: string; message?: string };
-    if (!email && !phone) { sendValidationError(res, "email or phone is required"); return; }
+    const { email, phone, name } = req.body as z.infer<typeof vendorInviteSchema>;
+
+    const adminReq = req as AdminRequest;
+    let channel: "push" | "email" | "audit_log" | "no_channel" = "no_channel";
+
+    const [existingUser] = await db
+      .select({ id: usersTable.id, name: usersTable.name })
+      .from(usersTable)
+      .where(
+        phone
+          ? eq(usersTable.phone, phone)
+          : eq(usersTable.email, email!)
+      )
+      .limit(1);
+
+    if (existingUser) {
+      await sendUserNotification(
+        existingUser.id,
+        "You've been invited to become a vendor!",
+        `An admin has invited ${name ? `"${name}"` : "you"} to register as a vendor on AJKMart. Open the app to complete your vendor registration.`,
+        "system",
+        "storefront-outline",
+      ).catch(() => {});
+      await db.insert(notificationsTable).values({
+        id: generateId(),
+        userId: existingUser.id,
+        title: "Vendor Invitation",
+        body: `You have been invited to become a vendor${name ? ` (${name})` : ""} on AJKMart.`,
+        type: "system",
+        icon: "storefront-outline",
+      }).catch(() => {});
+      channel = "push";
+    } else if (email) {
+      const { sendEmail } = await import("../../services/email.js");
+      const storeLine = name ? `<p><strong>Store:</strong> ${name}</p>` : "";
+      const result = await sendEmail({
+        to: email,
+        subject: "You've been invited to sell on AJKMart",
+        html: `<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+          <h2>Vendor Invitation</h2>
+          ${storeLine}
+          <p>An admin has invited you to register as a vendor on AJKMart. Download the app or visit our website to complete your registration.</p>
+        </div>`,
+        text: `Vendor Invitation\n\n${name ? `Store: ${name}\n\n` : ""}An admin has invited you to register as a vendor on AJKMart. Download the app or visit our website to complete your registration.`,
+      });
+      channel = result.sent ? "email" : "audit_log";
+    } else {
+      channel = "no_channel";
+    }
+
     addAuditEntry({
       action: "vendor_invite_sent",
       ip: getClientIp(req),
-      adminId: (req as AdminRequest).adminId,
-      details: `Vendor invite sent to ${email || phone} (${name ?? "unknown"})`,
+      adminId: adminReq.adminId,
+      details: `Vendor invite sent to ${email || phone} (${name ?? "unknown"}) via channel=${channel}`,
       result: "success",
     });
-    sendSuccess(res, { invited: true, email, phone, message });
+    sendSuccess(res, { invited: true, email, phone, name, channel });
   } catch (e) {
     sendError(res, "Failed to send vendor invite", 500);
   }
 });
 
 /* ── PATCH /admin/vendors/:id/tier — update vendor account tier ── */
-router.patch("/vendors/:id/tier", wrapAsync(async (req, res) => {
-  const { tier } = req.body;
-  const VALID_TIERS = ["bronze", "silver", "gold"];
-  if (!tier || !VALID_TIERS.includes(String(tier))) {
-    sendValidationError(res, `tier must be one of: ${VALID_TIERS.join(", ")}`);
-    return;
-  }
+router.patch("/vendors/:id/tier", requirePermission("vendors.edit"), validateBody(vendorTierSchema), wrapAsync(async (req, res) => {
+  const { tier } = req.body as z.infer<typeof vendorTierSchema>;
   const vendorId = req.params["id"]!;
   const [user] = await db
     .update(usersTable)
@@ -729,5 +785,6 @@ router.patch("/vendors/:id/tier", wrapAsync(async (req, res) => {
   addAuditEntry({ action: "vendor_tier_update", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Vendor ${vendorId} tier set to ${tier}`, result: "success" });
   sendSuccess(res, user);
 }));
+
 
 export default router;

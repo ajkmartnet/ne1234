@@ -1120,8 +1120,16 @@ export const useUpdatePlatformSettings = () => {
 };
 
 /* ── Vendors ── */
-export const useVendors = () =>
-  useQuery({ queryKey: ["admin-vendors"], queryFn: () => adminFetch("/vendors"), refetchInterval: REFETCH_INTERVAL });
+export const useVendors = () => {
+  const { toast } = useToast();
+  const q = useQuery({ queryKey: ["admin-vendors"], queryFn: () => adminFetch("/vendors"), refetchInterval: REFETCH_INTERVAL });
+  useEffect(() => {
+    if (q.isError) {
+      toast({ title: "Failed to load vendors", description: (q.error as Error)?.message ?? "Please try again.", variant: "destructive" });
+    }
+  }, [q.isError]);
+  return q;
+};
 
 export const useFleetVendors = () =>
   useQuery({ queryKey: ["admin-fleet-vendors"], queryFn: () => adminFetch("/fleet/vendors"), refetchInterval: 60_000 });
@@ -1130,7 +1138,21 @@ export const useUpdateVendorStatus = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: any) => adminFetch(`/vendors/${id}/status`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-vendors"] }),
+    onSuccess: (_, variables: any) => {
+      qc.setQueryData(["admin-vendors"], (old: any) => {
+        if (!old?.vendors) return old;
+        return {
+          ...old,
+          vendors: old.vendors.map((v: any) => {
+            if (v.id !== variables.id) return v;
+            const updated = { ...v, ...variables };
+            if (variables.isActive === true && !variables.isBanned) updated.approvalStatus = "approved";
+            return updated;
+          }),
+        };
+      });
+      qc.invalidateQueries({ queryKey: ["admin-vendors"] });
+    },
   });
 };
 

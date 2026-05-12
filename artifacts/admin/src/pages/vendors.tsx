@@ -367,11 +367,12 @@ export default function Vendors() {
     }
     setInviteSending(true);
     try {
-      await adminFetch("/vendors/invite", {
+      const res: any = await adminFetch("/vendors/invite", {
         method: "POST",
-        body: JSON.stringify({ phone: invitePhone.trim() || undefined, email: inviteEmail.trim() || undefined, storeName: inviteStore.trim() || undefined }),
+        body: JSON.stringify({ phone: invitePhone.trim() || undefined, email: inviteEmail.trim() || undefined, name: inviteStore.trim() || undefined }),
       });
-      toast({ title: "Invitation sent", description: `Vendor invite sent to ${invitePhone.trim() || inviteEmail.trim()}` });
+      const channelLabel = res?.channel === "push" ? "Push notification sent" : res?.channel === "email" ? "Email sent" : "Invite logged";
+      toast({ title: "Invitation sent", description: `${channelLabel} to ${invitePhone.trim() || inviteEmail.trim()}` });
       setInviteOpen(false);
     } catch (err: any) {
       toast({ title: "Failed to invite vendor", description: err?.message || "Please try again", variant: "destructive" });
@@ -471,24 +472,32 @@ export default function Vendors() {
 
   const handleBulkApprove = useCallback(async () => {
     const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      try {
-        await adminFetch(`/vendors/${id}/status`, { method: "PATCH", body: JSON.stringify({ isActive: true, isBanned: false }) });
-      } catch { /* continue */ }
+    const results = await Promise.allSettled(
+      ids.map(id => adminFetch(`/vendors/${id}/status`, { method: "PATCH", body: JSON.stringify({ isActive: true, isBanned: false }) }))
+    );
+    const succeeded = results.filter(r => r.status === "fulfilled").length;
+    const failed = results.filter(r => r.status === "rejected").length;
+    if (failed > 0) {
+      toast({ title: `${succeeded} approved, ${failed} failed`, variant: "destructive" });
+    } else {
+      toast({ title: `${succeeded} vendor${succeeded !== 1 ? "s" : ""} approved` });
     }
-    toast({ title: `${ids.length} vendor(s) approved` });
     setSelectedIds(new Set());
     await qc.invalidateQueries({ queryKey: ["admin-vendors"] });
   }, [selectedIds, toast, qc]);
 
   const handleBulkSuspend = useCallback(async () => {
     const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      try {
-        await adminFetch(`/vendors/${id}/status`, { method: "PATCH", body: JSON.stringify({ isActive: false, isBanned: false }) });
-      } catch { /* continue */ }
+    const results = await Promise.allSettled(
+      ids.map(id => adminFetch(`/vendors/${id}/status`, { method: "PATCH", body: JSON.stringify({ isActive: false, isBanned: false }) }))
+    );
+    const succeeded = results.filter(r => r.status === "fulfilled").length;
+    const failed = results.filter(r => r.status === "rejected").length;
+    if (failed > 0) {
+      toast({ title: `${succeeded} suspended, ${failed} failed`, variant: "destructive" });
+    } else {
+      toast({ title: `${succeeded} vendor${succeeded !== 1 ? "s" : ""} suspended` });
     }
-    toast({ title: `${ids.length} vendor(s) suspended` });
     setSelectedIds(new Set());
     await qc.invalidateQueries({ queryKey: ["admin-vendors"] });
   }, [selectedIds, toast, qc]);

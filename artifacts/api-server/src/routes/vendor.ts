@@ -125,23 +125,28 @@ router.patch("/profile", validateBody(patchProfileSchema), async (req, res) => {
 
 /* ── GET /vendor/profile/quick-replies ── */
 router.get("/profile/quick-replies", async (req, res) => {
-  const vendorId = req.vendorId!;
-  const [profile] = await db
-    .select({ quickReplies: vendorProfilesTable.quickReplies })
-    .from(vendorProfilesTable)
-    .where(eq(vendorProfilesTable.userId, vendorId));
-  let shortcuts: string[] = [];
-  if (profile?.quickReplies) {
-    try {
-      const parsed = JSON.parse(profile.quickReplies);
-      if (Array.isArray(parsed) && parsed.every(s => typeof s === "string")) {
-        shortcuts = parsed;
+  try {
+    const vendorId = req.vendorId!;
+    const [profile] = await db
+      .select({ quickReplies: vendorProfilesTable.quickReplies })
+      .from(vendorProfilesTable)
+      .where(eq(vendorProfilesTable.userId, vendorId));
+    let shortcuts: string[] = [];
+    if (profile?.quickReplies) {
+      try {
+        const parsed = JSON.parse(profile.quickReplies);
+        if (Array.isArray(parsed) && parsed.every(s => typeof s === "string")) {
+          shortcuts = parsed;
+        }
+      } catch (e) {
+        logger.warn({ vendorId, err: (e as Error).message }, "[vendor/quick-replies] corrupted quickReplies data, returning empty array");
       }
-    } catch (e) {
-      logger.warn({ vendorId, err: (e as Error).message }, "[vendor/quick-replies] corrupted quickReplies data, returning empty array");
     }
+    sendSuccess(res, { quickReplies: shortcuts });
+  } catch (err) {
+    logger.error({ err }, "[vendor/quick-replies] unexpected error");
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
-  sendSuccess(res, { quickReplies: shortcuts });
 });
 
 /* ── PATCH /vendor/profile/quick-replies ── */

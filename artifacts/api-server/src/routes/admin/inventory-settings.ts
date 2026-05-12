@@ -12,6 +12,7 @@ import {
 } from "../admin-shared.js";
 import { sendSuccess, sendError } from "../../lib/response.js";
 import { validateBody } from "../../middleware/validate.js";
+import { requirePermission } from "../../middleware/require-permission.js";
 
 /**
  * /api/admin/inventory-settings
@@ -99,7 +100,7 @@ function rowsToSettings(rows: { key: string; value: string }[]): InventorySettin
   };
 }
 
-router.get("/inventory-settings", async (_req, res) => {
+router.get("/inventory-settings", requirePermission("vendors.view"), async (_req, res) => {
   try {
     const rows = await db
       .select({ key: platformSettingsTable.key, value: platformSettingsTable.value })
@@ -121,7 +122,7 @@ const inventorySettingsSchema = z.object({
   backInStockNotifyChannels: z.array(channelSchema).max(3),
 });
 
-router.put("/inventory-settings", validateBody(inventorySettingsSchema), async (req, res) => {
+router.put("/inventory-settings", requirePermission("vendors.edit"), validateBody(inventorySettingsSchema), async (req, res) => {
   try {
   const body = req.body as z.infer<typeof inventorySettingsSchema>;
   /* Dedupe channels server-side so we never persist "email,email,push". */

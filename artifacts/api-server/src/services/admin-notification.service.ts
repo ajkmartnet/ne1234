@@ -129,11 +129,10 @@ export class NotificationService {
     }
 
     try {
-      const result = await sendEmail({
+      await sendEmail({
         to: emailAddress,
         subject: input.subject,
         html: input.body,
-        templateId: input.templateId,
       });
 
       logger.info(
@@ -143,7 +142,7 @@ export class NotificationService {
 
       return {
         success: true,
-        messageId: result?.messageId || generateId(),
+        messageId: generateId(),
       };
     } catch (error) {
       logger.error(

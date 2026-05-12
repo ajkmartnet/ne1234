@@ -681,10 +681,27 @@ export async function sendAdminPasswordOutOfBandResetEmail(
   }
 }
 
-/* ── Generic dispatch wrapper for NotificationService ── */
+/* ── Generic transactional email sender (env-var SMTP only) ── */
 export async function sendEmail(
-  input: { to: string; subject: string; html: string; templateId?: string }
-): Promise<{ messageId?: string } & EmailResult> {
-  logger.info(`[Email:generic] To: ${input.to} | Subject: ${input.subject}`);
-  return { sent: true, provider: "console", messageId: input.templateId };
+  input: { to: string; subject: string; html: string; text?: string },
+): Promise<EmailResult> {
+  const transport = getEnvTransporter();
+  if (!transport) {
+    logger.info(`[Email:generic] SMTP not configured — logging only. To: ${input.to} | Subject: ${input.subject}`);
+    return { sent: false, reason: "SMTP not configured" };
+  }
+  try {
+    await transport.sendMail({
+      from: resolveFrom(),
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      text: input.text,
+    });
+    logger.info(`[Email:generic] Sent to ${input.to} | Subject: ${input.subject}`);
+    return { sent: true };
+  } catch (err: any) {
+    logger.error(`[Email:generic] Failed to send to ${input.to}:`, err?.message);
+    return { sent: false, error: err?.message };
+  }
 }

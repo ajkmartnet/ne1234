@@ -25,6 +25,9 @@ import { buildCursorPage, decodeCursor } from "../../../lib/pagination/cursor.js
 import { FinanceService } from "../../../services/admin-finance.service.js";
 import { AuditService } from "../../../services/admin-audit.service.js";
 import { getIO } from "../../../lib/socketio.js";
+import { requirePermission } from "../../../middleware/require-permission.js";
+import { validateBody } from "../../../middleware/validate.js";
+import { z } from "zod";
 
 const router = Router();
 router.get("/transactions", async (req, res) => {
@@ -114,7 +117,7 @@ router.get("/transactions-enriched", async (req, res) => {
 });
 
 /* ── Vendors list ── */
-router.get("/vendors", async (_req, res) => {
+router.get("/vendors", requirePermission("vendors.view"), async (_req, res) => {
   try {
   const settings = await getCachedSettings();
   const isDemoMode = (settings["platform_mode"] ?? "demo") === "demo";
@@ -204,14 +207,31 @@ router.get("/vendors", async (_req, res) => {
   }
 });
 
-router.patch("/vendors/:id/status", async (req, res) => {
+const vendorStatusSchema = z.object({
+  isActive:    z.boolean().optional(),
+  isBanned:    z.boolean().optional(),
+  banReason:   z.string().max(500).nullable().optional(),
+  securityNote: z.string().max(500).nullable().optional(),
+});
+
+router.patch("/vendors/:id/status", requirePermission("vendors.edit"), validateBody(vendorStatusSchema), async (req, res) => {
   try {
   const { isActive, isBanned, banReason, securityNote } = req.body;
+
+  const [existing] = await db.select({ id: usersTable.id, roles: usersTable.roles, isBanned: usersTable.isBanned })
+    .from(usersTable).where(eq(usersTable.id, req.params["id"]!)).limit(1);
+  if (!existing) { sendNotFound(res, "Vendor not found"); return; }
+  if (!existing.roles || !existing.roles.toLowerCase().includes("vendor")) {
+    sendValidationError(res, "User is not a vendor"); return;
+  }
+
   const updates: Record<string, any> = { updatedAt: new Date() };
   if (isActive    !== undefined) updates.isActive    = isActive;
   if (isBanned    !== undefined) updates.isBanned    = isBanned;
   if (banReason   !== undefined) updates.banReason   = banReason || null;
   if (securityNote !== undefined) updates.securityNote = securityNote || null;
+  const effectiveBanned = isBanned !== undefined ? isBanned : existing.isBanned;
+  if (isActive === true && !effectiveBanned) updates.approvalStatus = "approved";
   const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, req.params["id"]!)).returning();
   if (!user) { sendNotFound(res, "Vendor not found"); return; }
   if (isBanned || isActive === false) {
@@ -226,16 +246,16 @@ router.patch("/vendors/:id/status", async (req, res) => {
   }
 });
 
-router.post("/vendors/:id/payout", async (req, res) => {
+const vendorFinancialSchema = z.object({
+  amount: z.number().positive("Amount must be positive"),
+  description: z.string().max(200).optional(),
+});
+
+router.post("/vendors/:id/payout", requirePermission("vendors.edit"), validateBody(vendorFinancialSchema), async (req, res) => {
   try {
   const adminReq = req as AdminRequest;
   const { amount, description } = req.body;
   const vendorId = req.params["id"]!;
-  
-  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-    sendValidationError(res, "Valid amount required");
-    return;
-  }
 
   try {
     const result = await AuditService.executeWithAudit(
@@ -270,16 +290,11 @@ router.post("/vendors/:id/payout", async (req, res) => {
   }
 });
 
-router.post("/vendors/:id/credit", async (req, res) => {
+router.post("/vendors/:id/credit", requirePermission("vendors.edit"), validateBody(vendorFinancialSchema), async (req, res) => {
   try {
   const adminReq = req as AdminRequest;
   const { amount, description } = req.body;
   const vendorId = req.params["id"]!;
-  
-  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-    sendValidationError(res, "Valid amount required");
-    return;
-  }
 
   try {
     const result = await AuditService.executeWithAudit(
@@ -1056,12 +1071,16 @@ router.post("/riders/:id/credit", async (req, res) => {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
-router.patch("/vendors/:id/commission", async (req, res) => {
+const vendorCommissionSchema = z.object({
+  commissionPct: z.number()
+    .min(0, "Commission must be between 0 and 100")
+    .max(100, "Commission must be between 0 and 100")
+    .multipleOf(0.01, "Commission supports up to 2 decimal places"),
+});
+
+router.patch("/vendors/:id/commission", requirePermission("vendors.edit"), validateBody(vendorCommissionSchema), async (req, res) => {
   try {
   const { commissionPct } = req.body as { commissionPct: number };
-  if (commissionPct === undefined || isNaN(Number(commissionPct))) {
-    sendValidationError(res, "commissionPct required"); return;
-  }
   const [vendor] = await db.update(usersTable)
     .set({ commissionOverride: String(commissionPct), updatedAt: new Date() })
     .where(eq(usersTable.id, req.params["id"]!))
@@ -1105,7 +1124,7 @@ router.post("/riders/:id/override-suspension", async (req, res) => {
 });
 
 /* ── POST /admin/vendors/:id/override-suspension — override auto-suspension ─ */
-router.post("/vendors/:id/override-suspension", async (req, res) => {
+router.post("/vendors/:id/override-suspension", requirePermission("vendors.edit"), async (req, res) => {
   try {
   const userId = req.params["id"]!;
   const [user] = await db.select({ id: usersTable.id, autoSuspendedAt: usersTable.autoSuspendedAt })

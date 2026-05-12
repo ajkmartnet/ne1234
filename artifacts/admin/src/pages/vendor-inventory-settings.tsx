@@ -98,6 +98,26 @@ export default function VendorInventorySettingsPage() {
     return <LoadingState label="Loading inventory settings…" variant="page" />;
   }
 
+  if (q.isError && !q.data) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto space-y-6">
+        <PageHeader
+          icon={Package}
+          title={t(ADMIN_I18N_KEYS.vendor.inventoryTitle, "Vendor Inventory Settings")}
+          subtitle="Global defaults for stock thresholds and back-in-stock notifications. Vendors can override per product."
+          iconBgClass="bg-amber-100"
+          iconColorClass="text-amber-600"
+        />
+        <ErrorState
+          title="Could not load inventory settings"
+          error={q.error as Error}
+          onRetry={() => q.refetch()}
+          variant="card"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <PageHeader

@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { weatherConfigTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { addAuditEntry, getClientIp, type AdminRequest } from "../admin-shared.js";
-import { sendSuccess, sendValidationError } from "../../lib/response.js";
+import { sendSuccess, sendError, sendValidationError } from "../../lib/response.js";
 
 const router = Router();
 
@@ -19,7 +19,7 @@ router.get("/", async (_req, res) => {
     const config = await getOrCreateConfig();
     sendSuccess(res, { config });
   } catch (err: unknown) {
-    sendSuccess(res, { config: null, error: String(err) });
+    sendError(res, "Failed to load weather config", 500);
   }
 });
 
@@ -38,7 +38,7 @@ router.patch("/", async (req, res) => {
     addAuditEntry({ action: "weather_config_update", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Updated weather config: enabled=${updated?.widgetEnabled}, cities=${updated?.cities}`, result: "success" });
     sendSuccess(res, { config: updated });
   } catch (err: unknown) {
-    sendValidationError(res, `Failed to update weather config: ${String(err)}`);
+    sendError(res, "Failed to update weather config", 500);
   }
 });
 

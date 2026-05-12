@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { webhookRegistrationsTable, webhookLogsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { generateId, addAuditEntry, getClientIp, type AdminRequest } from "../admin-shared.js";
-import { sendSuccess, sendNotFound, sendValidationError } from "../../lib/response.js";
+import { sendSuccess, sendError, sendNotFound, sendValidationError } from "../../lib/response.js";
 import crypto from "crypto";
 
 const SUPPORTED_EVENTS = [
@@ -33,8 +33,8 @@ router.get("/webhooks", async (_req, res) => {
     const webhooks = await db.select().from(webhookRegistrationsTable).orderBy(desc(webhookRegistrationsTable.createdAt));
     const sanitized = webhooks.map(({ secret, ...rest }) => rest);
     sendSuccess(res, { webhooks: sanitized });
-  } catch (err: unknown) {
-    sendNotFound(res, `Failed to fetch webhooks: ${String(err)}`);
+  } catch {
+    sendError(res, "Failed to load webhooks", 500);
   }
 });
 
@@ -68,8 +68,8 @@ router.post("/webhooks", async (req, res) => {
 
     addAuditEntry({ action: "webhook_create", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Created webhook: ${url}`, result: "success" });
     sendSuccess(res, { webhook: created });
-  } catch (err: unknown) {
-    sendNotFound(res, `Failed to create webhook: ${String(err)}`);
+  } catch {
+    sendError(res, "Failed to create webhook", 500);
   }
 });
 
@@ -83,8 +83,8 @@ router.patch("/webhooks/:id/toggle", async (req, res) => {
     await db.update(webhookRegistrationsTable).set({ isActive: newState, updatedAt: new Date() }).where(eq(webhookRegistrationsTable.id, id));
     addAuditEntry({ action: "webhook_toggle", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `${newState ? "Enabled" : "Disabled"} webhook: ${existing.url}`, result: "success" });
     sendSuccess(res, { success: true, isActive: newState });
-  } catch (err: unknown) {
-    sendNotFound(res, `Failed to toggle webhook: ${String(err)}`);
+  } catch {
+    sendError(res, "Failed to toggle webhook", 500);
   }
 });
 
@@ -159,8 +159,8 @@ router.delete("/webhooks/:id", async (req, res) => {
     await db.delete(webhookRegistrationsTable).where(eq(webhookRegistrationsTable.id, id));
     addAuditEntry({ action: "webhook_delete", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Deleted webhook: ${existing.url}`, result: "success" });
     sendSuccess(res, { success: true });
-  } catch (err: unknown) {
-    sendNotFound(res, `Failed to delete webhook: ${String(err)}`);
+  } catch {
+    sendError(res, "Failed to delete webhook", 500);
   }
 });
 
@@ -172,8 +172,8 @@ router.get("/webhooks/:id/logs", async (req, res) => {
       .orderBy(desc(webhookLogsTable.createdAt))
       .limit(50);
     sendSuccess(res, { logs });
-  } catch (err: unknown) {
-    sendNotFound(res, `Failed to fetch webhook logs: ${String(err)}`);
+  } catch {
+    sendError(res, "Failed to load webhook logs", 500);
   }
 });
 

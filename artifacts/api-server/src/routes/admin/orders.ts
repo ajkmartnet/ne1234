@@ -715,7 +715,7 @@ router.post("/vendors/invite", async (req, res) => {
 });
 
 /* ── PATCH /admin/vendors/:id/tier — update vendor account tier ── */
-router.patch("/vendors/:id/tier", async (req, res) => {
+router.patch("/vendors/:id/tier", wrapAsync(async (req, res) => {
   const { tier } = req.body;
   const VALID_TIERS = ["bronze", "silver", "gold"];
   if (!tier || !VALID_TIERS.includes(String(tier))) {
@@ -731,6 +731,6 @@ router.patch("/vendors/:id/tier", async (req, res) => {
   if (!user) { sendNotFound(res, "Vendor not found"); return; }
   addAuditEntry({ action: "vendor_tier_update", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Vendor ${vendorId} tier set to ${tier}`, result: "success" });
   sendSuccess(res, user);
-});
+}));
 
 export default router;

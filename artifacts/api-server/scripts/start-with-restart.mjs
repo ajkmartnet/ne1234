@@ -49,11 +49,18 @@ function startServer() {
 
   // Use local tsx binary from the package's node_modules to avoid PATH issues
   const tsxBin = path.resolve(PKG_ROOT, "node_modules", ".bin", "tsx");
-  const tsxCmd = existsSync(tsxBin) ? tsxBin : "tsx";
+  // Fallback: walk up to workspace root's pnpm store
+  const tsxPnpm = path.resolve(PKG_ROOT, "../../node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs");
+  const tsxCmd = existsSync(tsxBin) ? tsxBin : (existsSync(tsxPnpm) ? "node" : "tsx");
+  const tsxArgs = existsSync(tsxBin)
+    ? ["--enable-source-maps", "./src/index.ts"]
+    : existsSync(tsxPnpm)
+      ? [tsxPnpm, "--enable-source-maps", "./src/index.ts"]
+      : ["--enable-source-maps", "./src/index.ts"];
 
   child = spawn(
     tsxCmd,
-    ["--enable-source-maps", "./src/index.ts"],
+    tsxArgs,
     {
       stdio: "inherit",
       cwd: PKG_ROOT,

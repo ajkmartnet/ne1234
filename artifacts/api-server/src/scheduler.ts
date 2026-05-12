@@ -49,16 +49,48 @@ function register(
   intervalMs: number,
 ): ReturnType<typeof setInterval> {
   _registeredJobs.push({ name: label, intervalMs, startedAt: new Date() });
-  fn().catch((e: unknown) => {
-    logger.warn({ err: (e as Error).message, job: label }, "[scheduler] immediate first-run failed");
-  });
+  
+  // Execute first run with retry logic
+  let retries = 0;
+  const maxRetries = 3;
+  const retryDelay = 5000; // 5 seconds
+  
+  const executeWithRetry = async (): Promise<void> => {
+    try {
+      await fn();
+      retries = 0; // Reset on success
+      logger.debug({ job: label }, "[scheduler] first-run completed successfully");
+    } catch (e: unknown) {
+      const err = e as Error;
+      if (++retries < maxRetries) {
+        logger.warn(
+          { err: err.message, job: label, retries, maxRetries },
+          "[scheduler] first-run failed, scheduling retry"
+        );
+        setTimeout(executeWithRetry, retryDelay);
+      } else {
+        logger.error(
+          { err: err.message, job: label, retries },
+          "[scheduler] first-run failed permanently after retries"
+        );
+      }
+    }
+  };
+  
+  executeWithRetry();
+  
   const handle = setInterval(async () => {
     try {
       await fn();
     } catch (e: unknown) {
-      logger.warn({ err: (e as Error).message, job: label }, "[scheduler] cleanup job failed");
+      const err = e as Error;
+      logger.error(
+        { err: err.message, job: label, stack: err.stack },
+        "[scheduler] cleanup job failed"
+      );
     }
   }, intervalMs);
+  
   _timers.push(handle);
   return handle;
 }

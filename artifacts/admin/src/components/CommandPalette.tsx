@@ -641,7 +641,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-xs font-mono text-muted-foreground">#{item.id?.slice(-8).toUpperCase()}</p>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md capitalize ${(item.status && STATUS_COLORS[item.status]) || "bg-muted text-muted-foreground"}`}>{item.status}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md capitalize ${(item.status && STATUS_COLORS[item.status]) || "bg-muted text-muted-foreground"}`}>{item.status ? item.status.replace(/_/g, ' ') : 'Unknown'}</span>
                         {item.offeredFare && <span className="text-[10px] text-orange-600 font-bold">💬 Rs.{Math.round(item.offeredFare)}</span>}
                       </div>
                       <p className="text-sm font-medium truncate"><Highlight text={item.pickupAddress || "—"} query={query} /></p>
@@ -669,7 +669,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-xs font-mono text-muted-foreground">#{item.id?.slice(-8).toUpperCase()}</p>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md capitalize ${(item.status && STATUS_COLORS[item.status]) || "bg-muted text-muted-foreground"}`}>{item.status}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md capitalize ${(item.status && STATUS_COLORS[item.status]) || "bg-muted text-muted-foreground"}`}>{item.status ? item.status.replace(/_/g, ' ') : 'Unknown'}</span>
                         {item._pharm && <span className="text-[10px] text-purple-600 font-bold">Pharmacy</span>}
                       </div>
                       <p className="text-sm font-medium truncate"><Highlight text={item.deliveryAddress || "—"} query={query} /></p>

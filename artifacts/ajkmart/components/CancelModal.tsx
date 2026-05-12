@@ -176,7 +176,12 @@ export function CancelModal({
         body: JSON.stringify({ reason: selectedReason }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+        let data: any = {};
+        try {
+          data = await res.json();
+        } catch (parseErr) {
+          log.error(`Failed to parse error response (HTTP ${res.status}):`, parseErr);
+        }
         if (res.status === 409) {
           setError(data.error || "This order has already been processed and cannot be cancelled.");
         } else {
@@ -185,7 +190,16 @@ export function CancelModal({
         setLoading(false);
         return;
       }
-      const result = unwrapApiResponse(await res.json().catch(() => ({})));
+      let result;
+      try {
+        const json = await res.json();
+        result = unwrapApiResponse(json);
+      } catch (parseErr) {
+        log.error("Failed to parse success response or unwrap API response:", parseErr);
+        setError("Server returned invalid response. Please try again.");
+        setLoading(false);
+        return;
+      }
       dismiss(() => { onDone(result); onClose(); });
     } catch {
       setError("Network error. Please check your connection and try again.");

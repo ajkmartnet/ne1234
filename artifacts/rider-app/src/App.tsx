@@ -140,6 +140,12 @@ function AppRoutes() {
 
   useEffect(() => { initErrorReporter(); }, []);
 
+  useEffect(() => {
+    return () => {
+      queryClient.clear();
+    };
+  }, []);
+
   /* ── Apply network/retry settings from platform config on startup ── */
   useEffect(() => {
     const net = config?.network;
@@ -247,7 +253,8 @@ function AppRoutes() {
         if (fcmDismissTimer.current) clearTimeout(fcmDismissTimer.current);
       };
     }
-    if (typeof Notification === "undefined" || !Notification.requestPermission) return undefined;
+    if (typeof Notification === "undefined") return undefined;
+    if (!Notification.requestPermission) return undefined;
     if (sessionStorage.getItem(NOTIF_ASKED_KEY)) return undefined;
     if (Notification.permission !== "default") {
       if (Notification.permission === "granted") registerPush().catch(() => {});

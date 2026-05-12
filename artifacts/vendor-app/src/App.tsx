@@ -78,6 +78,12 @@ function AppRoutes() {
 
   useEffect(() => { initErrorReporter(); }, []);
 
+  useEffect(() => {
+    return () => {
+      queryClient.clear();
+    };
+  }, []);
+
   /* ── Apply network/retry settings from platform config on startup ── */
   useEffect(() => {
     const net = config?.network;
@@ -151,13 +157,9 @@ function AppRoutes() {
         }
 
         try {
-          type AudioCtxCtor = typeof AudioContext;
-          const AudioCtxClass: AudioCtxCtor =
-            window.AudioContext ??
-            (window as Window & { webkitAudioContext?: AudioCtxCtor }).webkitAudioContext ??
-            null!;
-          if (!AudioCtxClass) return;
-          const ctx = new AudioCtxClass();
+          const AudioContextCtor = (window as any).AudioContext || (window as any).webkitAudioContext;
+          if (!AudioContextCtor) return;
+          const ctx = new AudioContextCtor();
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.connect(gain);
@@ -407,8 +409,8 @@ export default function App() {
                  The previous logic forced "/vendor" whenever BASE_URL was
                  "/", which broke standalone deployments by mounting every
                  route under a non-existent /vendor prefix. */
-              const raw = vendorEnv.baseUrl;
-              if (typeof raw !== "string" || raw.length === 0) return "";
+              const raw = vendorEnv.baseUrl || "";
+              if (!raw || typeof raw !== "string") return "";
               return raw.replace(/\/$/, "");
             })()}>
             <AppRoutes />

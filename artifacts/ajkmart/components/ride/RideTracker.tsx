@@ -273,7 +273,12 @@ export function RideTracker({
     const status = ride?.status;
     if (status !== "searching" && status !== "no_riders") return;
     const poll = async () => {
-      try { const d = await getDispatchStatus(rideId); setDispatchInfo(d); } catch {}
+      try {
+        const d = await getDispatchStatus(rideId);
+        setDispatchInfo(d);
+      } catch (err) {
+        log.warn(`Failed to fetch dispatch status for ride ${rideId}:`, err);
+      }
     };
     poll();
     const iv = setInterval(poll, 5000);

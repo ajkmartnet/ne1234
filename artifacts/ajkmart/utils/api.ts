@@ -11,8 +11,29 @@ if (!domain) {
 export const API_BASE = domain ? `https://${domain}/api` : "";
 
 export function unwrapApiResponse<T = Record<string, unknown>>(json: unknown): T {
-  if (json != null && typeof json === "object" && "success" in json && (json as Record<string, unknown>)["success"] === true && "data" in json) {
-    return (json as Record<string, unknown>)["data"] as T;
+  // Validate input is an object
+  if (!json || typeof json !== "object") {
+    log.error("API response is not an object:", json);
+    throw new Error(`Invalid API response type: ${typeof json}`);
   }
-  return json as T;
+  
+  const obj = json as Record<string, unknown>;
+  
+  // Validate response structure
+  if (obj.success === true) {
+    if (!obj.hasOwnProperty("data")) {
+      log.error("API response has success=true but no data field");
+      throw new Error("API response missing data field");
+    }
+    return obj.data as T;
+  }
+  
+  // If not successful, log and throw
+  if (obj.success === false) {
+    log.error("API returned success=false:", obj.error || obj.message);
+    throw new Error(`API error: ${obj.error || obj.message || "Unknown error"}`);
+  }
+  
+  // If no success field, return as-is but validate it's an object
+  return obj as T;
 }

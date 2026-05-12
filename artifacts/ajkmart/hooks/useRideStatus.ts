@@ -150,8 +150,14 @@ export function useRideStatus(rideId: string): RideStatusHookResult {
         signal: controller.signal,
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error("SSE connection failed");
+      // Validate response status before checking body
+      if (!response.ok) {
+        throw new Error(`SSE connection failed: HTTP ${response.status} ${response.statusText}`);
+      }
+      
+      // Check if body stream is available (required for SSE)
+      if (!response.body) {
+        throw new Error("SSE connection response has no body stream");
       }
 
       if (!mountedRef.current) return;

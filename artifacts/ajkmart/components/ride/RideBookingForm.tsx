@@ -379,7 +379,9 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
   useEffect(() => {
     getRideStops()
       .then((data) => { if (data?.locations?.length) setPopularSpots(data.locations); })
-      .catch(() => {});
+      .catch((err) => {
+        log.warn("Failed to load popular spots:", err);
+      });
   }, []);
 
   useEffect(() => {
@@ -393,7 +395,8 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
           setPayMethod(mapped[0]!.id);
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        log.error("Failed to fetch payment methods, using fallback:", err);
         setPayMethods([{ id: "cash", label: "Cash" }, { id: "wallet", label: "Wallet" }]);
         setPayMethod("cash");
       });
@@ -428,8 +431,8 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
       .then((data: any) => {
         if (data?.routes?.length) setSchoolRoutes(data.routes);
       })
-      .catch(() => {
-        log.warn("School routes fetch failed");
+      .catch((err) => {
+        log.error("School routes fetch failed:", err);
       });
   }, [rideType]);
 
@@ -456,8 +459,12 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
             animateToStep("vehicle");
           }, 600);
         }
-      } catch {}
-    }).catch(() => {});
+      } catch (e) {
+        log.error("Failed to restore pending ride:", e);
+      }
+    }).catch((err) => {
+      log.warn("Failed to read pending ride from storage:", err);
+    });
   }, [user?.id]);
 
   useEffect(() => {
@@ -475,7 +482,9 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
       .then((r) => r.json())
       .then((j) => unwrapApiResponse<{ debtBalance?: number }>(j))
       .then((d) => { if ((d?.debtBalance ?? 0) > 0) setDebtBalance(d.debtBalance ?? 0); })
-      .catch(() => {});
+      .catch((err) => {
+        log.warn("Failed to fetch debt balance:", err);
+      });
   }, [user?.id]);
 
   const handleMyLocation = async () => {

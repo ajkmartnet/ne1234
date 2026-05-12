@@ -87,65 +87,75 @@ router.post("/users", requirePermission("users.create"), async (req, res) => {
 /* GET /admin/users/search?q=...&limit=20
    Lightweight server-side user search used by OTP Control and other admin tools.
    Returns users matching name or phone query (partial, case-insensitive). */
-router.get("/users/search", async (req, res) => {
+router.get("/users/search", requirePermission("users.view"), async (req, res) => {
   const q = ((req.query?.q as string) ?? "").trim();
   const limitN = Math.min(50, Math.max(1, parseInt((req.query?.limit as string) ?? "20", 10)));
 
-  const where = and(
-    isNull(usersTable.deletedAt),
-    q ? or(ilike(usersTable.name, `%${q}%`), ilike(usersTable.phone, `%${q}%`)) : undefined,
-  );
+  try {
+    const where = and(
+      isNull(usersTable.deletedAt),
+      q ? or(ilike(usersTable.name, `%${q}%`), ilike(usersTable.phone, `%${q}%`)) : undefined,
+    );
 
-  const rows = await db
-    .select({
-      id: usersTable.id,
-      name: usersTable.name,
-      phone: usersTable.phone,
-      role: usersTable.roles,
-      otpBypassUntil: sql<string | null>`${usersTable}.otp_bypass_until`,
-    })
-    .from(usersTable)
-    .where(where)
-    .orderBy(asc(usersTable.name))
-    .limit(limitN);
+    const rows = await db
+      .select({
+        id: usersTable.id,
+        name: usersTable.name,
+        phone: usersTable.phone,
+        role: usersTable.roles,
+        otpBypassUntil: sql<string | null>`${usersTable}.otp_bypass_until`,
+      })
+      .from(usersTable)
+      .where(where)
+      .orderBy(asc(usersTable.name))
+      .limit(limitN);
 
-  sendSuccess(res, { users: rows, total: rows.length });
+    sendSuccess(res, { users: rows, total: rows.length });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] search failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* GET /admin/users/search-riders?q=...&limit=20&onlineOnly=true
    Lightweight server-side rider search used by RideDetailModal for reassignment.
    Returns only active, non-rejected riders matching the search query.
    Pass onlineOnly=true to restrict to riders currently online (matches reassign constraints). */
-router.get("/users/search-riders", async (req, res) => {
+router.get("/users/search-riders", requirePermission("users.view"), async (req, res) => {
   const q = ((req.query?.q as string) ?? "").trim();
   const limitN = Math.min(50, Math.max(1, parseInt((req.query?.limit as string) ?? "20", 10)));
   const onlineOnly = (req.query?.onlineOnly as string) === "true";
 
-  const conditions = [
-    isNull(usersTable.deletedAt) as ReturnType<typeof eq>,
-    ilike(usersTable.roles, "%rider%") as ReturnType<typeof eq>,
-    eq(usersTable.isActive, true),
-    ne(usersTable.approvalStatus, "rejected"),
-  ];
-  if (onlineOnly) {
-    conditions.push(eq(usersTable.isOnline, true) as ReturnType<typeof eq>);
+  try {
+    const conditions = [
+      isNull(usersTable.deletedAt) as ReturnType<typeof eq>,
+      ilike(usersTable.roles, "%rider%") as ReturnType<typeof eq>,
+      eq(usersTable.isActive, true),
+      ne(usersTable.approvalStatus, "rejected"),
+    ];
+    if (onlineOnly) {
+      conditions.push(eq(usersTable.isOnline, true) as ReturnType<typeof eq>);
+    }
+    if (q) {
+      conditions.push(or(
+        ilike(usersTable.name, `%${q}%`),
+        ilike(usersTable.phone, `%${q}%`),
+      )! as ReturnType<typeof eq>);
+    }
+    const riders = await db
+      .select({ id: usersTable.id, name: usersTable.name, phone: usersTable.phone, isOnline: usersTable.isOnline, approvalStatus: usersTable.approvalStatus })
+      .from(usersTable)
+      .where(and(...conditions))
+      .orderBy(asc(usersTable.name))
+      .limit(limitN);
+    sendSuccess(res, { riders, total: riders.length });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] search-riders failed");
+    sendError(res, "An internal error occurred", 500);
   }
-  if (q) {
-    conditions.push(or(
-      ilike(usersTable.name, `%${q}%`),
-      ilike(usersTable.phone, `%${q}%`),
-    )! as ReturnType<typeof eq>);
-  }
-  const riders = await db
-    .select({ id: usersTable.id, name: usersTable.name, phone: usersTable.phone, isOnline: usersTable.isOnline, approvalStatus: usersTable.approvalStatus })
-    .from(usersTable)
-    .where(and(...conditions))
-    .orderBy(asc(usersTable.name))
-    .limit(limitN);
-  sendSuccess(res, { riders, total: riders.length });
 });
 
-router.get("/users", async (req, res) => {
+router.get("/users", requirePermission("users.view"), async (req, res) => {
   const filter = (req.query?.filter as string) ?? "";
   const conditionTier = (req.query?.conditionTier as string) ?? "";
   const search = ((req.query?.search as string) ?? "").trim();
@@ -218,192 +228,35 @@ router.get("/users", async (req, res) => {
     .where(finalWhere)
     .orderBy(desc(usersTable.createdAt));
 
-  const condCounts = await db.select({
-    userId: accountConditionsTable.userId,
-    activeCount: count(),
-    maxSeverity: sql<string>`MAX(CASE ${accountConditionsTable.severity}::text WHEN 'ban' THEN 5 WHEN 'suspension' THEN 4 WHEN 'restriction_strict' THEN 3 WHEN 'restriction_normal' THEN 2 WHEN 'warning' THEN 1 ELSE 0 END)`,
-    maxSeverityLabel: sql<string>`(ARRAY['warning','warning','restriction_normal','restriction_strict','suspension','ban'])[1 + MAX(CASE ${accountConditionsTable.severity}::text WHEN 'ban' THEN 5 WHEN 'suspension' THEN 4 WHEN 'restriction_strict' THEN 3 WHEN 'restriction_normal' THEN 2 WHEN 'warning' THEN 1 ELSE 0 END)]`,
-  }).from(accountConditionsTable)
-    .where(eq(accountConditionsTable.isActive, true))
-    .groupBy(accountConditionsTable.userId);
+  try {
+    const globalStatsQuery = db.select({
+      totalAll: count(),
+      totalActive: sql<number>`COUNT(*) FILTER (WHERE ${usersTable.isActive} = true AND ${usersTable.isBanned} = false)::int`,
+      totalBanned: sql<number>`COUNT(*) FILTER (WHERE ${usersTable.isBanned} = true)::int`,
+      totalBlocked: sql<number>`COUNT(*) FILTER (WHERE ${usersTable.isActive} = false AND ${usersTable.isBanned} = false)::int`,
+    }).from(usersTable).where(isNull(usersTable.deletedAt));
 
-  const condMap = new Map(condCounts.map(c => [c.userId, { count: Number(c.activeCount), maxSeverity: c.maxSeverityLabel }]));
+    const condCounts = await db.select({
+      userId: accountConditionsTable.userId,
+      activeCount: count(),
+      maxSeverity: sql<string>`MAX(CASE ${accountConditionsTable.severity}::text WHEN 'ban' THEN 5 WHEN 'suspension' THEN 4 WHEN 'restriction_strict' THEN 3 WHEN 'restriction_normal' THEN 2 WHEN 'warning' THEN 1 ELSE 0 END)`,
+      maxSeverityLabel: sql<string>`(ARRAY['warning','warning','restriction_normal','restriction_strict','suspension','ban'])[1 + MAX(CASE ${accountConditionsTable.severity}::text WHEN 'ban' THEN 5 WHEN 'suspension' THEN 4 WHEN 'restriction_strict' THEN 3 WHEN 'restriction_normal' THEN 2 WHEN 'warning' THEN 1 ELSE 0 END)]`,
+    }).from(accountConditionsTable)
+      .where(eq(accountConditionsTable.isActive, true))
+      .groupBy(accountConditionsTable.userId);
 
-  const enrich = (rows: Awaited<typeof finalBaseQuery>) => rows.map(({ user: u, vendorProfile, riderProfile }) => ({
-    ...stripUser(u),
-    roles: (u.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean),
-    walletBalance: parseFloat(u.walletBalance ?? "0"),
-    createdAt: u.createdAt.toISOString(),
-    updatedAt: u.updatedAt.toISOString(),
-    conditionCount: condMap.get(u.id)?.count || 0,
-    maxConditionSeverity: condMap.get(u.id)?.maxSeverity || null,
-    isMpinLocked: !!(u.walletPinLockedUntil && u.walletPinLockedUntil.getTime() > Date.now()),
-    hasMpin: !!u.walletPinHash,
-    vendorProfile: vendorProfile?.userId != null ? {
-      storeName: vendorProfile.storeName,
-      businessType: vendorProfile.businessType,
-      businessName: vendorProfile.businessName,
-      ntn: vendorProfile.ntn,
-      storeCategory: vendorProfile.storeCategory,
-      storeIsOpen: vendorProfile.storeIsOpen,
-    } : null,
-    riderProfile: riderProfile?.userId != null ? {
-      vehicleType: riderProfile.vehicleType,
-      vehiclePlate: riderProfile.vehiclePlate,
-      drivingLicense: riderProfile.drivingLicense,
-      vehicleRegNo: riderProfile.vehicleRegNo,
-      documents: riderProfile.documents,
-    } : null,
-  }));
+    const condMap = new Map(condCounts.map(c => [c.userId, { count: Number(c.activeCount), maxSeverity: c.maxSeverityLabel }]));
 
-  const globalStatsQuery = db.select({
-    totalAll: count(),
-    totalActive: sql<number>`COUNT(*) FILTER (WHERE ${usersTable.isActive} = true AND ${usersTable.isBanned} = false)::int`,
-    totalBanned: sql<number>`COUNT(*) FILTER (WHERE ${usersTable.isBanned} = true)::int`,
-    totalBlocked: sql<number>`COUNT(*) FILTER (WHERE ${usersTable.isActive} = false AND ${usersTable.isBanned} = false)::int`,
-  }).from(usersTable);
-
-  // Pure DB pagination: COUNT query + paginated fetch + global stats run in parallel
-  const [countResult, rows, [globalStats]] = await Promise.all([
-    db.select({ total: count() }).from(usersTable).where(finalWhere),
-    finalBaseQuery.limit(pageSize).offset((pageNum - 1) * pageSize),
-    globalStatsQuery,
-  ]);
-  const total = Number(countResult[0]?.total ?? 0);
-  const enrichedUsers = enrich(rows);
-  sendSuccess(res, {
-    users: enrichedUsers,
-    total,
-    page: pageNum,
-    pageSize,
-    activeCount: Number(globalStats?.totalActive ?? 0),
-    bannedCount: Number(globalStats?.totalBanned ?? 0),
-    blockedCount: Number(globalStats?.totalBlocked ?? 0),
-    totalCount: Number(globalStats?.totalAll ?? 0),
-  });
-});
-
-/* ── PATCH /admin/users/bulk-ban — ban/unban multiple users ── */
-router.patch("/users/bulk-ban", requirePermission("users.ban"), async (req, res) => {
-  const { ids, action, reason } = req.body as { ids: string[]; action: "ban" | "unban"; reason?: string };
-  if (!ids?.length) { sendValidationError(res, "ids required"); return; }
-  if (action !== "ban" && action !== "unban") { sendValidationError(res, "action must be 'ban' or 'unban'"); return; }
-  const adminReq = req as AdminRequest;
-  for (const id of ids) {
-    if (action === "ban") {
-      const [u] = await db.select({ roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id)).limit(1);
-      await db.insert(accountConditionsTable).values({
-        id: generateId(),
-        userId: id,
-        userRole: u?.roles?.split(",")[0]?.trim() || "customer",
-        conditionType: "ban_hard",
-        severity: "ban",
-        category: "ban",
-        reason: reason || "Bulk banned by admin",
-        appliedBy: adminReq.adminId || "admin",
-      });
-    } else {
-      await db.update(accountConditionsTable).set({
-        isActive: false, liftedAt: new Date(), liftedBy: adminReq.adminId || "admin",
-        liftReason: "Bulk unbanned via admin", updatedAt: new Date(),
-      }).where(and(
-        eq(accountConditionsTable.userId, id),
-        eq(accountConditionsTable.isActive, true),
-        eq(accountConditionsTable.severity, "ban"),
-      ));
-    }
-    await reconcileUserFlags(id);
-  }
-  addAuditEntry({ action: `bulk_${action}`, ip: getClientIp(req), adminId: adminReq.adminId, details: `Bulk ${action}: ${ids.length} users`, result: "success" });
-  sendSuccess(res, { success: true, affected: ids.length, action });
-});
-
-router.patch("/users/:id", requirePermission("users.edit"), async (req, res) => {
-  const adminReq = req as AdminRequest;
-  const { role, isActive, walletBalance } = req.body;
-  const userId = req.params["id"]!;
-  const updates: Partial<typeof usersTable.$inferInsert> & { tokenVersion?: ReturnType<typeof sql> } = {};
-  if (role !== undefined) { updates.roles = role; }
-  if (isActive !== undefined) updates.isActive = isActive;
-
-  if (role === "vendor" || role === "rider") {
-    updates.isActive = true;
-    updates.approvalStatus = "approved";
-  }
-
-  // Route wallet balance changes through FinanceService to preserve audit trail
-  if (walletBalance !== undefined) {
-    const currentUser = await db.select({ walletBalance: usersTable.walletBalance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1).then(r => r[0]);
-    if (!currentUser) { sendNotFound(res, "User not found"); return; }
-    const current = parseFloat(currentUser.walletBalance ?? "0");
-    const desired = parseFloat(String(walletBalance));
-    const diff = parseFloat((desired - current).toFixed(2));
-    if (diff !== 0) {
-      await FinanceService.createTransaction({
-        userId,
-        amount: Math.abs(diff),
-        type: diff > 0 ? "credit" : "debit",
-        reason: `Admin balance adjustment by ${adminReq.adminName || adminReq.adminId || "admin"}`,
-      });
-    }
-  }
-
-  if (Object.keys(updates).length > 0) {
-    const [user] = await db
-      .update(usersTable)
-      .set({ ...(updates as typeof usersTable.$inferInsert), updatedAt: new Date() })
-      .where(eq(usersTable.id, userId))
-      .returning();
-
-    if (!user) { sendNotFound(res, "User not found"); return; }
-    /* Revoke sessions on role or status change so user re-authenticates with new role */
-    if (role !== undefined || isActive === false) {
-      revokeAllUserSessions(userId).catch(() => {});
-    }
-    // Upsert a blank profile row when role changes to vendor or rider so the
-    // admin UI immediately shows a profile section without requiring the user
-    // to fill it in first.
-    if (role !== undefined) {
-      if (String(role).includes("vendor")) {
-        await db.insert(vendorProfilesTable).values({ userId }).onConflictDoNothing();
-      }
-      if (String(role).includes("rider")) {
-        await db.insert(riderProfilesTable).values({ userId }).onConflictDoNothing();
-      }
-    }
-    const [refreshed] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-    const u = refreshed ?? user;
-    sendSuccess(res, { ...stripUser(u), roles: (u.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean), walletBalance: parseFloat(u.walletBalance ?? "0") });
-  } else {
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-    if (!user) { sendNotFound(res, "User not found"); return; }
-    sendSuccess(res, { ...stripUser(user), roles: (user.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean), walletBalance: parseFloat(user.walletBalance ?? "0") });
-  }
-});
-
-
-router.get("/users/pending", async (_req, res) => {
-  const rows = await db
-    .select({
-      user: usersTable,
-      vendorProfile: vendorProfilesTable,
-      riderProfile: riderProfilesTable,
-    })
-    .from(usersTable)
-    .leftJoin(vendorProfilesTable, eq(usersTable.id, vendorProfilesTable.userId))
-    .leftJoin(riderProfilesTable, eq(usersTable.id, riderProfilesTable.userId))
-    .where(eq(usersTable.approvalStatus, "pending"))
-    .orderBy(desc(usersTable.createdAt));
-
-  sendSuccess(res, {
-    users: rows.map(({ user: u, vendorProfile, riderProfile }) => ({
+    const enrich = (rows: Awaited<typeof finalBaseQuery>) => rows.map(({ user: u, vendorProfile, riderProfile }) => ({
       ...stripUser(u),
       roles: (u.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean),
       walletBalance: parseFloat(u.walletBalance ?? "0"),
-      hasMpin: !!u.walletPinHash,
-      isMpinLocked: !!(u.walletPinLockedUntil && u.walletPinLockedUntil.getTime() > Date.now()),
       createdAt: u.createdAt.toISOString(),
       updatedAt: u.updatedAt.toISOString(),
+      conditionCount: condMap.get(u.id)?.count || 0,
+      maxConditionSeverity: condMap.get(u.id)?.maxSeverity || null,
+      isMpinLocked: !!(u.walletPinLockedUntil && u.walletPinLockedUntil.getTime() > Date.now()),
+      hasMpin: !!u.walletPinHash,
       vendorProfile: vendorProfile?.userId != null ? {
         storeName: vendorProfile.storeName,
         businessType: vendorProfile.businessType,
@@ -419,9 +272,186 @@ router.get("/users/pending", async (_req, res) => {
         vehicleRegNo: riderProfile.vehicleRegNo,
         documents: riderProfile.documents,
       } : null,
-    })),
-    total: rows.length,
-  });
+    }));
+
+    // Pure DB pagination: COUNT query + paginated fetch + global stats run in parallel
+    const [countResult, rows, [globalStats]] = await Promise.all([
+      db.select({ total: count() }).from(usersTable).where(finalWhere),
+      finalBaseQuery.limit(pageSize).offset((pageNum - 1) * pageSize),
+      globalStatsQuery,
+    ]);
+    const total = Number(countResult[0]?.total ?? 0);
+    const enrichedUsers = enrich(rows);
+    sendSuccess(res, {
+      users: enrichedUsers,
+      total,
+      page: pageNum,
+      pageSize,
+      activeCount: Number(globalStats?.totalActive ?? 0),
+      bannedCount: Number(globalStats?.totalBanned ?? 0),
+      blockedCount: Number(globalStats?.totalBlocked ?? 0),
+      totalCount: Number(globalStats?.totalAll ?? 0),
+    });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] list users failed");
+    sendError(res, "An internal error occurred", 500);
+  }
+});
+
+/* ── PATCH /admin/users/bulk-ban — ban/unban multiple users ── */
+router.patch("/users/bulk-ban", requirePermission("users.ban"), async (req, res) => {
+  const { ids, action, reason } = req.body as { ids: string[]; action: "ban" | "unban"; reason?: string };
+  if (!ids?.length) { sendValidationError(res, "ids required"); return; }
+  if (action !== "ban" && action !== "unban") { sendValidationError(res, "action must be 'ban' or 'unban'"); return; }
+  const adminReq = req as AdminRequest;
+  try {
+    for (const id of ids) {
+      if (action === "ban") {
+        const [u] = await db.select({ roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id)).limit(1);
+        await db.insert(accountConditionsTable).values({
+          id: generateId(),
+          userId: id,
+          userRole: u?.roles?.split(",")[0]?.trim() || "customer",
+          conditionType: "ban_hard",
+          severity: "ban",
+          category: "ban",
+          reason: reason || "Bulk banned by admin",
+          appliedBy: adminReq.adminId || "admin",
+        });
+      } else {
+        await db.update(accountConditionsTable).set({
+          isActive: false, liftedAt: new Date(), liftedBy: adminReq.adminId || "admin",
+          liftReason: "Bulk unbanned via admin", updatedAt: new Date(),
+        }).where(and(
+          eq(accountConditionsTable.userId, id),
+          eq(accountConditionsTable.isActive, true),
+          eq(accountConditionsTable.severity, "ban"),
+        ));
+      }
+      await reconcileUserFlags(id);
+    }
+    addAuditEntry({ action: `bulk_${action}`, ip: getClientIp(req), adminId: adminReq.adminId, details: `Bulk ${action}: ${ids.length} users`, result: "success" });
+    sendSuccess(res, { success: true, affected: ids.length, action });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] bulk-ban failed");
+    sendError(res, "An internal error occurred", 500);
+  }
+});
+
+router.patch("/users/:id", requirePermission("users.edit"), async (req, res) => {
+  const adminReq = req as AdminRequest;
+  const { role, isActive, walletBalance } = req.body;
+  const userId = req.params["id"]!;
+  try {
+    const updates: Partial<typeof usersTable.$inferInsert> & { tokenVersion?: ReturnType<typeof sql> } = {};
+    if (role !== undefined) { updates.roles = role; }
+    if (isActive !== undefined) updates.isActive = isActive;
+
+    if (role === "vendor" || role === "rider") {
+      updates.isActive = true;
+      updates.approvalStatus = "approved";
+    }
+
+    // Route wallet balance changes through FinanceService to preserve audit trail
+    if (walletBalance !== undefined) {
+      const currentUser = await db.select({ walletBalance: usersTable.walletBalance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1).then(r => r[0]);
+      if (!currentUser) { sendNotFound(res, "User not found"); return; }
+      const current = parseFloat(currentUser.walletBalance ?? "0");
+      const desired = parseFloat(String(walletBalance));
+      const diff = parseFloat((desired - current).toFixed(2));
+      if (diff !== 0) {
+        await FinanceService.createTransaction({
+          userId,
+          amount: Math.abs(diff),
+          type: diff > 0 ? "credit" : "debit",
+          reason: `Admin balance adjustment by ${adminReq.adminName || adminReq.adminId || "admin"}`,
+        });
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      const [user] = await db
+        .update(usersTable)
+        .set({ ...(updates as typeof usersTable.$inferInsert), updatedAt: new Date() })
+        .where(eq(usersTable.id, userId))
+        .returning();
+
+      if (!user) { sendNotFound(res, "User not found"); return; }
+      /* Revoke sessions on role or status change so user re-authenticates with new role */
+      if (role !== undefined || isActive === false) {
+        revokeAllUserSessions(userId).catch(() => {});
+      }
+      // Upsert a blank profile row when role changes to vendor or rider so the
+      // admin UI immediately shows a profile section without requiring the user
+      // to fill it in first.
+      if (role !== undefined) {
+        if (String(role).includes("vendor")) {
+          await db.insert(vendorProfilesTable).values({ userId }).onConflictDoNothing();
+        }
+        if (String(role).includes("rider")) {
+          await db.insert(riderProfilesTable).values({ userId }).onConflictDoNothing();
+        }
+      }
+      const [refreshed] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      const u = refreshed ?? user;
+      sendSuccess(res, { ...stripUser(u), roles: (u.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean), walletBalance: parseFloat(u.walletBalance ?? "0") });
+    } else {
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      if (!user) { sendNotFound(res, "User not found"); return; }
+      sendSuccess(res, { ...stripUser(user), roles: (user.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean), walletBalance: parseFloat(user.walletBalance ?? "0") });
+    }
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] patch user failed");
+    sendError(res, "An internal error occurred", 500);
+  }
+});
+
+
+router.get("/users/pending", requirePermission("users.view"), async (_req, res) => {
+  try {
+    const rows = await db
+      .select({
+        user: usersTable,
+        vendorProfile: vendorProfilesTable,
+        riderProfile: riderProfilesTable,
+      })
+      .from(usersTable)
+      .leftJoin(vendorProfilesTable, eq(usersTable.id, vendorProfilesTable.userId))
+      .leftJoin(riderProfilesTable, eq(usersTable.id, riderProfilesTable.userId))
+      .where(eq(usersTable.approvalStatus, "pending"))
+      .orderBy(desc(usersTable.createdAt));
+
+    sendSuccess(res, {
+      users: rows.map(({ user: u, vendorProfile, riderProfile }) => ({
+        ...stripUser(u),
+        roles: (u.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean),
+        walletBalance: parseFloat(u.walletBalance ?? "0"),
+        hasMpin: !!u.walletPinHash,
+        isMpinLocked: !!(u.walletPinLockedUntil && u.walletPinLockedUntil.getTime() > Date.now()),
+        createdAt: u.createdAt.toISOString(),
+        updatedAt: u.updatedAt.toISOString(),
+        vendorProfile: vendorProfile?.userId != null ? {
+          storeName: vendorProfile.storeName,
+          businessType: vendorProfile.businessType,
+          businessName: vendorProfile.businessName,
+          ntn: vendorProfile.ntn,
+          storeCategory: vendorProfile.storeCategory,
+          storeIsOpen: vendorProfile.storeIsOpen,
+        } : null,
+        riderProfile: riderProfile?.userId != null ? {
+          vehicleType: riderProfile.vehicleType,
+          vehiclePlate: riderProfile.vehiclePlate,
+          drivingLicense: riderProfile.drivingLicense,
+          vehicleRegNo: riderProfile.vehicleRegNo,
+          documents: riderProfile.documents,
+        } : null,
+      })),
+      total: rows.length,
+    });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] list pending failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── Approve User ── */
@@ -430,6 +460,7 @@ router.post("/users/:id/approve", requirePermission("users.approve"), async (req
   const { note, skipDocCheck } = req.body ?? {};
   const userId = req.params["id"]!;
   
+  try {
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!target) { sendNotFound(res, "User not found"); return; }
 
@@ -450,7 +481,6 @@ router.post("/users/:id/approve", requirePermission("users.approve"), async (req
     }
   }
 
-  try {
     await AuditService.executeWithAudit(
       {
         adminId: adminReq.adminId,
@@ -471,6 +501,7 @@ router.post("/users/:id/approve", requirePermission("users.approve"), async (req
     sendError(res, "An internal error occurred", 500);
   }
 });
+
 
 /* ── Reject User ── */
 router.post("/users/:id/reject", requirePermission("users.approve"), async (req, res) => {
@@ -570,24 +601,32 @@ router.delete("/users/:id", requirePermission("users.delete"), async (req, res) 
 /* ── User Activity (orders + rides summary) ── */
 router.get("/users/:id/activity", requirePermission("users.view"), async (req, res) => {
   const uid = req.params["id"]!;
-  const orders = await db.select().from(ordersTable).where(and(eq(ordersTable.userId, uid), isNull(ordersTable.deletedAt))).orderBy(desc(ordersTable.createdAt)).limit(10);
-  const rides = await db.select().from(ridesTable).where(eq(ridesTable.userId, uid)).orderBy(desc(ridesTable.createdAt)).limit(10);
-  const pharmacy = await db.select().from(pharmacyOrdersTable).where(eq(pharmacyOrdersTable.userId, uid)).orderBy(desc(pharmacyOrdersTable.createdAt)).limit(5);
-  const parcels = await db.select().from(parcelBookingsTable).where(eq(parcelBookingsTable.userId, uid)).orderBy(desc(parcelBookingsTable.createdAt)).limit(5);
-  const txns = await db.select().from(walletTransactionsTable).where(eq(walletTransactionsTable.userId, uid)).orderBy(desc(walletTransactionsTable.createdAt)).limit(10);
-  sendSuccess(res, {
-    orders: orders.map(o => ({ ...o, total: parseFloat(String(o.total)), createdAt: o.createdAt.toISOString(), updatedAt: o.updatedAt.toISOString() })),
-    rides: rides.map(r => ({ ...r, fare: parseFloat(r.fare), distance: parseFloat(r.distance), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() })),
-    pharmacy: pharmacy.map(p => ({ ...p, total: parseFloat(String(p.total)), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() })),
-    parcels: parcels.map(p => ({ ...p, fare: parseFloat(p.fare), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() })),
-    transactions: txns.map(t => ({ ...t, amount: parseFloat(t.amount), createdAt: t.createdAt.toISOString() })),
-  });
+  try {
+    const [orders, rides, pharmacy, parcels, txns] = await Promise.all([
+      db.select().from(ordersTable).where(and(eq(ordersTable.userId, uid), isNull(ordersTable.deletedAt))).orderBy(desc(ordersTable.createdAt)).limit(10),
+      db.select().from(ridesTable).where(eq(ridesTable.userId, uid)).orderBy(desc(ridesTable.createdAt)).limit(10),
+      db.select().from(pharmacyOrdersTable).where(eq(pharmacyOrdersTable.userId, uid)).orderBy(desc(pharmacyOrdersTable.createdAt)).limit(5),
+      db.select().from(parcelBookingsTable).where(eq(parcelBookingsTable.userId, uid)).orderBy(desc(parcelBookingsTable.createdAt)).limit(5),
+      db.select().from(walletTransactionsTable).where(eq(walletTransactionsTable.userId, uid)).orderBy(desc(walletTransactionsTable.createdAt)).limit(10),
+    ]);
+    sendSuccess(res, {
+      orders: orders.map(o => ({ ...o, total: parseFloat(String(o.total)), createdAt: o.createdAt.toISOString(), updatedAt: o.updatedAt.toISOString() })),
+      rides: rides.map(r => ({ ...r, fare: parseFloat(r.fare), distance: parseFloat(r.distance), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() })),
+      pharmacy: pharmacy.map(p => ({ ...p, total: parseFloat(String(p.total)), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() })),
+      parcels: parcels.map(p => ({ ...p, fare: parseFloat(p.fare), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() })),
+      transactions: txns.map(t => ({ ...t, amount: parseFloat(t.amount), createdAt: t.createdAt.toISOString() })),
+    });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] activity fetch failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── Overview with user enrichment (orders + user info) ── */
 router.patch("/users/:id/security", requirePermission("users.ban"), async (req, res) => {
   const { id } = req.params;
   const body = req.body as Record<string, unknown>;
+  try {
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (body.isActive     !== undefined) updates.isActive     = body.isActive;
   if (body.isBanned     !== undefined) updates.isBanned     = body.isBanned;
@@ -683,12 +722,17 @@ router.patch("/users/:id/security", requirePermission("users.ban"), async (req, 
     await sendUserNotification(id!, "Account Suspended ⚠️", String(body.banReason || "Your account has been suspended. Contact support."), "warning", "warning-outline");
   }
   sendSuccess(res, { ...user, roles: (user.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean), walletBalance: parseFloat(String(user.walletBalance)) });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] security patch failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── PATCH /admin/users/:id/identity — Admin update user identity (username, email, name) ── */
 router.patch("/users/:id/identity", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
   const body = req.body as Record<string, unknown>;
+  try {
   const updates: Record<string, unknown> = { updatedAt: new Date() };
 
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
@@ -756,55 +800,64 @@ router.patch("/users/:id/identity", requirePermission("users.edit"), async (req,
   revokeAllUserSessions(userId).catch(() => {});
 
   sendSuccess(res, { ...stripUser(user), roles: (user.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean), walletBalance: parseFloat(String(user.walletBalance)) });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] identity patch failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── GET /admin/users/:id/otp — view live OTP code for support troubleshooting ── */
-router.get("/users/:id/otp", async (req, res) => {
+router.get("/users/:id/otp", requirePermission("users.view"), async (req, res) => {
   const userId = req.params["id"]!;
-  const [user] = await db
-    .select({
-      id: usersTable.id,
-      phone: usersTable.phone,
-      otpCode: usersTable.otpCode,
-      otpExpiry: usersTable.otpExpiry,
-      emailOtpCode: usersTable.emailOtpCode,
-      emailOtpExpiry: usersTable.emailOtpExpiry,
-    })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId))
-    .limit(1);
+  try {
+    const [user] = await db
+      .select({
+        id: usersTable.id,
+        phone: usersTable.phone,
+        otpCode: usersTable.otpCode,
+        otpExpiry: usersTable.otpExpiry,
+        emailOtpCode: usersTable.emailOtpCode,
+        emailOtpExpiry: usersTable.emailOtpExpiry,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
 
-  if (!user) { sendNotFound(res, "User not found"); return; }
+    if (!user) { sendNotFound(res, "User not found"); return; }
 
-  const now = new Date();
-  const phoneOtpActive = !!(user.otpCode && user.otpExpiry && user.otpExpiry > now);
-  const emailOtpActive = !!(user.emailOtpCode && user.emailOtpExpiry && user.emailOtpExpiry > now);
+    const now = new Date();
+    const phoneOtpActive = !!(user.otpCode && user.otpExpiry && user.otpExpiry > now);
+    const emailOtpActive = !!(user.emailOtpCode && user.emailOtpExpiry && user.emailOtpExpiry > now);
 
-  const adminReq = req as AdminRequest;
-  addAuditEntry({
-    action: "admin_view_otp",
-    ip: getClientIp(req),
-    adminId: adminReq.adminId,
-    details: `Admin viewed OTP for user ${userId} (${user.phone})`,
-    result: "success",
-  });
+    const adminReq = req as AdminRequest;
+    addAuditEntry({
+      action: "admin_view_otp",
+      ip: getClientIp(req),
+      adminId: adminReq.adminId,
+      details: `Admin viewed OTP for user ${userId} (${user.phone})`,
+      result: "success",
+    });
 
-  sendSuccess(res, {
-    phone: {
-      code: phoneOtpActive ? user.otpCode : null,
-      expiry: phoneOtpActive ? user.otpExpiry?.toISOString() : null,
-      active: phoneOtpActive,
-    },
-    email: {
-      code: emailOtpActive ? user.emailOtpCode : null,
-      expiry: emailOtpActive ? user.emailOtpExpiry?.toISOString() : null,
-      active: emailOtpActive,
-    },
-  });
+    sendSuccess(res, {
+      phone: {
+        code: phoneOtpActive ? user.otpCode : null,
+        expiry: phoneOtpActive ? user.otpExpiry?.toISOString() : null,
+        active: phoneOtpActive,
+      },
+      email: {
+        code: emailOtpActive ? user.emailOtpCode : null,
+        expiry: emailOtpActive ? user.emailOtpExpiry?.toISOString() : null,
+        active: emailOtpActive,
+      },
+    });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] view OTP failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── PATCH /admin/users/:id/verify-contact — manually verify phone or email ── */
-router.patch("/users/:id/verify-contact", async (req, res) => {
+router.patch("/users/:id/verify-contact", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
   const { type } = req.body as { type: "phone" | "email" };
 
@@ -813,63 +866,72 @@ router.patch("/users/:id/verify-contact", async (req, res) => {
     return;
   }
 
-  const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  if (!user) { sendNotFound(res, "User not found"); return; }
+  try {
+    const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!user) { sendNotFound(res, "User not found"); return; }
 
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (type === "phone") updates.phoneVerified = true;
-  else updates.emailVerified = true;
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (type === "phone") updates.phoneVerified = true;
+    else updates.emailVerified = true;
 
-  await db.update(usersTable).set(updates).where(eq(usersTable.id, userId));
+    await db.update(usersTable).set(updates).where(eq(usersTable.id, userId));
 
-  const adminReq = req as AdminRequest;
-  addAuditEntry({
-    action: "admin_verify_contact",
-    ip: getClientIp(req),
-    adminId: adminReq.adminId,
-    details: `Admin manually verified ${type} for user ${userId} (${user.phone})`,
-    result: "success",
-  });
+    const adminReq = req as AdminRequest;
+    addAuditEntry({
+      action: "admin_verify_contact",
+      ip: getClientIp(req),
+      adminId: adminReq.adminId,
+      details: `Admin manually verified ${type} for user ${userId} (${user.phone})`,
+      result: "success",
+    });
 
-  sendSuccess(res, { success: true, type, message: `${type === "phone" ? "Phone" : "Email"} marked as verified` });
+    sendSuccess(res, { success: true, type, message: `${type === "phone" ? "Phone" : "Email"} marked as verified` });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] verify-contact failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── POST /admin/users/:id/force-password-reset — require password change on next login ── */
-router.post("/users/:id/force-password-reset", async (req, res) => {
+router.post("/users/:id/force-password-reset", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
-  const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, name: usersTable.name }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  if (!user) { sendNotFound(res, "User not found"); return; }
+  try {
+    const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, name: usersTable.name }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!user) { sendNotFound(res, "User not found"); return; }
 
-  await db.update(usersTable).set({ requirePasswordChange: true, updatedAt: new Date() }).where(eq(usersTable.id, userId));
+    await db.update(usersTable).set({ requirePasswordChange: true, updatedAt: new Date() }).where(eq(usersTable.id, userId));
 
-  await db.insert(notificationsTable).values({
-    id: generateId(),
-    userId,
-    title: "Password Reset Required",
-    body: "For your account security, you are required to change your password on next login.",
-    type: "security",
-    icon: "lock-closed-outline",
-  }).catch(() => {});
+    await db.insert(notificationsTable).values({
+      id: generateId(),
+      userId,
+      title: "Password Reset Required",
+      body: "For your account security, you are required to change your password on next login.",
+      type: "security",
+      icon: "lock-closed-outline",
+    }).catch(() => {});
 
-  const adminReq = req as AdminRequest;
-  addAuditEntry({
-    action: "admin_force_password_reset",
-    ip: getClientIp(req),
-    adminId: adminReq.adminId,
-    details: `Admin forced password reset for user ${userId} (${user.phone})`,
-    result: "success",
-  });
+    const adminReq = req as AdminRequest;
+    addAuditEntry({
+      action: "admin_force_password_reset",
+      ip: getClientIp(req),
+      adminId: adminReq.adminId,
+      details: `Admin forced password reset for user ${userId} (${user.phone})`,
+      result: "success",
+    });
 
-  sendSuccess(res, { success: true, message: `Password reset required for ${user.name ?? user.phone}. They will be prompted on next login.` });
+    sendSuccess(res, { success: true, message: `Password reset required for ${user.name ?? user.phone}. They will be prompted on next login.` });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] force-password-reset failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
-router.post("/users/:id/reset-otp", async (req, res) => {
+router.post("/users/:id/reset-otp", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
   const adminReq = req as AdminRequest;
+  try {
   const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, name: usersTable.name, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) { sendNotFound(res, "User not found"); return; }
-
-  try {
     await AuditService.executeWithAudit(
       {
         adminId:          adminReq.adminId,
@@ -898,122 +960,146 @@ router.post("/users/:id/reset-otp", async (req, res) => {
 
 
 /* ── POST /admin/users/:id/otp/bypass — set a timed OTP bypass ── */
-router.post("/users/:id/otp/bypass", async (req, res) => {
+router.post("/users/:id/otp/bypass", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
   const minutes = Number(req.body?.minutes);
   if (!minutes || minutes <= 0 || minutes > 1440 || !Number.isInteger(minutes)) {
     sendValidationError(res, "minutes must be a positive integer between 1 and 1440");
     return;
   }
-  const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  if (!user) { sendNotFound(res, "User not found"); return; }
+  try {
+    const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!user) { sendNotFound(res, "User not found"); return; }
 
-  const bypassUntil = new Date(Date.now() + minutes * 60 * 1000);
+    const bypassUntil = new Date(Date.now() + minutes * 60 * 1000);
 
-  // no user notification — admin-only action
-  await db.update(usersTable).set({ otpBypassUntil: bypassUntil, updatedAt: new Date() }).where(eq(usersTable.id, userId));
+    // no user notification — admin-only action
+    await db.update(usersTable).set({ otpBypassUntil: bypassUntil, updatedAt: new Date() }).where(eq(usersTable.id, userId));
 
-  const ip = getClientIp(req);
-  const adminReq = req as unknown as AdminRequest;
-  addAuditEntry({ action: "admin_otp_bypass_set", ip, adminId: adminReq.adminId, details: `Admin set ${minutes}min OTP bypass for user ${userId} (${user.phone}), expires ${bypassUntil.toISOString()}`, result: "success" });
-  writeAuthAuditLog("admin_otp_bypass_set", {
-    userId,
-    ip,
-    userAgent: req.headers["user-agent"] ?? undefined,
-    metadata: { phone: user.phone, adminId: adminReq.adminId, minutes, bypassUntil: bypassUntil.toISOString(), result: "success" },
-  });
+    const ip = getClientIp(req);
+    const adminReq = req as unknown as AdminRequest;
+    addAuditEntry({ action: "admin_otp_bypass_set", ip, adminId: adminReq.adminId, details: `Admin set ${minutes}min OTP bypass for user ${userId} (${user.phone}), expires ${bypassUntil.toISOString()}`, result: "success" });
+    writeAuthAuditLog("admin_otp_bypass_set", {
+      userId,
+      ip,
+      userAgent: req.headers["user-agent"] ?? undefined,
+      metadata: { phone: user.phone, adminId: adminReq.adminId, minutes, bypassUntil: bypassUntil.toISOString(), result: "success" },
+    });
 
-  sendSuccess(res, { bypassUntil: bypassUntil.toISOString(), minutes });
+    sendSuccess(res, { bypassUntil: bypassUntil.toISOString(), minutes });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] otp bypass set failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── DELETE /admin/users/:id/otp/bypass — cancel an active OTP bypass ── */
-router.delete("/users/:id/otp/bypass", async (req, res) => {
+router.delete("/users/:id/otp/bypass", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
-  const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  if (!user) { sendNotFound(res, "User not found"); return; }
+  try {
+    const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!user) { sendNotFound(res, "User not found"); return; }
 
-  // no user notification — admin-only action
-  await db.update(usersTable).set({ otpBypassUntil: null, updatedAt: new Date() }).where(eq(usersTable.id, userId));
+    // no user notification — admin-only action
+    await db.update(usersTable).set({ otpBypassUntil: null, updatedAt: new Date() }).where(eq(usersTable.id, userId));
 
-  const ip = getClientIp(req);
-  const adminReq = req as unknown as AdminRequest;
-  addAuditEntry({ action: "admin_otp_bypass_cancel", ip, adminId: adminReq.adminId, details: `Admin cancelled OTP bypass for user ${userId} (${user.phone})`, result: "success" });
-  writeAuthAuditLog("admin_otp_bypass_cancel", {
-    userId,
-    ip,
-    userAgent: req.headers["user-agent"] ?? undefined,
-    metadata: { phone: user.phone, adminId: adminReq.adminId, result: "success" },
-  });
+    const ip = getClientIp(req);
+    const adminReq = req as unknown as AdminRequest;
+    addAuditEntry({ action: "admin_otp_bypass_cancel", ip, adminId: adminReq.adminId, details: `Admin cancelled OTP bypass for user ${userId} (${user.phone})`, result: "success" });
+    writeAuthAuditLog("admin_otp_bypass_cancel", {
+      userId,
+      ip,
+      userAgent: req.headers["user-agent"] ?? undefined,
+      metadata: { phone: user.phone, adminId: adminReq.adminId, result: "success" },
+    });
 
-  sendSuccess(res, { success: true });
+    sendSuccess(res, { success: true });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] otp bypass cancel failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 
 /* ── Force-disable 2FA for a user (admin action) ── */
 router.post("/users/:id/2fa/disable", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  if (!user) { sendNotFound(res, "User not found"); return; }
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!user) { sendNotFound(res, "User not found"); return; }
 
-  if (!user.totpEnabled) { sendValidationError(res, "2FA is not enabled for this user"); return; }
+    if (!user.totpEnabled) { sendValidationError(res, "2FA is not enabled for this user"); return; }
 
-  await db.update(usersTable).set({
-    totpEnabled: false, totpSecret: null, backupCodes: null, trustedDevices: null, updatedAt: new Date(),
-  }).where(eq(usersTable.id, userId));
+    await db.update(usersTable).set({
+      totpEnabled: false, totpSecret: null, backupCodes: null, trustedDevices: null, updatedAt: new Date(),
+    }).where(eq(usersTable.id, userId));
 
-  const ip = getClientIp(req);
-  addAuditEntry({ action: "admin_2fa_disable", ip, details: `Admin force-disabled 2FA for user ${userId} (${user.phone})`, result: "success" });
-  writeAuthAuditLog("admin_2fa_disabled", { userId, ip, userAgent: req.headers["user-agent"] as string, metadata: { adminAction: true } });
+    const ip = getClientIp(req);
+    addAuditEntry({ action: "admin_2fa_disable", ip, details: `Admin force-disabled 2FA for user ${userId} (${user.phone})`, result: "success" });
+    writeAuthAuditLog("admin_2fa_disabled", { userId, ip, userAgent: req.headers["user-agent"] as string, metadata: { adminAction: true } });
 
-  sendSuccess(res, { success: true, message: `2FA disabled for user ${user.name ?? user.phone}` });
+    sendSuccess(res, { success: true, message: `2FA disabled for user ${user.name ?? user.phone}` });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] 2fa disable failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 router.post("/users/:id/reset-wallet-pin", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  if (!user) { sendNotFound(res, "User not found"); return; }
-  if (!user.walletPinHash) { sendValidationError(res, "This user has no MPIN set"); return; }
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!user) { sendNotFound(res, "User not found"); return; }
+    if (!user.walletPinHash) { sendValidationError(res, "This user has no MPIN set"); return; }
 
-  await db.update(usersTable).set({
-    walletPinHash: null,
-    walletPinAttempts: 0,
-    walletPinLockedUntil: null,
-    updatedAt: new Date(),
-  }).where(eq(usersTable.id, userId));
+    await db.update(usersTable).set({
+      walletPinHash: null,
+      walletPinAttempts: 0,
+      walletPinLockedUntil: null,
+      updatedAt: new Date(),
+    }).where(eq(usersTable.id, userId));
 
-  sendSuccess(res, { success: true, message: `Wallet MPIN reset for ${user.name ?? user.phone}. User will need to create a new MPIN.` });
+    sendSuccess(res, { success: true, message: `Wallet MPIN reset for ${user.name ?? user.phone}. User will need to create a new MPIN.` });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] reset-wallet-pin failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── Admin Accounts (Sub-Admins) ── */
 router.patch("/users/:id/request-correction", requirePermission("users.approve"), async (req, res) => {
   const { field, note } = req.body as { field?: string; note?: string };
-  const [user] = await db.update(usersTable)
-    .set({ approvalStatus: "correction_needed", approvalNote: note || `Please re-upload: ${field || "document"}`, updatedAt: new Date() })
-    .where(eq(usersTable.id, req.params["id"]!))
-    .returning();
-  if (!user) { sendNotFound(res, "User not found"); return; }
-  addAuditEntry({ action: "user_correction_requested", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Correction requested for ${user.phone}: ${field}`, result: "success" });
-  const docLang = await getUserLanguage(user.id);
-  await db.insert(notificationsTable).values({
-    id: generateId(), userId: user.id,
-    title: t("notifDocumentCorrection", docLang),
-    body: note || t("notifDocumentCorrectionBody", docLang).replace("{field}", field || "document"),
-    type: "system", icon: "document-outline",
-  }).catch(() => {});
-  sendSuccess(res, { success: true, user: { ...stripUser(user), roles: (user.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean) } });
+  try {
+    const [user] = await db.update(usersTable)
+      .set({ approvalStatus: "correction_needed", approvalNote: note || `Please re-upload: ${field || "document"}`, updatedAt: new Date() })
+      .where(eq(usersTable.id, req.params["id"]!))
+      .returning();
+    if (!user) { sendNotFound(res, "User not found"); return; }
+    addAuditEntry({ action: "user_correction_requested", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Correction requested for ${user.phone}: ${field}`, result: "success" });
+    const docLang = await getUserLanguage(user.id);
+    await db.insert(notificationsTable).values({
+      id: generateId(), userId: user.id,
+      title: t("notifDocumentCorrection", docLang),
+      body: note || t("notifDocumentCorrectionBody", docLang).replace("{field}", field || "document"),
+      type: "system", icon: "document-outline",
+    }).catch(() => {});
+    sendSuccess(res, { success: true, user: { ...stripUser(user), roles: (user.roles ?? "customer").split(",").map((r: string) => r.trim()).filter(Boolean) } });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] request-correction failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── PATCH /admin/users/:id/waive-debt — waive rider's cancellation debt ── */
-router.patch("/users/:id/waive-debt", async (req, res) => {
+router.patch("/users/:id/waive-debt", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
   const adminReq = req as AdminRequest;
+  try {
   const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, name: usersTable.name, roles: usersTable.roles, cancellationDebt: usersTable.cancellationDebt })
     .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) { sendNotFound(res, "User not found"); return; }
   const debt = parseFloat(user.cancellationDebt ?? "0");
   if (debt <= 0) { sendSuccess(res, { success: true, message: "No debt to waive" }); return; }
-
-  try {
     await AuditService.executeWithAudit(
       {
         adminId:          adminReq.adminId,
@@ -1046,33 +1132,39 @@ router.patch("/users/:id/waive-debt", async (req, res) => {
 });
 
 /* ── GET /admin/users/:id/sessions — list user's active sessions ── */
-router.get("/users/:id/sessions", async (req, res) => {
+router.get("/users/:id/sessions", requirePermission("users.view"), async (req, res) => {
   const { id } = req.params;
-  const sessions = await db
-    .select()
-    .from(userSessionsTable)
-    .where(and(eq(userSessionsTable.userId, id!), isNull(userSessionsTable.revokedAt)))
-    .orderBy(desc(userSessionsTable.lastActiveAt));
+  try {
+    const sessions = await db
+      .select()
+      .from(userSessionsTable)
+      .where(and(eq(userSessionsTable.userId, id!), isNull(userSessionsTable.revokedAt)))
+      .orderBy(desc(userSessionsTable.lastActiveAt));
 
-  sendSuccess(res, {
-    sessions: sessions.map(s => ({
-      id: s.id,
-      deviceName: s.deviceName,
-      browser: s.browser,
-      os: s.os,
-      ip: s.ip,
-      location: s.location,
-      lastActiveAt: s.lastActiveAt,
-      createdAt: s.createdAt,
-    })),
-  });
+    sendSuccess(res, {
+      sessions: sessions.map(s => ({
+        id: s.id,
+        deviceName: s.deviceName,
+        browser: s.browser,
+        os: s.os,
+        ip: s.ip,
+        location: s.location,
+        lastActiveAt: s.lastActiveAt,
+        createdAt: s.createdAt,
+      })),
+    });
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] list sessions failed");
+    sendError(res, "An internal error occurred", 500);
+  }
 });
 
 /* ── DELETE /admin/users/:id/sessions/:sessionId — revoke one session ── */
-router.delete("/users/:id/sessions/:sessionId", async (req, res) => {
+router.delete("/users/:id/sessions/:sessionId", requirePermission("users.edit"), async (req, res) => {
   const { id, sessionId } = req.params;
   const adminReq = req as AdminRequest;
 
+  try {
   const [session] = await db
     .select()
     .from(userSessionsTable)
@@ -1081,8 +1173,6 @@ router.delete("/users/:id/sessions/:sessionId", async (req, res) => {
   if (!session) { sendNotFound(res, "Session"); return; }
 
   const [affectedUser] = await db.select({ name: usersTable.name, phone: usersTable.phone, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
-
-  try {
     await AuditService.executeWithAudit(
       {
         adminId:          adminReq.adminId,
@@ -1112,12 +1202,11 @@ router.delete("/users/:id/sessions/:sessionId", async (req, res) => {
 });
 
 /* ── DELETE /admin/users/:id/sessions — revoke ALL sessions for user ── */
-router.delete("/users/:id/sessions", async (req, res) => {
+router.delete("/users/:id/sessions", requirePermission("users.edit"), async (req, res) => {
   const { id } = req.params;
   const adminReq = req as AdminRequest;
-  const [affectedUser] = await db.select({ name: usersTable.name, phone: usersTable.phone, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
-
   try {
+  const [affectedUser] = await db.select({ name: usersTable.name, phone: usersTable.phone, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
     await AuditService.executeWithAudit(
       {
         adminId:          adminReq.adminId,
@@ -1153,13 +1242,12 @@ router.delete("/users/:id/sessions", async (req, res) => {
 });
 
 /* ── POST /admin/users/:id/otp/reset — explicit alias for POST .../reset-otp ── */
-router.post("/users/:id/otp/reset", async (req, res) => {
+router.post("/users/:id/otp/reset", requirePermission("users.edit"), async (req, res) => {
   const userId = req.params["id"]!;
   const adminReq = req as AdminRequest;
+  try {
   const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, name: usersTable.name, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) { sendNotFound(res, "User not found"); return; }
-
-  try {
     await AuditService.executeWithAudit(
       {
         adminId:          adminReq.adminId,
@@ -1187,22 +1275,22 @@ router.post("/users/:id/otp/reset", async (req, res) => {
 });
 
 /* ── POST /admin/users/:id/sessions/revoke — explicit alias; optional body.sessionId ── */
-router.post("/users/:id/sessions/revoke", async (req, res) => {
+router.post("/users/:id/sessions/revoke", requirePermission("users.edit"), async (req, res) => {
   const { id } = req.params;
   const adminReq = req as AdminRequest;
   const sessionId: string | undefined = req.body?.sessionId;
 
-  if (sessionId) {
-    // Revoke a single session
-    const [session] = await db
-      .select()
-      .from(userSessionsTable)
-      .where(and(eq(userSessionsTable.id, sessionId), eq(userSessionsTable.userId, id!)))
-      .limit(1);
-    if (!session) { sendNotFound(res, "Session"); return; }
-    const [affectedUser] = await db.select({ name: usersTable.name, phone: usersTable.phone, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
+  try {
+    if (sessionId) {
+      // Revoke a single session
+      const [session] = await db
+        .select()
+        .from(userSessionsTable)
+        .where(and(eq(userSessionsTable.id, sessionId), eq(userSessionsTable.userId, id!)))
+        .limit(1);
+      if (!session) { sendNotFound(res, "Session"); return; }
+      const [affectedUser] = await db.select({ name: usersTable.name, phone: usersTable.phone, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
 
-    try {
       await AuditService.executeWithAudit(
         {
           adminId:          adminReq.adminId,
@@ -1225,14 +1313,10 @@ router.post("/users/:id/sessions/revoke", async (req, res) => {
       );
       writeAuthAuditLog("admin_session_revoked", { userId: id!, ip: req.ip ?? "", metadata: { sessionId } });
       sendSuccess(res, { revoked: true });
-    } catch (err: unknown) {
-      logger.error({ err }, "[admin/users] revoke single session (alias) failed");
-      sendError(res, "An internal error occurred", 500);
-    }
-  } else {
-    // Revoke all sessions
-    const [affectedUser] = await db.select({ name: usersTable.name, phone: usersTable.phone, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
-    try {
+    } else {
+      // Revoke all sessions
+      const [affectedUser] = await db.select({ name: usersTable.name, phone: usersTable.phone, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
+
       await AuditService.executeWithAudit(
         {
           adminId:          adminReq.adminId,
@@ -1260,10 +1344,10 @@ router.post("/users/:id/sessions/revoke", async (req, res) => {
       );
       writeAuthAuditLog("admin_all_sessions_revoked", { userId: id!, ip: req.ip ?? "" });
       sendSuccess(res, { revoked: true, message: "All sessions revoked for user" });
-    } catch (err: unknown) {
-      logger.error({ err }, "[admin/users] revoke all sessions (alias) failed");
-      sendError(res, "An internal error occurred", 500);
     }
+  } catch (err: unknown) {
+    logger.error({ err }, "[admin/users] revoke session(s) (alias) failed");
+    sendError(res, "An internal error occurred", 500);
   }
 });
 

@@ -947,6 +947,7 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
                 Manage in OTP Control Center →
               </Link>
 
+              <div className="space-y-2 pt-2 border-t border-border/50">
                 <p className="text-sm font-semibold text-foreground">Manual Verification</p>
                 <p className="text-xs text-muted-foreground">Force-mark phone or email as verified</p>
                 <div className="flex gap-2">
@@ -1254,6 +1255,7 @@ function SecurityModal({ user, onClose }: { user: any; onClose: () => void }) {
               {securityMutation.isPending ? "Saving..." : "Save Security"}
             </Button>
           </div>
+        </div>
     </MobileDrawer>
 
     <SensitiveActionDialog

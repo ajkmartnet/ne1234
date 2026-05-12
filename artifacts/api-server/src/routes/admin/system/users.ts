@@ -1203,8 +1203,8 @@ router.get("/users/:id/sessions", requirePermission("users.view"), async (req, r
         os: s.os,
         ip: s.ip,
         location: s.location,
-        lastActiveAt: s.lastActiveAt,
-        createdAt: s.createdAt,
+        lastActiveAt: s.lastActiveAt?.toISOString() ?? null,
+        createdAt: s.createdAt?.toISOString() ?? null,
       })),
     });
   } catch (err: unknown) {

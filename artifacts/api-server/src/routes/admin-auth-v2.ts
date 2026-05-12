@@ -162,6 +162,7 @@ function buildAdminResetUrl(rawToken: string): string {
  * protection against CSRF-based credential-stuffing.
  */
 router.post('/auth/login', adminAuthLimiter, loginLimiter, async (req: Request, res: Response) => {
+  try {
   const ip = getClientIp(req);
   const userAgent = req.headers['user-agent'];
 
@@ -253,6 +254,9 @@ router.post('/auth/login', adminAuthLimiter, loginLimiter, async (req: Request, 
     logger.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /**
@@ -264,6 +268,7 @@ router.post('/auth/login', adminAuthLimiter, loginLimiter, async (req: Request, 
  * The tempToken itself acts as a bound proof-of-login-attempt.
  */
 router.post('/auth/2fa', adminAuthLimiter, verifyTotpLimiter, async (req: Request, res: Response) => {
+  try {
   const ip = getClientIp(req);
   const userAgent = req.headers['user-agent'];
 
@@ -354,6 +359,9 @@ router.post('/auth/2fa', adminAuthLimiter, verifyTotpLimiter, async (req: Reques
     logger.error('2FA verification error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /**
@@ -368,6 +376,7 @@ router.post('/auth/2fa', adminAuthLimiter, verifyTotpLimiter, async (req: Reques
  * HttpOnly cookie which browsers will not attach from a third-party context.
  */
 router.post('/auth/refresh', async (req: Request, res: Response) => {
+  try {
   const ip = getClientIp(req);
   const userAgent = req.headers['user-agent'];
   const refreshToken = req.cookies.refresh_token;
@@ -441,6 +450,9 @@ router.post('/auth/refresh', async (req: Request, res: Response) => {
         }
       : undefined,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /**
@@ -449,6 +461,7 @@ router.post('/auth/refresh', async (req: Request, res: Response) => {
  * the must-change-password flag is set on the current session).
  */
 router.get('/auth/me', authenticateAdmin, async (req: Request, res: Response) => {
+  try {
   const adminId = req.admin?.sub;
   if (!adminId) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
@@ -474,6 +487,9 @@ router.get('/auth/me', authenticateAdmin, async (req: Request, res: Response) =>
     mustChangePassword: !!admin.mustChangePassword,
     usingDefaultCredentials: !!admin.defaultCredentials,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /**
@@ -485,6 +501,7 @@ router.post(
   authenticateAdmin,
   csrfProtection,
   async (req: Request, res: Response) => {
+    try {
     const ip = getClientIp(req);
     const userAgent = req.headers['user-agent'];
     const adminId = req.admin?.sub;
@@ -512,6 +529,9 @@ router.post(
     });
 
     res.json({ success: true, message: 'Logged out successfully' });
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   }
 );
 
@@ -532,6 +552,7 @@ router.post(
   adminAuthLimiter,
   forgotPasswordLimiter,
   async (req: Request, res: Response) => {
+    try {
     const ip = getClientIp(req);
     const userAgent = req.headers['user-agent'];
 
@@ -616,6 +637,9 @@ router.post(
       // Still return the generic response — never expose internal failures.
       res.json(genericResponse); return;
     }
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   },
 );
 
@@ -636,6 +660,7 @@ router.get(
   adminAuthLimiter,
   resetPasswordLimiter,
   async (req: Request, res: Response) => {
+    try {
     const ip = getClientIp(req);
     const userAgent = req.headers['user-agent'];
 
@@ -671,6 +696,9 @@ router.get(
       expiresAt: verified.token.expiresAt.toISOString(),
       adminName: verified.admin.name,
     });
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   },
 );
 
@@ -689,6 +717,7 @@ router.post(
   adminAuthLimiter,
   resetPasswordLimiter,
   async (req: Request, res: Response) => {
+    try {
     const ip = getClientIp(req);
     const userAgent = req.headers['user-agent'];
 
@@ -745,6 +774,9 @@ router.post(
       success: true,
       message: 'Password updated. Please sign in with your new password.',
     });
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   },
 );
 
@@ -762,6 +794,7 @@ router.post(
   authenticateAdmin,
   csrfProtection,
   async (req: Request, res: Response) => {
+    try {
     const ip = getClientIp(req);
     const userAgent = req.headers['user-agent'];
     const adminId = req.admin?.sub;
@@ -848,6 +881,9 @@ router.post(
       },
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     });
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   },
 );
 
@@ -860,6 +896,7 @@ router.get(
   '/auth/sessions',
   authenticateAdmin,
   async (req: Request, res: Response) => {
+    try {
     const adminId = req.admin?.sub;
 
     if (!adminId) {
@@ -879,6 +916,9 @@ router.get(
       })),
       total: sessions.length,
     });
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   }
 );
 
@@ -891,6 +931,7 @@ router.delete(
   authenticateAdmin,
   csrfProtection,
   async (req: Request, res: Response) => {
+    try {
     const adminId = req.admin?.sub;
     const sessionId = req.params.sessionId;
 
@@ -909,6 +950,9 @@ router.delete(
     await logoutAdminSession(sessionId);
 
     res.json({ success: true, message: 'Session revoked' });
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   }
 );
 
@@ -924,6 +968,7 @@ router.post(
   authenticateAdmin,
   csrfProtection,
   async (req: Request, res: Response) => {
+    try {
     const ip = getClientIp(req);
     const userAgent = req.headers['user-agent'];
     const adminId = req.admin?.sub;
@@ -972,6 +1017,9 @@ router.post(
     });
 
     res.json({ success: true });
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   }
 );
 
@@ -985,6 +1033,7 @@ router.delete(
   authenticateAdmin,
   csrfProtection,
   async (req: Request, res: Response) => {
+    try {
     const adminId = req.admin?.sub;
 
     if (!adminId) {
@@ -998,6 +1047,9 @@ router.delete(
     res.clearCookie('csrf_token', { path: '/' });
 
     res.json({ success: true, message: 'All sessions revoked' });
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   }
 );
 

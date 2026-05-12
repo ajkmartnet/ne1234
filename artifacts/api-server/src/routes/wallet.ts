@@ -242,6 +242,7 @@ function isWalletFrozen(user: { blockedServices: string }): boolean {
 
 /* ── GET /wallet ─────────────────────────────────────────────────────────── */
 router.get("/", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
 
   try {
@@ -283,6 +284,9 @@ router.get("/", customerAuth, async (req, res) => {
     logger.error("[wallet GET /] DB error:", e);
     sendError(res, "Something went wrong, please try again.", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /wallet/topup — ADMIN ONLY ────────────────────────────────────────
@@ -291,6 +295,7 @@ router.get("/", customerAuth, async (req, res) => {
    Customers cannot self-credit — all credits must go through payment verification.
 ─────────────────────────────────────────────────────────────────────────── */
 router.post("/topup", adminAuth, async (req, res) => {
+  try {
 
   const { userId, amount, method } = req.body;
   if (!userId) { sendValidationError(res, "userId required"); return; }
@@ -364,6 +369,9 @@ router.post("/topup", adminAuth, async (req, res) => {
       sendError(res, "Something went wrong, please try again.", 500);
     }
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /wallet/deposit ────────────────────────────────────────────────────
@@ -372,6 +380,7 @@ router.post("/topup", adminAuth, async (req, res) => {
    Body: { amount, paymentMethod, transactionId, idempotencyKey, accountNumber?, note? }
 ─────────────────────────────────────────────────────────────────────────── */
 router.post("/deposit", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
 
   const parsed = depositSchema.safeParse(req.body);
@@ -455,6 +464,9 @@ router.post("/deposit", customerAuth, async (req, res) => {
     logger.error("[wallet /deposit] Unexpected error:", e);
     sendError(res, "Something went wrong, please try again.", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /wallet/send ───────────────────────────────────────────────────────
@@ -463,6 +475,7 @@ router.post("/deposit", customerAuth, async (req, res) => {
    Body: { receiverPhone? | ajkId?, amount, note? }
 ─────────────────────────────────────────────────────────────────────────── */
 router.post("/send", customerAuth, async (req, res) => {
+  try {
   const senderId = req.customerId!;
 
   const rawIdemKey =
@@ -608,6 +621,9 @@ router.post("/send", customerAuth, async (req, res) => {
     logger.error("[wallet /send] Unexpected error:", e);
     sendError(res, "Something went wrong, please try again.", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /wallet/withdraw ───────────────────────────────────────────────────
@@ -617,6 +633,7 @@ router.post("/send", customerAuth, async (req, res) => {
    Body: { amount, paymentMethod, accountNumber, note? }
 ─────────────────────────────────────────────────────────────────────────── */
 router.post("/withdraw", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
 
   const rawIdemKey =
@@ -718,6 +735,9 @@ router.post("/withdraw", customerAuth, async (req, res) => {
     if (code === "INSUFFICIENT") { sendError(res, "Insufficient wallet balance", 422); return; }
     logger.error("[wallet /withdraw] Unexpected error:", e);
     sendError(res, "Something went wrong, please try again.", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

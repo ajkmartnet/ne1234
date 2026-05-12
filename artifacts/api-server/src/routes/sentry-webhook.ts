@@ -27,6 +27,7 @@ import crypto from "crypto";
 const router = Router();
 
 router.post("/admin/sentry-webhook", async (req, res) => {
+  try {
   const secret = process.env["SENTRY_WEBHOOK_SECRET"];
   if (!secret) {
     logger.warn("[sentry-webhook] SENTRY_WEBHOOK_SECRET not configured — rejecting");
@@ -177,6 +178,9 @@ router.post("/admin/sentry-webhook", async (req, res) => {
   } catch (err: any) {
     logger.error({ err: err.message }, "[sentry-webhook] DB operation failed");
     sendError(res, "Internal error", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

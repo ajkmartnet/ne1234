@@ -31,6 +31,7 @@ router.get("/release-notes", async (_req, res) => {
 
 /* ── POST /admin/release-notes ── */
 router.post("/release-notes", async (req, res) => {
+  try {
   const { version, releaseDate, notes, sortOrder } = req.body as {
     version?: string;
     releaseDate?: string;
@@ -56,10 +57,14 @@ router.post("/release-notes", async (req, res) => {
   } catch (e) {
     sendError(res, "Failed to create release note");
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/release-notes/:id ── */
 router.patch("/release-notes/:id", async (req, res) => {
+  try {
   const { id } = req.params as { id: string };
   const { version, releaseDate, notes, sortOrder } = req.body as {
     version?: string;
@@ -92,10 +97,14 @@ router.patch("/release-notes/:id", async (req, res) => {
   } catch (e) {
     sendError(res, "Failed to update release note");
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /admin/release-notes/:id ── */
 router.delete("/release-notes/:id", async (req, res) => {
+  try {
   const { id } = req.params as { id: string };
   try {
     await db.execute(sql`DELETE FROM release_notes WHERE id = ${id}`);
@@ -103,10 +112,14 @@ router.delete("/release-notes/:id", async (req, res) => {
   } catch (e) {
     sendError(res, "Failed to delete release note");
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/consent-log ── */
 router.get("/consent-log", async (req, res) => {
+  try {
   const userId = (req.query["userId"] as string) || null;
   const page   = Math.max(1, parseInt(String(req.query["page"] || "1"), 10));
   const limit  = Math.min(100, Math.max(1, parseInt(String(req.query["limit"] || "50"), 10)));
@@ -149,6 +162,9 @@ router.get("/consent-log", async (req, res) => {
     });
   } catch (e) {
     sendError(res, "Failed to fetch consent log");
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

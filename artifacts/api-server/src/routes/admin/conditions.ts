@@ -363,6 +363,7 @@ router.get("/conditions/user/:userId", async (req, res) => {
 });
 
 router.post("/conditions", async (req, res) => {
+  try {
   const p = createConditionSchema.safeParse(req.body ?? {});
   if (!p.success) {
     const msg = p.error.errors.map(e => e.message).join("; ");
@@ -409,9 +410,13 @@ router.post("/conditions", async (req, res) => {
     res.status(500).json({ success: false, error: "An internal error occurred" });
     return;
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" }); return;
+  }
 });
 
 router.patch("/conditions/:id", async (req, res) => {
+  try {
   const p = patchConditionSchema.safeParse(req.body ?? {});
   if (!p.success) {
     const msg = p.error.errors.map(e => e.message).join("; ");
@@ -490,6 +495,9 @@ router.patch("/conditions/:id", async (req, res) => {
     logger.error("[admin/conditions] update error:", error);
     return res.status(500).json({ success: false, error: "An internal error occurred" });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" }); return;
+  }
 });
 
 router.delete("/conditions/:id", async (req, res) => {
@@ -503,6 +511,7 @@ router.delete("/conditions/:id", async (req, res) => {
 });
 
 router.post("/conditions/bulk", async (req, res) => {
+  try {
   const p = bulkConditionSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -536,6 +545,9 @@ router.post("/conditions/bulk", async (req, res) => {
     logger.error("[admin/conditions] bulk action error:", error);
     return res.status(500).json({ success: false, error: "An internal error occurred" });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" }); return;
+  }
 });
 
 /* ─────────────── CONDITION RULES (CRUD) ─────────────── */
@@ -550,6 +562,7 @@ router.get("/condition-rules", async (_req, res) => {
 });
 
 router.post("/condition-rules", async (req, res) => {
+  try {
   const p = createConditionRuleSchema.safeParse(req.body ?? {});
   if (!p.success) {
     const msg = p.error.errors.map(e => e.message).join("; ");
@@ -580,9 +593,13 @@ router.post("/condition-rules", async (req, res) => {
     logger.error("[admin/condition-rules] create error:", error);
     return res.status(500).json({ success: false, error: "An internal error occurred" });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" }); return;
+  }
 });
 
 router.patch("/condition-rules/:id", async (req, res) => {
+  try {
   const p = patchConditionRuleSchema.safeParse(req.body ?? {});
   if (!p.success) {
     sendValidationError(res, p.error.errors.map(e => e.message).join("; "));
@@ -603,6 +620,9 @@ router.patch("/condition-rules/:id", async (req, res) => {
   } catch (error) {
     logger.error("[admin/condition-rules] patch error:", error);
     return res.status(500).json({ success: false, error: "An internal error occurred" });
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" }); return;
   }
 });
 

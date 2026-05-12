@@ -439,6 +439,7 @@ async function broadcastRiderLocation(userId: string, lat: number, lon: number, 
 }
 
 router.post("/update", gpsAntiSpoofMiddleware, async (req, res) => {
+  try {
   const authHeader = req.headers.authorization ?? "";
   if (!authHeader.startsWith("Bearer ")) {
     res.status(401).json({ error: "Authentication required" });
@@ -530,12 +531,16 @@ router.post("/update", gpsAntiSpoofMiddleware, async (req, res) => {
   }
 
   res.json({ success: true, updatedAt });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /locations/batch — Replay queued GPS pings from IndexedDB (offline mode) ──
    Accepts an array of pings sorted by timestamp. Each ping is replayed in order.
    Spoofed pings are rejected silently (logged but not included in response). */
 router.post("/batch", async (req, res) => {
+  try {
   const authHeader = req.headers.authorization ?? "";
   if (!authHeader.startsWith("Bearer ")) {
     res.status(401).json({ error: "Authentication required" });
@@ -623,6 +628,9 @@ router.post("/batch", async (req, res) => {
   }
 
   res.json({ success: true, processed, skipped, updatedAt: lastUpdatedAt });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

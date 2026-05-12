@@ -41,6 +41,7 @@ ensureBroadcastsTable().catch(() => {});
    Paginated list of sent broadcasts with delivery stats.
 ───────────────────────────────────────────────────────── */
 router.get("/broadcasts", async (req, res) => {
+  try {
   const page  = Math.max(1, parseInt(String(req.query["page"]  ?? "1")));
   const limit = Math.min(200, parseInt(String(req.query["limit"] ?? "50")));
   const offset = (page - 1) * limit;
@@ -74,6 +75,9 @@ router.get("/broadcasts", async (req, res) => {
   } catch (err: any) {
     sendError(res, err?.message ?? "Failed to fetch broadcasts", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─────────────────────────────────────────────────────────
@@ -82,6 +86,7 @@ router.get("/broadcasts", async (req, res) => {
    each sent broadcast so history is populated.
 ───────────────────────────────────────────────────────── */
 router.post("/broadcasts/record", async (req, res) => {
+  try {
   const { title, body, type, targetRole, sentCount, adminId } = req.body as {
     title: string; body?: string; type?: string;
     targetRole?: string; sentCount?: number; adminId?: string;
@@ -109,6 +114,9 @@ router.post("/broadcasts/record", async (req, res) => {
   } catch (err: any) {
     sendError(res, err?.message ?? "Failed to record broadcast", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─────────────────────────────────────────────────────────
@@ -116,6 +124,7 @@ router.post("/broadcasts/record", async (req, res) => {
    Update delivered_count / failed_count (called by webhook or manually).
 ───────────────────────────────────────────────────────── */
 router.patch("/broadcasts/:id/delivery-stats", async (req, res) => {
+  try {
   const { id } = req.params;
   const { deliveredCount, failedCount } = req.body as { deliveredCount?: number; failedCount?: number };
 
@@ -145,6 +154,9 @@ router.patch("/broadcasts/:id/delivery-stats", async (req, res) => {
     sendSuccess(res, { success: true });
   } catch (err: any) {
     sendError(res, err?.message ?? "Failed to update delivery stats", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

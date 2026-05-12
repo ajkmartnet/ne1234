@@ -31,6 +31,7 @@ router.get("/conversations", async (_req, res) => {
 });
 
 router.get("/conversations/:userId", async (req, res) => {
+  try {
   const { userId } = req.params;
   try {
     await db
@@ -63,9 +64,13 @@ router.get("/conversations/:userId", async (req, res) => {
   } catch {
     return sendError(res, "Failed to fetch messages", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/conversations/:userId/reply", async (req, res) => {
+  try {
   const { userId } = req.params;
   const { message } = req.body as { message?: string };
   if (!message || typeof message !== "string" || !message.trim()) {
@@ -97,9 +102,13 @@ router.post("/conversations/:userId/reply", async (req, res) => {
   } catch {
     return sendError(res, "Failed to send reply", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/conversations/:userId/resolve", async (req, res) => {
+  try {
   const { userId } = req.params;
   const { resolved } = req.body as { resolved?: boolean };
   try {
@@ -110,6 +119,9 @@ router.patch("/conversations/:userId/resolve", async (req, res) => {
     return sendSuccess(res, { ok: true });
   } catch {
     return sendError(res, "Failed to update status", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

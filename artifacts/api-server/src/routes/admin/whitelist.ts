@@ -15,15 +15,20 @@ router.use(adminAuth);
 
 /* GET /api/admin/whitelist */
 router.get("/", async (_req, res) => {
+  try {
   const rows = await db
     .select()
     .from(whitelistUsersTable)
     .orderBy(desc(whitelistUsersTable.createdAt));
   res.json({ entries: rows });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* POST /api/admin/whitelist */
 router.post("/", async (req, res) => {
+  try {
   const { identifier, label, bypassCode, expiresAt } = req.body;
 
   if (!identifier) { sendError(res, "identifier (phone or email) is required"); return; }
@@ -54,10 +59,14 @@ router.post("/", async (req, res) => {
     }
     throw err;
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* PATCH /api/admin/whitelist/:id */
 router.patch("/:id", async (req, res) => {
+  try {
   const { id } = req.params;
   const { label, bypassCode, isActive, expiresAt } = req.body;
 
@@ -72,12 +81,19 @@ router.patch("/:id", async (req, res) => {
 
   const [updated] = await db.update(whitelistUsersTable).set(updates).where(eq(whitelistUsersTable.id, id!)).returning();
   sendSuccess(res, { entry: updated });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* DELETE /api/admin/whitelist/:id */
 router.delete("/:id", async (req, res) => {
+  try {
   await db.delete(whitelistUsersTable).where(eq(whitelistUsersTable.id, req.params.id!));
   sendSuccess(res, { deleted: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

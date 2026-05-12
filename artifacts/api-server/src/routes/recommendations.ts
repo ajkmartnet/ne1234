@@ -10,6 +10,7 @@ import { sendSuccess, sendNotFound, sendValidationError, sendInternalError } fro
 const router: IRouter = Router();
 
 router.post("/track", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
   const { productId, type } = req.body;
   if (!productId || !type) {
@@ -30,9 +31,13 @@ router.post("/track", customerAuth, async (req, res) => {
     weight: weightMap[type] ?? 1,
   });
   res.json({ success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/for-you", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
   const limit = Math.min(20, parseInt(String(req.query["limit"] || "10")));
 
@@ -110,9 +115,13 @@ router.get("/for-you", customerAuth, async (req, res) => {
   }
 
   res.json({ recommendations, total: recommendations.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/trending", async (req, res) => {
+  try {
   const limit = Math.min(20, parseInt(String(req.query["limit"] || "10")));
   const type = req.query["type"] as string | undefined;
 
@@ -187,9 +196,13 @@ router.get("/trending", async (req, res) => {
     logger.error("[recommendations GET /trending] DB error:", e);
     sendInternalError(res);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/similar/:productId", async (req, res) => {
+  try {
   const productId = req.params["productId"]!;
   const limit = Math.min(20, parseInt(String(req.query["limit"] || "8")));
 
@@ -231,9 +244,13 @@ router.get("/similar/:productId", async (req, res) => {
   }).sort((a, b) => b.similarityScore - a.similarityScore);
 
   res.json({ products: scored, total: scored.length, baseProduct: { id: product.id, name: product.name, category: product.category } });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/frequently-bought", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
   const limit = Math.min(20, parseInt(String(req.query["limit"] || "10")));
 
@@ -290,6 +307,9 @@ router.get("/frequently-bought", customerAuth, async (req, res) => {
   })).sort((a, b) => b.purchaseCount - a.purchaseCount);
 
   res.json({ products: result, total: result.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

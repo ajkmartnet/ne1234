@@ -37,6 +37,7 @@ import { requirePermission } from "../../../middleware/require-permission.js";
 const router = Router();
 
 router.post("/users", requirePermission("users.create"), async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const { phone, name, role, city, area, email, username, tempPassword } = req.body;
 
@@ -82,12 +83,16 @@ router.post("/users", requirePermission("users.create"), async (req, res) => {
       sendError(res, "An internal error occurred", 500);
     }
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* GET /admin/users/search?q=...&limit=20
    Lightweight server-side user search used by OTP Control and other admin tools.
    Returns users matching name or phone query (partial, case-insensitive). */
 router.get("/users/search", async (req, res) => {
+  try {
   const q = ((req.query?.q as string) ?? "").trim();
   const limitN = Math.min(50, Math.max(1, parseInt((req.query?.limit as string) ?? "20", 10)));
 
@@ -110,6 +115,9 @@ router.get("/users/search", async (req, res) => {
     .limit(limitN);
 
   sendSuccess(res, { users: rows, total: rows.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* GET /admin/users/search-riders?q=...&limit=20&onlineOnly=true
@@ -117,6 +125,7 @@ router.get("/users/search", async (req, res) => {
    Returns only active, non-rejected riders matching the search query.
    Pass onlineOnly=true to restrict to riders currently online (matches reassign constraints). */
 router.get("/users/search-riders", async (req, res) => {
+  try {
   const q = ((req.query?.q as string) ?? "").trim();
   const limitN = Math.min(50, Math.max(1, parseInt((req.query?.limit as string) ?? "20", 10)));
   const onlineOnly = (req.query?.onlineOnly as string) === "true";
@@ -143,9 +152,13 @@ router.get("/users/search-riders", async (req, res) => {
     .orderBy(asc(usersTable.name))
     .limit(limitN);
   sendSuccess(res, { riders, total: riders.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/users", async (req, res) => {
+  try {
   const filter = (req.query?.filter as string) ?? "";
   const conditionTier = (req.query?.conditionTier as string) ?? "";
   const search = ((req.query?.search as string) ?? "").trim();
@@ -280,10 +293,14 @@ router.get("/users", async (req, res) => {
     blockedCount: Number(globalStats?.totalBlocked ?? 0),
     totalCount: Number(globalStats?.totalAll ?? 0),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/users/bulk-ban — ban/unban multiple users ── */
 router.patch("/users/bulk-ban", requirePermission("users.ban"), async (req, res) => {
+  try {
   const { ids, action, reason } = req.body as { ids: string[]; action: "ban" | "unban"; reason?: string };
   if (!ids?.length) { sendValidationError(res, "ids required"); return; }
   if (action !== "ban" && action !== "unban") { sendValidationError(res, "action must be 'ban' or 'unban'"); return; }
@@ -315,9 +332,13 @@ router.patch("/users/bulk-ban", requirePermission("users.ban"), async (req, res)
   }
   addAuditEntry({ action: `bulk_${action}`, ip: getClientIp(req), adminId: adminReq.adminId, details: `Bulk ${action}: ${ids.length} users`, result: "success" });
   sendSuccess(res, { success: true, affected: ids.length, action });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/users/:id", requirePermission("users.edit"), async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const { role, isActive, walletBalance } = req.body;
   const userId = req.params["id"]!;
@@ -377,10 +398,14 @@ router.patch("/users/:id", requirePermission("users.edit"), async (req, res) => 
     if (!user) { sendNotFound(res, "User not found"); return; }
     sendSuccess(res, { ...stripUser(user), walletBalance: parseFloat(user.walletBalance ?? "0") });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 
 router.get("/users/pending", async (_req, res) => {
+  try {
   const rows = await db
     .select({
       user: usersTable,
@@ -417,10 +442,14 @@ router.get("/users/pending", async (_req, res) => {
     })),
     total: rows.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Approve User ── */
 router.post("/users/:id/approve", requirePermission("users.approve"), async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const { note, skipDocCheck } = req.body ?? {};
   const userId = req.params["id"]!;
@@ -454,10 +483,14 @@ router.post("/users/:id/approve", requirePermission("users.approve"), async (req
     logger.error({ err: error }, "[admin/users] approve user failed");
     sendError(res, "An internal error occurred", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Reject User ── */
 router.post("/users/:id/reject", requirePermission("users.approve"), async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const { note } = req.body as { note?: string };
   const userId = req.params["id"]!;
@@ -482,10 +515,14 @@ router.post("/users/:id/reject", requirePermission("users.approve"), async (req,
     logger.error({ err: error }, "[admin/users] reject user failed");
     sendError(res, "An internal error occurred", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Wallet Top-up ── */
 router.post("/users/:id/wallet-topup", requirePermission("users.wallet"), async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const { amount, description } = req.body;
   const userId = req.params["id"]!;
@@ -526,8 +563,12 @@ router.post("/users/:id/wallet-topup", requirePermission("users.wallet"), async 
     logger.error({ err: error }, "[admin/users] wallet topup failed");
     sendError(res, "An internal error occurred", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 router.delete("/users/:id", requirePermission("users.delete"), async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const userId = req.params["id"]!;
 
@@ -549,10 +590,14 @@ router.delete("/users/:id", requirePermission("users.delete"), async (req, res) 
     logger.error({ err: error }, "[admin/users] delete user failed");
     sendError(res, "An internal error occurred", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── User Activity (orders + rides summary) ── */
 router.get("/users/:id/activity", async (req, res) => {
+  try {
   const uid = req.params["id"]!;
   const orders = await db.select().from(ordersTable).where(and(eq(ordersTable.userId, uid), isNull(ordersTable.deletedAt))).orderBy(desc(ordersTable.createdAt)).limit(10);
   const rides = await db.select().from(ridesTable).where(eq(ridesTable.userId, uid)).orderBy(desc(ridesTable.createdAt)).limit(10);
@@ -566,10 +611,14 @@ router.get("/users/:id/activity", async (req, res) => {
     parcels: parcels.map(p => ({ ...p, fare: parseFloat(p.fare), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() })),
     transactions: txns.map(t => ({ ...t, amount: parseFloat(t.amount), createdAt: t.createdAt.toISOString() })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Overview with user enrichment (orders + user info) ── */
 router.patch("/users/:id/security", requirePermission("users.ban"), async (req, res) => {
+  try {
   const { id } = req.params;
   const body = req.body as Record<string, unknown>;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -666,10 +715,14 @@ router.patch("/users/:id/security", requirePermission("users.ban"), async (req, 
     await sendUserNotification(id!, "Account Suspended ⚠️", String(body.banReason || "Your account has been suspended. Contact support."), "warning", "warning-outline");
   }
   sendSuccess(res, { ...user, walletBalance: parseFloat(String(user.walletBalance)) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/users/:id/identity — Admin update user identity (username, email, name) ── */
 router.patch("/users/:id/identity", requirePermission("users.edit"), async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const body = req.body as Record<string, unknown>;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -739,10 +792,14 @@ router.patch("/users/:id/identity", requirePermission("users.edit"), async (req,
   revokeAllUserSessions(userId).catch(() => {});
 
   sendSuccess(res, { ...stripUser(user), walletBalance: parseFloat(String(user.walletBalance)) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/users/:id/otp — view live OTP code for support troubleshooting ── */
 router.get("/users/:id/otp", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const [user] = await db
     .select({
@@ -784,10 +841,14 @@ router.get("/users/:id/otp", async (req, res) => {
       active: emailOtpActive,
     },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/users/:id/verify-contact — manually verify phone or email ── */
 router.patch("/users/:id/verify-contact", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const { type } = req.body as { type: "phone" | "email" };
 
@@ -815,10 +876,14 @@ router.patch("/users/:id/verify-contact", async (req, res) => {
   });
 
   sendSuccess(res, { success: true, type, message: `${type === "phone" ? "Phone" : "Email"} marked as verified` });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/users/:id/force-password-reset — require password change on next login ── */
 router.post("/users/:id/force-password-reset", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, name: usersTable.name }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) { sendNotFound(res, "User not found"); return; }
@@ -844,9 +909,13 @@ router.post("/users/:id/force-password-reset", async (req, res) => {
   });
 
   sendSuccess(res, { success: true, message: `Password reset required for ${user.name ?? user.phone}. They will be prompted on next login.` });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/users/:id/reset-otp", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const adminReq = req as AdminRequest;
   const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, name: usersTable.name, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
@@ -877,11 +946,15 @@ router.post("/users/:id/reset-otp", async (req, res) => {
     logger.error({ err }, "[admin/users] reset OTP failed");
     sendError(res, "An internal error occurred", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 
 /* ── POST /admin/users/:id/otp/bypass — set a timed OTP bypass ── */
 router.post("/users/:id/otp/bypass", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const minutes = Number(req.body?.minutes);
   if (!minutes || minutes <= 0 || minutes > 1440 || !Number.isInteger(minutes)) {
@@ -907,10 +980,14 @@ router.post("/users/:id/otp/bypass", async (req, res) => {
   });
 
   sendSuccess(res, { bypassUntil: bypassUntil.toISOString(), minutes });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /admin/users/:id/otp/bypass — cancel an active OTP bypass ── */
 router.delete("/users/:id/otp/bypass", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) { sendNotFound(res, "User not found"); return; }
@@ -929,11 +1006,15 @@ router.delete("/users/:id/otp/bypass", async (req, res) => {
   });
 
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 
 /* ── Force-disable 2FA for a user (admin action) ── */
 router.post("/users/:id/2fa/disable", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) { sendNotFound(res, "User not found"); return; }
@@ -949,9 +1030,13 @@ router.post("/users/:id/2fa/disable", async (req, res) => {
   writeAuthAuditLog("admin_2fa_disabled", { userId, ip, userAgent: req.headers["user-agent"] as string, metadata: { adminAction: true } });
 
   sendSuccess(res, { success: true, message: `2FA disabled for user ${user.name ?? user.phone}` });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/users/:id/reset-wallet-pin", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!user) { sendNotFound(res, "User not found"); return; }
@@ -965,10 +1050,14 @@ router.post("/users/:id/reset-wallet-pin", async (req, res) => {
   }).where(eq(usersTable.id, userId));
 
   sendSuccess(res, { success: true, message: `Wallet MPIN reset for ${user.name ?? user.phone}. User will need to create a new MPIN.` });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Admin Accounts (Sub-Admins) ── */
 router.patch("/users/:id/request-correction", async (req, res) => {
+  try {
   const { field, note } = req.body as { field?: string; note?: string };
   const [user] = await db.update(usersTable)
     .set({ approvalStatus: "correction_needed", approvalNote: note || `Please re-upload: ${field || "document"}`, updatedAt: new Date() })
@@ -984,10 +1073,14 @@ router.patch("/users/:id/request-correction", async (req, res) => {
     type: "system", icon: "document-outline",
   }).catch(() => {});
   sendSuccess(res, { success: true, user: stripUser(user) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/users/:id/waive-debt — waive rider's cancellation debt ── */
 router.patch("/users/:id/waive-debt", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const adminReq = req as AdminRequest;
   const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, name: usersTable.name, roles: usersTable.roles, cancellationDebt: usersTable.cancellationDebt })
@@ -1026,10 +1119,14 @@ router.patch("/users/:id/waive-debt", async (req, res) => {
     logger.error({ err }, "[admin/users] waive debt failed");
     sendError(res, "An internal error occurred", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/users/:id/sessions — list user's active sessions ── */
 router.get("/users/:id/sessions", async (req, res) => {
+  try {
   const { id } = req.params;
   const sessions = await db
     .select()
@@ -1049,10 +1146,14 @@ router.get("/users/:id/sessions", async (req, res) => {
       createdAt: s.createdAt,
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /admin/users/:id/sessions/:sessionId — revoke one session ── */
 router.delete("/users/:id/sessions/:sessionId", async (req, res) => {
+  try {
   const { id, sessionId } = req.params;
   const adminReq = req as AdminRequest;
 
@@ -1092,10 +1193,14 @@ router.delete("/users/:id/sessions/:sessionId", async (req, res) => {
     logger.error({ err }, "[admin/users] revoke session failed");
     sendError(res, "An internal error occurred", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /admin/users/:id/sessions — revoke ALL sessions for user ── */
 router.delete("/users/:id/sessions", async (req, res) => {
+  try {
   const { id } = req.params;
   const adminReq = req as AdminRequest;
   const [affectedUser] = await db.select({ name: usersTable.name, phone: usersTable.phone, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, id!)).limit(1);
@@ -1133,10 +1238,14 @@ router.delete("/users/:id/sessions", async (req, res) => {
     logger.error({ err }, "[admin/users] revoke all sessions failed");
     sendError(res, "An internal error occurred", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/users/:id/otp/reset — explicit alias for POST .../reset-otp ── */
 router.post("/users/:id/otp/reset", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const adminReq = req as AdminRequest;
   const [user] = await db.select({ id: usersTable.id, phone: usersTable.phone, name: usersTable.name, roles: usersTable.roles }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
@@ -1167,10 +1276,14 @@ router.post("/users/:id/otp/reset", async (req, res) => {
     logger.error({ err }, "[admin/users] reset OTP (bulk) failed");
     sendError(res, "An internal error occurred", 500);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/users/:id/sessions/revoke — explicit alias; optional body.sessionId ── */
 router.post("/users/:id/sessions/revoke", async (req, res) => {
+  try {
   const { id } = req.params;
   const adminReq = req as AdminRequest;
   const sessionId: string | undefined = req.body?.sessionId;
@@ -1247,6 +1360,9 @@ router.post("/users/:id/sessions/revoke", async (req, res) => {
       logger.error({ err }, "[admin/users] revoke all sessions (alias) failed");
       sendError(res, "An internal error occurred", 500);
     }
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

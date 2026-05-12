@@ -42,6 +42,7 @@ import { validateBody } from "../../middleware/validate.js";
 
 const router = Router();
 router.get("/stats", async (_req, res) => {
+  try {
   const [
     [userCount],
     [orderCount],
@@ -122,9 +123,13 @@ router.get("/stats", async (_req, res) => {
       updatedAt: r.updatedAt.toISOString(),
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/platform-settings", async (_req, res) => {
+  try {
   const rows = await db.select().from(platformSettingsTable);
   const grouped: Record<string, any[]> = {};
   for (const row of rows) {
@@ -132,6 +137,9 @@ router.get("/platform-settings", async (_req, res) => {
     grouped[row.category]!.push({ key: row.key, value: row.value, label: row.label, updatedAt: row.updatedAt.toISOString() });
   }
   sendSuccess(res, { settings: rows.map(r => ({ ...r, updatedAt: r.updatedAt.toISOString() })), grouped });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* Keys that must be valid finite numbers */
@@ -195,6 +203,7 @@ function validateSettingValue(key: string, value: string): string | null {
 }
 
 router.put("/platform-settings", async (req, res) => {
+  try {
   const { settings } = req.body as { settings: Array<{ key: string; value: string }> };
   if (!Array.isArray(settings)) { sendValidationError(res, "settings array required"); return; }
   for (const { key, value } of settings) {
@@ -217,10 +226,14 @@ router.put("/platform-settings", async (req, res) => {
   addAuditEntry({ action: "settings_update", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Updated ${settings.length} setting(s): ${changedKeys}`, result: "success" });
   const rows = await db.select().from(platformSettingsTable);
   sendSuccess(res, { settings: rows.map(r => ({ ...r, updatedAt: r.updatedAt.toISOString() })) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Backup: download all settings as JSON ───────────────────────────────── */
 router.get("/platform-settings/backup", async (req, res) => {
+  try {
   const rows = await db.select().from(platformSettingsTable);
   const payload = {
     _meta: {
@@ -238,10 +251,14 @@ router.get("/platform-settings/backup", async (req, res) => {
   };
   addAuditEntry({ action: "settings_backup", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Exported ${rows.length} settings`, result: "success" });
   sendSuccess(res, payload);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Restore: import settings from a backup JSON ─────────────────────────── */
 router.post("/platform-settings/restore", async (req, res) => {
+  try {
   const { settings } = req.body as { settings: Array<{ key: string; value: string }> };
   if (!Array.isArray(settings) || settings.length === 0) {
     sendValidationError(res, "settings array required"); return;
@@ -271,11 +288,15 @@ router.post("/platform-settings/restore", async (req, res) => {
   addAuditEntry({ action: "settings_restore", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Restored ${updated} settings (${skipped} unrecognised keys skipped)`, result: "success" });
   const rows = await db.select().from(platformSettingsTable);
   sendSuccess(res, { restored: updated, skipped, settings: rows.map(r => ({ ...r, updatedAt: r.updatedAt.toISOString() })) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const patchSettingSchema = z.object({ value: z.string() });
 
 router.patch("/platform-settings/:key", validateBody(patchSettingSchema), async (req, res) => {
+  try {
   const { value } = req.body;
   const settingKey = req.params["key"]!;
   const err = validateSettingValue(settingKey, String(value));
@@ -291,6 +312,9 @@ router.patch("/platform-settings/:key", validateBody(patchSettingSchema), async 
   invalidatePlatformSettingsCache();
   addAuditEntry({ action: "settings_update", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Updated setting "${settingKey}" = "${value}"`, result: "success" });
   sendSuccess(res, { ...row, updatedAt: row.updatedAt.toISOString() });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Integration Test Endpoints ────────────────────────────────────────────
@@ -330,6 +354,7 @@ async function recordIntegrationTest(opts: {
 }
 
 router.post("/test-integration/email", async (req, res) => {
+  try {
   const start = Date.now();
   try {
     const settings = await getCachedSettings();
@@ -359,9 +384,13 @@ router.post("/test-integration/email", async (req, res) => {
     await recordIntegrationTest({ req: req as AdminRequest, type: "email", ok: false, latencyMs, message: msg, errorDetail: String(err?.stack ?? err) });
     sendError(res, msg, 502);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/test-integration/sms", async (req, res) => {
+  try {
   const start = Date.now();
   try {
     const settings = await getCachedSettings();
@@ -385,9 +414,13 @@ router.post("/test-integration/sms", async (req, res) => {
     await recordIntegrationTest({ req: req as AdminRequest, type: "sms", ok: false, latencyMs, message: msg, errorDetail: String(err?.stack ?? err) });
     sendError(res, msg, 502);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/test-integration/whatsapp", async (req, res) => {
+  try {
   const start = Date.now();
   try {
     const settings = await getCachedSettings();
@@ -415,9 +448,13 @@ router.post("/test-integration/whatsapp", async (req, res) => {
     await recordIntegrationTest({ req: req as AdminRequest, type: "whatsapp", ok: false, latencyMs, message: msg, errorDetail: String(err?.stack ?? err) });
     sendError(res, msg, 502);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/test-integration/fcm", async (req, res) => {
+  try {
   const start = Date.now();
   const fail = async (msg: string, status = 400, errorDetail?: string) => {
     const latencyMs = Date.now() - start;
@@ -485,9 +522,13 @@ router.post("/test-integration/fcm", async (req, res) => {
   } catch (err: any) {
     await fail(err.message ?? "FCM test failed unexpectedly", 502, String(err?.stack ?? err));
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/test-integration/maps", async (req, res) => {
+  try {
   const start = Date.now();
   const fail = async (msg: string, status = 400, errorDetail?: string) => {
     const latencyMs = Date.now() - start;
@@ -541,6 +582,9 @@ router.post("/test-integration/maps", async (req, res) => {
   } catch (err: any) {
     await fail(err.message ?? "Maps test failed unexpectedly", 502, String(err?.stack ?? err));
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Integration Test History ──────────────────────────────────────────────
@@ -549,6 +593,7 @@ router.post("/test-integration/maps", async (req, res) => {
  *   `?type=email` (optional) restricts to one integration.
  */
 router.get("/integration-history", async (req, res) => {
+  try {
   const filterType = (req.query["type"] as string | undefined)?.trim();
   const cap = 10;
 
@@ -581,10 +626,14 @@ router.get("/integration-history", async (req, res) => {
   }
 
   sendSuccess(res, { latest, recent });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Pharmacy Orders Enriched ── */
 router.get("/app-overview", async (_req, res) => {
+  try {
   const [
     totalUsers, activeUsers, bannedUsers,
     totalOrders, pendingOrders,
@@ -623,10 +672,14 @@ router.get("/app-overview", async (_req, res) => {
       wallet:   settingsMap["feature_wallet"]   || "on",
     },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Categories Management ── */
 router.get("/all-notifications", async (req, res) => {
+  try {
   const role = req.query["role"] as string | undefined;
   const limit = Math.min(parseInt(String(req.query["limit"] || "100")), 300);
   let userIds: string[] = [];
@@ -645,6 +698,9 @@ router.get("/all-notifications", async (req, res) => {
     return { ...n, user: user || null };
   }));
   sendSuccess(res, { notifications: enriched });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -767,6 +823,7 @@ router.get("/audit-logs", adminAuth, auditLogHandler);
 
 /* ── GET /api/admin/me/preferences — per-admin UI preferences ── */
 router.get("/me/preferences", adminAuth, async (req, res) => {
+  try {
   const adminId = (req as AdminRequest).adminId;
   if (!adminId) { sendForbidden(res, "Not authenticated"); return; }
   try {
@@ -790,10 +847,14 @@ router.get("/me/preferences", adminAuth, async (req, res) => {
   } catch {
     sendSuccess(res, { preferences: {} });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PUT /api/admin/me/preferences — save per-admin UI preferences ── */
 router.put("/me/preferences", adminAuth, async (req, res) => {
+  try {
   const adminId = (req as AdminRequest).adminId;
   if (!adminId) { sendForbidden(res, "Not authenticated"); return; }
   const body = req.body as Record<string, unknown>;
@@ -816,10 +877,14 @@ router.put("/me/preferences", adminAuth, async (req, res) => {
     return;
   }
   sendSuccess(res, { preferences: allowed, persisted: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/auth-audit-log — persistent auth event log from DB ── */
 router.get("/auth-audit-log", adminAuth, async (req, res) => {
+  try {
   const limit  = Math.min(parseInt(String(req.query["limit"]  || "100")), 500);
   const event  = req.query["event"] as string | undefined;
   const userId = req.query["userId"] as string | undefined;
@@ -834,6 +899,9 @@ router.get("/auth-audit-log", adminAuth, async (req, res) => {
     .limit(limit);
 
   sendSuccess(res, { entries, total: entries.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/rotate-secret — rotate the admin master secret ── */
@@ -860,15 +928,20 @@ router.get("/security-events", adminAuth, (req, res) => {
 
 /* ── GET /admin/blocked-ips — list all blocked IPs ── */
 router.get("/blocked-ips", adminAuth, async (_req, res) => {
+  try {
   const blocked = await getBlockedIPList();
   sendSuccess(res, {
     blocked,
     total: blocked.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/blocked-ips — block an IP ── */
 router.post("/blocked-ips", adminAuth, async (req, res) => {
+  try {
   const { ip, reason } = req.body as { ip: string; reason?: string };
   if (!ip) { sendValidationError(res, "ip required"); return; }
 
@@ -883,10 +956,14 @@ router.post("/blocked-ips", adminAuth, async (req, res) => {
   addSecurityEvent({ type: "ip_manually_blocked", ip, details: `Admin manually blocked IP: ${ip}. Reason: ${reason || "none"}`, severity: "high" });
   const blocked = await getBlockedIPList();
   sendSuccess(res, { blocked: ip, totalBlocked: blocked.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /admin/blocked-ips/:ip — unblock an IP ── */
 router.delete("/blocked-ips/:ip", adminAuth, async (req, res) => {
+  try {
   const ip = decodeURIComponent(String(req.params["ip"]));
   const wasBlocked = await isIPBlocked(ip);
   await unblockIP(ip);
@@ -898,10 +975,14 @@ router.delete("/blocked-ips/:ip", adminAuth, async (req, res) => {
     result: "success",
   });
   sendSuccess(res, { unblocked: ip, wasBlocked });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/login-lockouts — view locked accounts ── */
 router.get("/login-lockouts", adminAuth, async (_req, res) => {
+  try {
   const lockouts = await getActiveLockouts();
   sendSuccess(res, {
     lockouts: lockouts.map(l => ({
@@ -912,10 +993,14 @@ router.get("/login-lockouts", adminAuth, async (_req, res) => {
     })),
     total: lockouts.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /admin/login-lockouts/:phone — unlock a phone ── */
 router.delete("/login-lockouts/:phone", adminAuth, async (req, res) => {
+  try {
   const phone = decodeURIComponent(String(req.params["phone"]));
   await unlockPhone(phone);
   addAuditEntry({
@@ -926,10 +1011,14 @@ router.delete("/login-lockouts/:phone", adminAuth, async (req, res) => {
     result: "success",
   });
   sendSuccess(res, { unlocked: phone });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/system/admin-ip-lockouts — list current admin IP lockout entries ── */
 router.get("/system/admin-ip-lockouts", adminAuth, async (_req: AdminRequest, res) => {
+  try {
   const entries = Array.from(adminLoginAttempts.entries()).map(([key, data]) => ({
     key,
     attempts: data.count,
@@ -937,10 +1026,14 @@ router.get("/system/admin-ip-lockouts", adminAuth, async (_req: AdminRequest, re
     lastAttemptAt: data.lastAttempt ? new Date(data.lastAttempt).toISOString() : null,
   }));
   sendSuccess(res, { lockouts: entries, total: entries.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /admin/system/admin-ip-lockouts/:key — clear an admin IP lockout ── */
 router.delete("/system/admin-ip-lockouts/:key", adminAuth, async (req: AdminRequest, res) => {
+  try {
   const key = decodeURIComponent(String(req.params["key"]));
   const existed = adminLoginAttempts.has(key);
   adminLoginAttempts.delete(key);
@@ -952,10 +1045,14 @@ router.delete("/system/admin-ip-lockouts/:key", adminAuth, async (req: AdminRequ
     result: "success",
   });
   sendSuccess(res, { cleared: key, existed });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/security-dashboard — quick security overview ── */
 router.get("/security-dashboard", adminAuth, async (_req, res) => {
+  try {
   const settings = await getCachedSettings();
   const now = Date.now();
 
@@ -994,6 +1091,9 @@ router.get("/security-dashboard", adminAuth, async (_req, res) => {
       ipWhitelistActive: !!(settings["security_admin_ip_whitelist"] || "").trim(),
     },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/settings (override) — invalidate settings cache on save ── */
@@ -1012,6 +1112,7 @@ router.post("/invalidate-cache", adminAuth, (_req, res) => {
 
 /* GET /admin/me/language — get current admin's saved language */
 router.get("/search", async (req, res) => {
+  try {
   const q        = String(req.query["q"]        ?? "").trim();
   const category = String(req.query["category"] ?? "").trim().toLowerCase(); // users | rides | orders
   const statusParam = String(req.query["status"] ?? "").trim(); // comma-separated DB status values
@@ -1160,6 +1261,9 @@ router.get("/search", async (req, res) => {
     users, rides, orders, pharmacy, query: q,
     ...(errors.length > 0 ? { errors, partial: true } : {}),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── AI Search endpoint ──────────────────────────────────────────────────── */
@@ -1524,6 +1628,7 @@ Important: Only use keys from the lists above. If the command is ambiguous, map 
 ══════════════════════════════════════════════════════════════════════════════ */
 
 router.get("/reviews", adminAuth, async (req, res) => {
+  try {
   const page   = Math.max(1, parseInt(String(req.query["page"]  || "1")));
   const limit  = Math.min(parseInt(String(req.query["limit"] || "50")), 200);
   const offset = (page - 1) * limit;
@@ -1632,20 +1737,28 @@ router.get("/reviews", adminAuth, async (req, res) => {
   }));
 
   sendSuccess(res, { reviews: enriched, total, page, limit, pages: Math.ceil(total / limit) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/reviews/:id/hide — toggle hidden status ── */
 router.patch("/reviews/:id/hide", adminAuth, async (req, res) => {
+  try {
   const [existing] = await db.select({ id: reviewsTable.id, hidden: reviewsTable.hidden })
     .from(reviewsTable).where(eq(reviewsTable.id, String(req.params["id"]))).limit(1);
   if (!existing) { sendNotFound(res, "Review not found"); return; }
   const newHidden = !existing.hidden;
   await db.update(reviewsTable).set({ hidden: newHidden }).where(eq(reviewsTable.id, existing.id));
   sendSuccess(res, { hidden: newHidden });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /admin/reviews/:id — soft delete ── */
 router.delete("/reviews/:id", adminAuth, async (req, res) => {
+  try {
   const adminId = (req as AdminRequest).adminId ?? "admin";
   const [existing] = await db.select({ id: reviewsTable.id })
     .from(reviewsTable).where(eq(reviewsTable.id, String(req.params["id"]))).limit(1);
@@ -1654,20 +1767,28 @@ router.delete("/reviews/:id", adminAuth, async (req, res) => {
     .set({ deletedAt: new Date(), deletedBy: adminId, hidden: true })
     .where(eq(reviewsTable.id, existing.id));
   sendSuccess(res);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/ride-ratings/:id/hide — toggle hidden status ── */
 router.patch("/ride-ratings/:id/hide", adminAuth, async (req, res) => {
+  try {
   const [existing] = await db.select({ id: rideRatingsTable.id, hidden: rideRatingsTable.hidden })
     .from(rideRatingsTable).where(eq(rideRatingsTable.id, String(req.params["id"]))).limit(1);
   if (!existing) { sendNotFound(res, "Ride rating not found"); return; }
   const newHidden = !existing.hidden;
   await db.update(rideRatingsTable).set({ hidden: newHidden }).where(eq(rideRatingsTable.id, existing.id));
   sendSuccess(res, { hidden: newHidden });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── DELETE /admin/ride-ratings/:id — soft delete ── */
 router.delete("/ride-ratings/:id", adminAuth, async (req, res) => {
+  try {
   const adminId = (req as AdminRequest).adminId ?? "admin";
   const [existing] = await db.select({ id: rideRatingsTable.id })
     .from(rideRatingsTable).where(eq(rideRatingsTable.id, String(req.params["id"]))).limit(1);
@@ -1676,6 +1797,9 @@ router.delete("/ride-ratings/:id", adminAuth, async (req, res) => {
     .set({ deletedAt: new Date(), deletedBy: adminId, hidden: true })
     .where(eq(rideRatingsTable.id, existing.id));
   sendSuccess(res);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/vendor-ratings — vendor rating leaderboard ─────────── */
@@ -1758,6 +1882,7 @@ router.get("/vendor-ratings", adminAuth, async (req, res) => {
 
 /* ── GET /admin/reviews/export — export CSV ────────────────────────────── */
 router.get("/reviews/export", async (req, res) => {
+  try {
   const { status, type } = req.query as Record<string, string>;
 
   const conditions: SQL[] = [];
@@ -1799,10 +1924,14 @@ router.get("/reviews/export", async (req, res) => {
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", `attachment; filename="reviews-${new Date().toISOString().slice(0, 10)}.csv"`);
   res.send(csv);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/reviews/import — import CSV ────────────────────────────── */
 router.post("/reviews/import", async (req, res) => {
+  try {
   const { csvData } = req.body;
   if (!csvData || typeof csvData !== "string") {
     sendValidationError(res, "csvData (string) is required");
@@ -1880,10 +2009,14 @@ router.post("/reviews/import", async (req, res) => {
   }
 
   sendSuccess(res, { imported, skipped, errored, total: lines.length - 1, errors });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/reviews/moderation-queue — pending moderation ─────────── */
 router.get("/reviews/moderation-queue", async (req, res) => {
+  try {
   const rows = await db
     .select({
       review: reviewsTable,
@@ -1903,30 +2036,42 @@ router.get("/reviews/moderation-queue", async (req, res) => {
     })),
     total: rows.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/reviews/:id/approve — approve a moderated review ──────── */
 router.patch("/reviews/:id/approve", async (req, res) => {
+  try {
   const [updated] = await db.update(reviewsTable)
     .set({ status: "visible" })
     .where(and(eq(reviewsTable.id, req.params["id"]!), eq(reviewsTable.status, "pending_moderation")))
     .returning();
   if (!updated) { sendNotFound(res, "Review not found or not pending moderation"); return; }
   sendSuccess(res, updated);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/reviews/:id/reject — reject (soft-delete) a moderated review ─ */
 router.patch("/reviews/:id/reject", async (req, res) => {
+  try {
   const [updated] = await db.update(reviewsTable)
     .set({ status: "rejected" })
     .where(eq(reviewsTable.id, req.params["id"]!))
     .returning();
   if (!updated) { sendNotFound(res, "Review not found"); return; }
   sendSuccess(res, updated);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/jobs/rating-suspension — auto-suspend low-rated riders/vendors ─ */
 router.post("/jobs/rating-suspension", async (req, res) => {
+  try {
   const s = await getCachedSettings();
   const riderThreshold  = parseFloat(s["auto_suspend_rating_threshold"] ?? "2.5");
   const riderMinReviews = parseInt(s["auto_suspend_min_reviews"] ?? "10");
@@ -2039,12 +2184,16 @@ router.post("/jobs/rating-suspension", async (req, res) => {
     suspendedVendors,
     message: `Suspended ${suspendedRiders} rider(s) and ${suspendedVendors} vendor(s) due to low ratings.`,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const ALLOWED_SOS_STATUSES = new Set(["pending", "acknowledged", "resolved"]);
 
 /* ── POST /admin/riders/:id/override-suspension — override auto-suspension ─ */
 router.get("/sos/alerts", async (req, res) => {
+  try {
   const page   = Math.max(1, parseInt(String(req.query["page"]  || "1"),  10));
   const limit  = Math.min(50, Math.max(1, parseInt(String(req.query["limit"] || "20"), 10)));
   const offset = (page - 1) * limit;
@@ -2076,10 +2225,14 @@ router.get("/sos/alerts", async (req, res) => {
     hasMore:     offset + alerts.length < totalRows,
     activeCount: unresolvedRows,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* PATCH /admin/sos/alerts/:id/acknowledge */
 router.patch("/sos/alerts/:id/acknowledge", async (req, res) => {
+  try {
   const alertId  = req.params["id"];
   const adminId  = (req as AdminRequest).adminId  ?? "admin";
   const adminName = (req as AdminRequest).adminName ?? "Admin";
@@ -2104,10 +2257,14 @@ router.patch("/sos/alerts/:id/acknowledge", async (req, res) => {
   const fullAckPayload = serializeSosAlert(updatedAck) as SosAlertPayload;
   try { emitSosAcknowledged(fullAckPayload); } catch { /* non-critical */ }
   sendSuccess(res, { ok: true, alert: fullAckPayload });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* PATCH /admin/sos/alerts/:id/resolve */
 router.patch("/sos/alerts/:id/resolve", async (req, res) => {
+  try {
   const alertId   = req.params["id"];
   const adminId   = (req as AdminRequest).adminId  ?? "admin";
   const adminName = (req as AdminRequest).adminName ?? "Admin";
@@ -2129,6 +2286,9 @@ router.patch("/sos/alerts/:id/resolve", async (req, res) => {
   const fullResPayload = serializeSosAlert(updatedRes) as SosAlertPayload;
   try { emitSosResolved(fullResPayload); } catch { /* non-critical */ }
   sendSuccess(res, { ok: true, alert: fullResPayload });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/fleet/vendors — active vendor store pins for the fleet map ─────
@@ -2391,15 +2551,20 @@ router.patch("/wallet/freeze-p2p/:userId", adminAuth, async (req, res) => {
 
 /* ═══════════════════  Scheduled Maintenance Window  ═══════════════════ */
 router.get("/maintenance-schedule", async (_req, res) => {
+  try {
   const settings = await getCachedSettings();
   sendSuccess(res, {
     scheduledStart: settings["maintenance_scheduled_start"] || null,
     scheduledEnd: settings["maintenance_scheduled_end"] || null,
     scheduledMsg: settings["maintenance_scheduled_msg"] || "We're performing scheduled maintenance. We'll be back shortly!",
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.put("/maintenance-schedule", adminAuth, async (req, res) => {
+  try {
   const { scheduledStart, scheduledEnd, scheduledMsg } = req.body as {
     scheduledStart?: string | null;
     scheduledEnd?: string | null;
@@ -2448,10 +2613,14 @@ router.put("/maintenance-schedule", adminAuth, async (req, res) => {
     scheduledEnd: scheduledEnd || null,
     scheduledMsg: scheduledMsg || "We're performing scheduled maintenance. We'll be back shortly!",
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ═══════════════════  Data Retention Policies  ═══════════════════ */
 router.get("/retention-policies", async (_req, res) => {
+  try {
   const settings = await getCachedSettings();
   sendSuccess(res, {
     locationDays: parseInt(settings["retention_location_days"] ?? "90"),
@@ -2460,9 +2629,13 @@ router.get("/retention-policies", async (_req, res) => {
     notificationsDays: parseInt(settings["retention_notifications_days"] ?? "30"),
     lastCleanup: settings["retention_last_cleanup"] || null,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.put("/retention-policies", adminAuth, async (req, res) => {
+  try {
   const { locationDays, chatDays, auditDays, notificationsDays } = req.body as {
     locationDays?: number;
     chatDays?: number;
@@ -2500,6 +2673,9 @@ router.put("/retention-policies", adminAuth, async (req, res) => {
     notificationsDays: parseInt(settings["retention_notifications_days"] ?? "30"),
     lastCleanup: settings["retention_last_cleanup"] || null,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/retention-cleanup", adminAuth, async (req, res) => {
@@ -2569,6 +2745,7 @@ router.post("/retention-cleanup", adminAuth, async (req, res) => {
 
 /* ═══════════════════  Vendor Schedule Admin  ═══════════════════ */
 router.get("/vendor-schedules/:vendorId", async (req, res) => {
+  try {
   const vendorId = req.params["vendorId"]!;
   const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const rows = await db.select().from(vendorSchedulesTable).where(eq(vendorSchedulesTable.vendorId, vendorId));
@@ -2579,9 +2756,13 @@ router.get("/vendor-schedules/:vendorId", async (req, res) => {
       : { id: null, vendorId, dayOfWeek: i, dayName: name, openTime: "09:00", closeTime: "21:00", isEnabled: false };
   });
   sendSuccess(res, { schedule });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.put("/vendor-schedules/:vendorId", adminAuth, async (req, res) => {
+  try {
   const vendorId = req.params["vendorId"]!;
   const { schedule } = req.body as { schedule: Array<{ dayOfWeek: number; openTime: string; closeTime: string; isEnabled: boolean }> };
   if (!Array.isArray(schedule)) { sendValidationError(res, "schedule array required"); return; }
@@ -2625,6 +2806,9 @@ router.put("/vendor-schedules/:vendorId", adminAuth, async (req, res) => {
       : { id: null, vendorId, dayOfWeek: i, dayName: name, openTime: "09:00", closeTime: "21:00", isEnabled: false };
   });
   sendSuccess(res, { schedule: result });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ═══════════════════  CSV / Report Export  ═══════════════════ */
@@ -2929,6 +3113,7 @@ function formatUptime(sec: number): string {
 }
 
 router.get("/system/health-dashboard", async (_req, res) => {
+  try {
   const s = await getCachedSettings();
   const now = new Date();
 
@@ -3197,12 +3382,16 @@ router.get("/system/health-dashboard", async (_req, res) => {
       },
     },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /system/diagnostics ─────────────────────────────────────────────────
    Live snapshot of all 5 sibling services, OS process counts, and scheduler
    job registry. Auth applied by parent admin router.                         */
 router.get("/system/diagnostics", async (_req, res) => {
+  try {
   const [{ getSchedulerStatus }, { execSync }] = await Promise.all([
     import("../../scheduler.js"),
     import("node:child_process"),
@@ -3273,6 +3462,9 @@ router.get("/system/diagnostics", async (_req, res) => {
     processCounts,
     scheduler: getSchedulerStatus(),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/admin-accounts — list admin accounts (alias for auth.ts route) ── */
@@ -3333,6 +3525,7 @@ router.get("/van/schedules", adminAuth, async (req, res) => {
 
 /* ── GET /api/admin/system/connection-status — DB source (secret vs fallback) ── */
 router.get("/system/connection-status", adminAuth, async (_req, res) => {
+  try {
   let host = "unknown";
   let database = "unknown";
   let reachable = false;
@@ -3367,6 +3560,9 @@ router.get("/system/connection-status", adminAuth, async (_req, res) => {
       ? "DATABASE_URL secret is not set — using the hardcoded Neon fallback string."
       : "DATABASE_URL is loaded from the Replit Secrets panel.",
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

@@ -70,6 +70,7 @@ async function confirmOrder(orderId: string): Promise<void> {
 //            feature_wallet, jazzcash_type (api/manual), easypaisa_type
 // ═══════════════════════════════════════════════════════════════════════════════
 router.get("/methods", async (req, res) => {
+  try {
   const s = await getCachedSettings();
   const serviceType = (req.query.serviceType as string | undefined)?.toLowerCase();
   const validServices = ["mart", "food", "pharmacy", "parcel", "rides"];
@@ -196,6 +197,9 @@ router.get("/methods", async (req, res) => {
     receiptRequired:   (s["payment_receipt_required"]              ?? "off") === "on",
     verifyWindowHours: parseInt(s["payment_verify_window_hours"]   ?? "24"),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -203,6 +207,7 @@ router.get("/methods", async (req, res) => {
 //  Admin only — validates credentials and generates test hash
 // ═══════════════════════════════════════════════════════════════════════════════
 router.get("/test-connection/:gateway", adminAuth, async (req, res) => {
+  try {
   const s = await getCachedSettings();
   const gw = req.params["gateway"];
 
@@ -249,6 +254,9 @@ router.get("/test-connection/:gateway", adminAuth, async (req, res) => {
   }
 
   sendValidationError(res, "Unknown gateway. Use: jazzcash, easypaisa");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -258,6 +266,7 @@ router.get("/test-connection/:gateway", adminAuth, async (req, res) => {
 //  Header: X-Idempotency-Key (UUID, optional but strongly recommended)
 // ═══════════════════════════════════════════════════════════════════════════════
 router.post("/initiate", customerAuth, idempotency("payment:initiate"), async (req, res) => {
+  try {
   const callerId = req.customerId!;
 
   const parsed = paymentInitiateSchema.safeParse(req.body);
@@ -451,6 +460,9 @@ router.post("/initiate", customerAuth, idempotency("payment:initiate"), async (r
   }
 
   sendValidationError(res, "Unsupported gateway. Use: jazzcash, easypaisa");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -459,13 +471,18 @@ router.post("/initiate", customerAuth, idempotency("payment:initiate"), async (r
 //  Body: { orderId, gateway, transactionId, amount }
 // ═══════════════════════════════════════════════════════════════════════════════
 router.post("/verify-manual", adminAuth, async (req, res) => {
+  try {
   const { orderId, gateway, transactionId } = req.body;
   if (!orderId) { sendValidationError(res, "orderId required"); return; }
   await confirmOrder(orderId);
   sendSuccess(res, { orderId, gateway, transactionId }, "Manual payment verified — order confirmed ✅");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/reconcile", adminAuth, async (req, res) => {
+  try {
   const { orderId, txnRef, status: forcedStatus, gateway, notes } = req.body;
   if (!orderId && !txnRef) {
     sendValidationError(res, "orderId or txnRef is required");
@@ -508,6 +525,9 @@ router.post("/reconcile", adminAuth, async (req, res) => {
     txnRef: order.txnRef,
     notes: notes ?? null,
   }, "Payment reconciled successfully");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

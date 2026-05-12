@@ -25,6 +25,7 @@ import { IDEMPOTENCY_TTL_MS } from "../../lib/cleanupIdempotencyKeys.js";
 const router = Router();
 
 router.get("/services", async (_req, res) => {
+  try {
   await ensureDefaultRideServices();
   const services = await db.select().from(rideServiceTypesTable)
     .where(eq(rideServiceTypesTable.isEnabled, true))
@@ -46,6 +47,9 @@ router.get("/services", async (_req, res) => {
       sortOrder:       s.sortOrder,
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/stops", async (_req, res) => {
@@ -63,6 +67,7 @@ router.get("/stops", async (_req, res) => {
 });
 
 router.post("/estimate", estimateLimiter, async (req, res) => {
+  try {
   const parsed = estimateSchema.safeParse(req.body);
   if (!parsed.success) {
     const msg = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ");
@@ -99,9 +104,13 @@ router.post("/estimate", estimateLimiter, async (req, res) => {
     }
     sendErrorWithData(res, e instanceof RideApiError ? (e as Error).message : "An internal error occurred", { code }, status);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/", customerAuth, bookRideLimiter, async (req, res) => {
+  try {
   const parsed = bookRideSchema.safeParse(req.body);
   if (!parsed.success) {
     const msg = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ");
@@ -544,9 +553,13 @@ router.post("/", customerAuth, bookRideLimiter, async (req, res) => {
       await releaseIdempotencyLock();
     }
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/:id/cancel", customerAuth, cancelRideLimiter, requireRideState(["searching", "bargaining", "accepted", "arrived"]), requireRideOwner("userId"), async (req, res) => {
+  try {
   const userId = req.customerId!;
   const ride = req.ride!;
   const cancelParsed = cancelRideSchema.safeParse(req.body ?? {});
@@ -693,9 +706,13 @@ router.patch("/:id/cancel", customerAuth, cancelRideLimiter, requireRideState(["
     cancelFeeAsDebt,
     cancelReason,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/:id/bids/:bidId/reject", customerAuth, async (req, res) => {
+  try {
   const rideId = String(req.params["id"]);
   const bidId  = String(req.params["bidId"]);
   const userId = req.customerId!;
@@ -723,9 +740,13 @@ router.patch("/:id/bids/:bidId/reject", customerAuth, async (req, res) => {
 
   emitRideUpdate(rideId);
   sendSuccess(res, { bidId, status: "rejected" });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/:id/accept-bid", customerAuth, async (req, res) => {
+  try {
   const parsed = acceptBidSchema.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, "bidId required"); return;
@@ -880,9 +901,13 @@ router.patch("/:id/accept-bid", customerAuth, async (req, res) => {
   emitRideDispatchUpdate({ rideId: rideUpdate!.id, action: "accepted", status: "accepted" });
   emitRideUpdate(rideUpdate!.id);
   sendSuccess(res, { ...formatRide(rideUpdate!), agreedFare, tripOtp: otp });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/:id/customer-counter", bargainLimiter, customerAuth, requireRideState(["bargaining"]), requireRideOwner("userId"), async (req, res) => {
+  try {
   const parsed = customerCounterSchema.safeParse(req.body);
   if (!parsed.success) {
     const msg = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ");
@@ -946,9 +971,13 @@ router.patch("/:id/customer-counter", bargainLimiter, customerAuth, requireRideS
 
   emitRideUpdate(rideId);
   sendSuccess(res, formatRide(updated!));
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
   const statusFilter = req.query["status"] as string | undefined;
 
@@ -975,9 +1004,13 @@ router.get("/", customerAuth, async (req, res) => {
     rides: result,
     total: result.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/payment-methods", async (_req, res) => {
+  try {
   const s = await getCachedSettings();
   const rideAllowed = (newKey: string, legacyKey: string, legacyDefault: string): boolean => {
     if (s[newKey] !== undefined) return s[newKey] === "on";
@@ -990,9 +1023,13 @@ router.get("/payment-methods", async (_req, res) => {
     { key: "easypaisa", label: "EasyPaisa",  enabled: rideAllowed("easypaisa_allowed_rides", "ride_payment_easypaisa", "off") && (s["easypaisa_enabled"] ?? "off") === "on" },
   ];
   sendSuccess(res, { methods: methods.filter(m => m.enabled) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/pool/:groupId", customerAuth, async (req, res) => {
+  try {
   const groupId = String(req.params["groupId"]);
   const rides = await db.select({
     id: ridesTable.id, userId: ridesTable.userId,
@@ -1001,6 +1038,9 @@ router.get("/pool/:groupId", customerAuth, async (req, res) => {
     stops: ridesTable.stops, createdAt: ridesTable.createdAt,
   }).from(ridesTable).where(eq(ridesTable.poolGroupId, groupId)).orderBy(ridesTable.createdAt);
   sendSuccess(res, { groupId, rides, passengerCount: rides.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

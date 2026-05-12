@@ -28,6 +28,7 @@ import { getIO } from "../../../lib/socketio.js";
 
 const router = Router();
 router.get("/transactions", async (req, res) => {
+  try {
   const limit = Math.min(parseInt(req.query["limit"] as string) || 50, 200);
   const after = req.query["after"] as string | undefined;
   const cursor = after ? decodeCursor(after) : null;
@@ -60,10 +61,14 @@ router.get("/transactions", async (req, res) => {
     nextCursor: page.nextCursor,
     hasMore: page.hasMore,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Platform Settings ── */
 router.get("/transactions-enriched", async (req, res) => {
+  try {
   const limit = Math.min(parseInt(req.query["limit"] as string) || 50, 300);
   const after = req.query["after"] as string | undefined;
   const cursor = after ? decodeCursor(after) : null;
@@ -103,10 +108,14 @@ router.get("/transactions-enriched", async (req, res) => {
     nextCursor: page.nextCursor,
     hasMore: page.hasMore,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Vendors list ── */
 router.get("/vendors", async (_req, res) => {
+  try {
   const settings = await getCachedSettings();
   const isDemoMode = (settings["platform_mode"] ?? "demo") === "demo";
 
@@ -167,9 +176,13 @@ router.get("/vendors", async (_req, res) => {
     }),
     total: vendors.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/vendors/:id/status", async (req, res) => {
+  try {
   const { isActive, isBanned, banReason, securityNote } = req.body;
   const updates: Record<string, any> = { updatedAt: new Date() };
   if (isActive    !== undefined) updates.isActive    = isActive;
@@ -185,9 +198,13 @@ router.patch("/vendors/:id/status", async (req, res) => {
     }
   }
   sendSuccess(res, { ...user, walletBalance: parseFloat(String(user.walletBalance ?? "0")) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/vendors/:id/payout", async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const { amount, description } = req.body;
   const vendorId = req.params["id"]!;
@@ -225,9 +242,13 @@ router.post("/vendors/:id/payout", async (req, res) => {
     const message = error instanceof Error ? error.message : String(error);
     sendError(res, message, 400);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/vendors/:id/credit", async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const { amount, description } = req.body;
   const vendorId = req.params["id"]!;
@@ -265,12 +286,16 @@ router.post("/vendors/:id/credit", async (req, res) => {
     const message = error instanceof Error ? error.message : String(error);
     sendError(res, message, 400);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ══════════════════════════════════════
    RIDER MANAGEMENT
 ══════════════════════════════════════ */
 router.get("/riders", async (_req, res) => {
+  try {
   const settings = await getCachedSettings();
   const isDemoMode = (settings["platform_mode"] ?? "demo") === "demo";
 
@@ -322,9 +347,13 @@ router.get("/riders", async (_req, res) => {
     })),
     total: riders.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.patch("/riders/:id/status", async (req, res) => {
+  try {
   const { isActive, isBanned, banReason } = req.body;
   const updates: Record<string, any> = { updatedAt: new Date() };
   if (isActive  !== undefined) updates.isActive  = isActive;
@@ -343,9 +372,13 @@ router.patch("/riders/:id/status", async (req, res) => {
     }
   }
   sendSuccess(res, { ...user, walletBalance: parseFloat(String(user.walletBalance ?? "0")) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/riders/:id/payout", async (req, res) => {
+  try {
   const { amount, description } = req.body;
   if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
     sendValidationError(res, "Valid amount required"); return;
@@ -387,9 +420,13 @@ router.post("/riders/:id/payout", async (req, res) => {
   const newBal = parseFloat(updated.walletBalance ?? "0");
   await sendUserNotification(rider.id, "Earnings Paid Out 💵", `Rs. ${amt} has been paid out to your account.`, "system", "cash-outline");
   sendSuccess(res, { amount: amt, newBalance: newBal, rider: { ...updated, walletBalance: newBal } });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/riders/:id/bonus", async (req, res) => {
+  try {
   const { amount, description } = req.body;
   if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
     sendValidationError(res, "Valid amount required"); return;
@@ -432,27 +469,39 @@ router.post("/riders/:id/bonus", async (req, res) => {
   }
   await sendUserNotification(riderId, "Bonus Received! 🎉", `Rs. ${amt} bonus has been added to your wallet.`, "system", "gift-outline");
   sendSuccess(res, { amount: amt, newBalance: newBal, rider: { ...updated, walletBalance: newBal } });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/riders/:id/penalties", async (req, res) => {
+  try {
   const riderId = req.params["id"]!;
   const penalties = await db.select().from(riderPenaltiesTable)
     .where(eq(riderPenaltiesTable.riderId, riderId))
     .orderBy(desc(riderPenaltiesTable.createdAt))
     .limit(100);
   sendSuccess(res, { penalties: penalties.map(p => ({ ...p, amount: parseFloat(String(p.amount)) })) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/riders/:id/ratings", async (req, res) => {
+  try {
   const riderId = req.params["id"]!;
   const ratings = await db.select().from(rideRatingsTable)
     .where(eq(rideRatingsTable.riderId, riderId))
     .orderBy(desc(rideRatingsTable.createdAt))
     .limit(100);
   sendSuccess(res, { ratings });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/riders/:id/restrict", async (req, res) => {
+  try {
   const riderId = req.params["id"]!;
   const [user] = await db.update(usersTable)
     .set({ isRestricted: true, updatedAt: new Date() })
@@ -461,9 +510,13 @@ router.post("/riders/:id/restrict", async (req, res) => {
   if (!user) { sendNotFound(res, "Rider not found"); return; }
   await sendUserNotification(riderId, "Account Restricted ⚠️", "Your account has been restricted by admin. Contact support for more details.", "system", "alert-circle-outline");
   sendSuccess(res, { isRestricted: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/riders/:id/unrestrict", async (req, res) => {
+  try {
   const riderId = req.params["id"]!;
   const [user] = await db.update(usersTable)
     .set({ isRestricted: false, updatedAt: new Date() })
@@ -472,10 +525,14 @@ router.post("/riders/:id/unrestrict", async (req, res) => {
   if (!user) { sendNotFound(res, "Rider not found"); return; }
   await sendUserNotification(riderId, "Account Unrestricted ✅", "Your account has been unrestricted. You can now accept rides again.", "system", "checkmark-circle-outline");
   sendSuccess(res, { isRestricted: false });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/withdrawal-requests ─────────── */
 router.get("/withdrawal-requests", async (req, res) => {
+  try {
   const statusFilter = req.query["status"] as string | undefined;
   const txns = await db.select().from(walletTransactionsTable)
     .where(eq(walletTransactionsTable.type, "withdrawal"))
@@ -491,10 +548,14 @@ router.get("/withdrawal-requests", async (req, res) => {
   }));
   const filtered = statusFilter ? enriched.filter(w => w.status === statusFilter) : enriched;
   sendSuccess(res, { withdrawals: filtered });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/withdrawal-requests/:id/approve ─── */
 router.patch("/withdrawal-requests/:id/approve", async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const { refNo, note } = req.body;
   const txId = req.params["id"]!;
@@ -534,10 +595,14 @@ router.patch("/withdrawal-requests/:id/approve", async (req, res) => {
   const wdIo = getIO();
   if (wdIo) wdIo.to("admin-fleet").emit("wallet:withdrawal-approved", { txId, userId: tx.userId, amount: amt });
   sendSuccess(res, { txId, status: "paid", refNo: refNo || "manual" });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/withdrawal-requests/:id/reject ─── */
 router.patch("/withdrawal-requests/:id/reject", async (req, res) => {
+  try {
   const adminReq = req as AdminRequest;
   const { reason } = req.body;
   const txId = req.params["id"]!;
@@ -588,10 +653,14 @@ router.patch("/withdrawal-requests/:id/reject", async (req, res) => {
   const wdRejIo = getIO();
   if (wdRejIo) wdRejIo.to("admin-fleet").emit("wallet:withdrawal-rejected", { txId, userId: tx.userId, amount: amt, reason: rejReason });
   sendSuccess(res, { txId, status: "rejected", reason: rejReason, refunded: amt });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/withdrawal-requests/batch-approve ─── */
 router.patch("/withdrawal-requests/batch-approve", async (req, res) => {
+  try {
   const { ids } = req.body as { ids: string[] };
   if (!Array.isArray(ids) || ids.length === 0) { sendValidationError(res, "ids required"); return; }
   const results: unknown[] = [];
@@ -610,10 +679,14 @@ router.patch("/withdrawal-requests/batch-approve", async (req, res) => {
     results.push(txId);
   }
   sendSuccess(res, { approved: results });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/withdrawal-requests/batch-reject ─── */
 router.patch("/withdrawal-requests/batch-reject", async (req, res) => {
+  try {
   const { ids, reason } = req.body as { ids: string[]; reason: string };
   if (!Array.isArray(ids) || ids.length === 0) { sendValidationError(res, "ids required"); return; }
   const rejReason = (reason || "Admin batch rejected").trim();
@@ -638,10 +711,14 @@ router.patch("/withdrawal-requests/batch-reject", async (req, res) => {
     results.push(txId);
   }
   sendSuccess(res, { rejected: results });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/deposit-requests — List all rider deposit requests ─── */
 router.get("/deposit-requests", async (req, res) => {
+  try {
   const statusFilter = req.query["status"] as string | undefined;
   const txns = await db.select().from(walletTransactionsTable)
     .where(eq(walletTransactionsTable.type, "deposit"))
@@ -658,10 +735,14 @@ router.get("/deposit-requests", async (req, res) => {
   }));
   const filtered = statusFilter ? enriched.filter(d => d.status === statusFilter) : enriched;
   sendSuccess(res, { deposits: filtered });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/deposit-requests/:id/approve — Approve a rider deposit (credits wallet, atomic) ─── */
 router.patch("/deposit-requests/:id/approve", async (req, res) => {
+  try {
   const { refNo, note } = req.body;
   const txId = req.params["id"]!;
 
@@ -731,10 +812,14 @@ router.patch("/deposit-requests/:id/approve", async (req, res) => {
   const fleetIo = getIO();
   if (fleetIo) fleetIo.to("admin-fleet").emit("wallet:deposit-approved", { txId, userId: tx.userId, amount: amt });
   sendSuccess(res, { txId, status: "approved", credited: amt });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /admin/deposit-requests/:id/reject — Reject a rider deposit (atomic state transition) ─── */
 router.patch("/deposit-requests/:id/reject", async (req, res) => {
+  try {
   const { reason } = req.body;
   const txId = req.params["id"]!;
 
@@ -765,10 +850,14 @@ router.patch("/deposit-requests/:id/reject", async (req, res) => {
     type: "wallet", icon: "close-circle-outline",
   }).catch(e => logger.error("deposit rejection notif failed:", e));
   sendSuccess(res, { txId, status: "rejected", reason: rejReason });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/deposit-requests/bulk-approve — Bulk approve customer pending deposits (all-or-nothing atomic) ─── */
 router.post("/deposit-requests/bulk-approve", async (req, res) => {
+  try {
   const { ids, refNo } = req.body as { ids: string[]; refNo?: string };
   if (!Array.isArray(ids) || ids.length === 0) { sendValidationError(res, "ids array is required"); return; }
   const uniqueIds = [...new Set(ids)];
@@ -827,10 +916,14 @@ router.post("/deposit-requests/bulk-approve", async (req, res) => {
   }
 
   sendSuccess(res, { approved: preChecked.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/deposit-requests/bulk-reject — Bulk reject customer pending deposits (all-or-nothing atomic) ─── */
 router.post("/deposit-requests/bulk-reject", async (req, res) => {
+  try {
   const { ids, reason } = req.body as { ids: string[]; reason: string };
   if (!Array.isArray(ids) || ids.length === 0) { sendValidationError(res, "ids array is required"); return; }
   if (!reason?.trim()) { sendValidationError(res, "reason is required"); return; }
@@ -882,10 +975,14 @@ router.post("/deposit-requests/bulk-reject", async (req, res) => {
   }
 
   sendSuccess(res, { rejected: preChecked.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /admin/all-notifications ─────────── */
 router.post("/riders/:id/credit", async (req, res) => {
+  try {
   const { amount, description, type } = req.body;
   if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
     sendValidationError(res, "Valid amount required"); return;
@@ -932,8 +1029,12 @@ router.post("/riders/:id/credit", async (req, res) => {
     "wallet", "wallet-outline"
   );
   sendSuccess(res, { amount: amt, newBalance: parseFloat(updated?.walletBalance ?? "0") });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 router.patch("/vendors/:id/commission", async (req, res) => {
+  try {
   const { commissionPct } = req.body as { commissionPct: number };
   if (commissionPct === undefined || isNaN(Number(commissionPct))) {
     sendValidationError(res, "commissionPct required"); return;
@@ -945,10 +1046,14 @@ router.patch("/vendors/:id/commission", async (req, res) => {
   if (!vendor) { sendNotFound(res, "Vendor not found"); return; }
   addAuditEntry({ action: "vendor_commission_override", ip: getClientIp(req), adminId: (req as AdminRequest).adminId, details: `Commission override ${commissionPct}% for vendor ${req.params["id"]}`, result: "success" });
   sendSuccess(res, { commissionPct });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/riders/:id/override-suspension — override auto-suspension ── */
 router.post("/riders/:id/override-suspension", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const [user] = await db.select({ id: usersTable.id, autoSuspendedAt: usersTable.autoSuspendedAt })
     .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
@@ -971,10 +1076,14 @@ router.post("/riders/:id/override-suspension", async (req, res) => {
   }).catch(() => {});
 
   sendSuccess(res, { user: stripUser(updated!) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /admin/vendors/:id/override-suspension — override auto-suspension ─ */
 router.post("/vendors/:id/override-suspension", async (req, res) => {
+  try {
   const userId = req.params["id"]!;
   const [user] = await db.select({ id: usersTable.id, autoSuspendedAt: usersTable.autoSuspendedAt })
     .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
@@ -997,6 +1106,9 @@ router.post("/vendors/:id/override-suspension", async (req, res) => {
   }).catch(() => {});
 
   sendSuccess(res, { user: stripUser(updated!) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

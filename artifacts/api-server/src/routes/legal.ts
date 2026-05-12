@@ -140,6 +140,7 @@ async function isLatestForPolicy(policy: string, version: string): Promise<boole
 }
 
 router.post("/terms-versions", validateBody(termsVersionSchema), async (req, res) => {
+  try {
   const body = req.body as z.infer<typeof termsVersionSchema>;
   const effectiveAt = body.effectiveAt ? new Date(body.effectiveAt) : new Date();
 
@@ -238,6 +239,9 @@ router.post("/terms-versions", validateBody(termsVersionSchema), async (req, res
   } catch (err) {
     sendError(res, (err as Error).message ?? "Failed to create terms version");
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /legal/consent-log ──────────────────────────────────────── */
@@ -250,6 +254,7 @@ const consentQuerySchema = z.object({
 });
 
 router.get("/consent-log", async (req, res) => {
+  try {
   const parsed = consentQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     sendError(res, parsed.error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join("; "), 400);
@@ -315,6 +320,9 @@ router.get("/consent-log", async (req, res) => {
     sendSuccess(res, { items, total, limit, offset });
   } catch (err) {
     sendError(res, (err as Error).message ?? "Failed to load consent log");
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

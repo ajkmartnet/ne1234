@@ -8,6 +8,7 @@ import { sendSuccess, sendNotFound, sendValidationError, sendError } from "../..
 const router = Router();
 
 router.get("/delivery-log", async (req, res) => {
+  try {
   const limit = Math.min(Math.max(parseInt((req.query.limit as string) || "20", 10), 1), 200);
   const offset = Math.max(parseInt((req.query.offset as string) || "0", 10), 0);
   const status = (req.query.status as string | undefined)?.trim();
@@ -60,9 +61,13 @@ router.get("/delivery-log", async (req, res) => {
   } catch (err: any) {
     sendError(res, "Failed to fetch WhatsApp delivery log", 500, err?.message);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/delivery-log/retry", async (req, res) => {
+  try {
   const id = (req.body?.id as string | undefined)?.trim();
   if (!id) {
     sendValidationError(res, "Delivery log id is required");
@@ -95,6 +100,9 @@ router.post("/delivery-log/retry", async (req, res) => {
   });
 
   sendSuccess(res, { success: true });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/delivery-log/stats", async (req, res) => {

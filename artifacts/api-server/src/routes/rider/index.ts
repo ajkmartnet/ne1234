@@ -251,6 +251,7 @@ router.use(riderAuth);
 
 /* ── GET /rider/me — Profile ── */
 router.get("/me", async (req, res) => {
+  try {
   const user = req.riderUser!;
   const riderId = user.id;
   const today = new Date(); today.setHours(0,0,0,0);
@@ -319,10 +320,14 @@ router.get("/me", async (req, res) => {
       rating: avgRating,
     },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /rider/online — Toggle online status ── */
 router.patch("/online", async (req, res) => {
+  try {
   const parsed = onlineSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid input"); return; }
   const riderId   = req.riderId!;
@@ -421,10 +426,14 @@ router.patch("/online", async (req, res) => {
   } catch { /* non-critical */ }
 
   sendSuccess(res, { isOnline: !!isOnline, ...(serviceZoneWarning ? { serviceZoneWarning } : {}) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /rider/profile — Update profile ── */
 router.patch("/profile", async (req, res) => {
+  try {
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid input"); return; }
   const riderId = req.riderId!;
@@ -542,6 +551,9 @@ router.patch("/profile", async (req, res) => {
     })(),
     ...(cnicChanged || drivingLicenseChanged ? { pendingVerification: true } : {}),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Haversine distance (km) ── */
@@ -570,6 +582,7 @@ function maskPhone(phone: string | null | undefined): string | null {
 /* InDrive-style broadcast: ALL nearby riders within admin radius see every open ride.
    First to accept wins via atomic WHERE riderId IS NULL. */
 router.get("/requests", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const s = await getCachedSettings();
   const avgSpeed = parseFloat(s["dispatch_avg_speed_kmh"] ?? "25");
@@ -655,10 +668,14 @@ router.get("/requests", async (req, res) => {
       rides: maskedRides,
     },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /rider/active — Current active delivery ── */
 router.get("/active", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const [order, ride] = await Promise.all([
     db.select().from(ordersTable).where(and(eq(ordersTable.riderId, riderId), or(eq(ordersTable.status, "out_for_delivery"), eq(ordersTable.status, "picked_up")))).orderBy(desc(ordersTable.updatedAt)).limit(1),
@@ -707,11 +724,15 @@ router.get("/active", async (req, res) => {
   }
 
   sendSuccess(res, { order: enrichedOrder, ride: enrichedRide });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/orders/:id/accept — Accept an order ──
    Uses WHERE riderId IS NULL to prevent two riders accepting the same order (race condition) */
 router.post("/orders/:id/accept", async (req, res) => {
+  try {
   const paramParsed = idParamSchema.safeParse(req.params);
   if (!paramParsed.success) { sendValidationError(res, "Invalid order ID"); return; }
   const riderId   = req.riderId!;
@@ -813,12 +834,16 @@ router.post("/orders/:id/accept", async (req, res) => {
   }).catch((err: Error) => { logger.error("[rider] background op failed:", err.message); });
 
   sendSuccess(res, { ...updated, total: safeNum(updated.total) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/orders/:id/reject — Rider explicitly rejects/skips an order ──
    Records the rejection server-side so the dispatch engine can skip this rider
    for future broadcasts of the same order. No penalty is applied. */
 router.post("/orders/:id/reject", async (req, res) => {
+  try {
   const paramParsed = idParamSchema.safeParse(req.params);
   if (!paramParsed.success) { sendValidationError(res, "Invalid order ID"); return; }
   const riderId = req.riderId!;
@@ -837,6 +862,9 @@ router.post("/orders/:id/reject", async (req, res) => {
   }).catch((e: Error) => { logger.warn({ riderId, orderId, err: e.message }, "[rider] skip-order notification insert failed"); });
 
   sendSuccess(res, { orderId, reason });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Cancellation penalty helper ──
@@ -932,6 +960,7 @@ async function handleCancelPenalty(riderId: string): Promise<{ dailyCancels: num
 
 /* ── GET /rider/cancel-stats — Rider's cancellation stats ── */
 router.get("/cancel-stats", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const s = await getCachedSettings();
   const dailyLimit = parseInt(s["rider_cancel_limit_daily"] ?? "3", 10);
@@ -980,10 +1009,14 @@ router.get("/cancel-stats", async (req, res) => {
     restrictEnabled,
     cancelRate,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /rider/orders/:id/status — Update order status (delivered) ── */
 router.patch("/orders/:id/status", async (req, res) => {
+  try {
   const parsed = orderStatusSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid status"); return; }
   const riderId = req.riderId!;
@@ -1199,11 +1232,15 @@ router.patch("/orders/:id/status", async (req, res) => {
   }
 
   sendSuccess(res, { ...updated, total: safeNum(updated.total) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/rides/:id/accept — Accept a ride ──
    Uses WHERE riderId IS NULL to prevent two riders accepting same ride (race condition) */
 router.post("/rides/:id/accept", rideAcceptLimiter, async (req, res) => {
+  try {
   const paramParsed = idParamSchema.safeParse(req.params);
   if (!paramParsed.success) { sendValidationError(res, "Invalid ride ID"); return; }
   const riderId   = req.riderId!;
@@ -1351,10 +1388,14 @@ router.post("/rides/:id/accept", rideAcceptLimiter, async (req, res) => {
   emitRideUpdate(updated.id);
   const { tripOtp: _omitOtp, ...rideWithoutOtp } = updated;
   sendSuccess(res, { ...rideWithoutOtp, fare: safeNum(updated.fare), distance: safeNum(updated.distance) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/rides/:id/verify-otp — Verify customer OTP before starting trip ── */
 router.post("/rides/:id/verify-otp", otpLimiter, async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const rideId  = req.params["id"]!;
   const { otp } = req.body ?? {};
@@ -1415,10 +1456,14 @@ router.post("/rides/:id/verify-otp", otpLimiter, async (req, res) => {
   emitRideDispatchUpdate({ rideId, action: "otp-verified", status: ride.status });
   emitRideUpdate(rideId);
   sendSuccess(res, undefined, "OTP verified. You may now start the trip.");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /rider/rides/:id/status — Update ride status (completed/cancelled) ── */
 router.patch("/rides/:id/status", rideStatusLimiter, async (req, res) => {
+  try {
   const parsed = rideStatusSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid status"); return; }
   const riderId = req.riderId!;
@@ -1605,10 +1650,14 @@ router.patch("/rides/:id/status", rideStatusLimiter, async (req, res) => {
   emitRideDispatchUpdate({ rideId: updated.id, action: "status-change", status });
   emitRideUpdate(updated.id);
   sendSuccess(res, { ...updated, fare: safeNum(updated.fare), distance: safeNum(updated.distance) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/rides/:id/counter — Rider submits a bid on a bargaining ride (InDrive multi-bid) ── */
 router.post("/rides/:id/counter", rideBidLimiter, async (req, res) => {
+  try {
   const parsed = counterSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "counterFare required"); return; }
   const riderId   = req.riderId!;
@@ -1738,10 +1787,14 @@ router.post("/rides/:id/counter", rideBidLimiter, async (req, res) => {
   emitRideDispatchUpdate({ rideId, action: "bid", status: "bargaining" });
   emitRideUpdate(rideId);
   sendSuccess(res, { bid: { ...bid, fare: safeNum(bid!.fare) } });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/rides/:id/reject-offer — Rider dismisses a bargaining ride (local dismiss, no DB lock) ── */
 router.post("/rides/:id/reject-offer", async (req, res) => {
+  try {
   /* InDrive model: riders don't lock the ride anymore, so "rejection" is purely a local dismiss.
      If this rider had submitted a pending bid, we cancel it. */
   const riderId = req.riderId!;
@@ -1753,10 +1806,14 @@ router.post("/rides/:id/reject-offer", async (req, res) => {
     .where(and(eq(rideBidsTable.rideId, rideId), eq(rideBidsTable.riderId, riderId), eq(rideBidsTable.status, "pending")));
 
   sendSuccess(res, undefined, "Ride dismissed");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /rider/history — Delivery history ── */
 router.get("/history", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const s = await getCachedSettings();
   const riderKeepPct = (Number(s["rider_keep_pct"]) || 80) / 100;
@@ -1784,10 +1841,14 @@ router.get("/history", async (req, res) => {
   const combined = sorted.slice(0, limitParam);
 
   sendSuccess(res, { history: combined, hasMore, limit: limitParam, offset: offsetParam });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /rider/reviews — Reviews received by this rider (excludes hidden/deleted) ── */
 router.get("/reviews", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const pageLimit = 50;
 
@@ -1908,10 +1969,14 @@ router.get("/reviews", async (req, res) => {
     .slice(0, pageLimit);
 
   sendSuccess(res, { reviews, avgRating, total, starBreakdown });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /rider/earnings — Earnings summary ── */
 router.get("/earnings", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const today = new Date(); today.setHours(0,0,0,0);
   const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
@@ -1977,6 +2042,9 @@ router.get("/earnings", async (req, res) => {
     month:  { earnings: parseFloat(monthTotal.toFixed(2)), deliveries: (monthOrders[0]?.c ?? 0) + (monthRides[0]?.c ?? 0), breakdown: mkBreakdown(monthOrders, monthFoodOrders, monthRides) },
     dailyGoal: personalDailyGoal,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /rider/wallet/transactions ──
@@ -1991,6 +2059,7 @@ router.get("/earnings", async (req, res) => {
    any client still on the old API keeps working through the transition. The
    rider-app frontend uses the paginated path. */
 router.get("/wallet/transactions", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const user = req.riderUser!;
 
@@ -2080,10 +2149,14 @@ router.get("/wallet/transactions", async (req, res) => {
     nextCursor,
     limit,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/wallet/withdraw — Atomic withdrawal (prevents race condition) ── */
 router.post("/wallet/withdraw", async (req, res) => {
+  try {
   const parsed = withdrawSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid input"); return; }
   const riderId = req.riderId!;
@@ -2140,10 +2213,14 @@ router.post("/wallet/withdraw", async (req, res) => {
   } catch (e: unknown) {
     sendValidationError(res, (e as Error).message);
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /rider/cod-summary — COD balance + remittance history ── */
 router.get("/cod-summary", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const [codAgg, verifiedAgg, remittances] = await Promise.all([
     db.select({ total: sum(ordersTable.total), count: count() }).from(ordersTable)
@@ -2163,6 +2240,9 @@ router.get("/cod-summary", async (req, res) => {
     codOrderCount: Number(codAgg[0]?.count ?? 0),
     remittances:   remittances.map(r => ({ ...r, amount: safeNum(r.amount) })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/cod/remit — submit COD cash remittance ── */
@@ -2226,19 +2306,27 @@ router.post("/cod/remit", async (req, res) => {
 
 /* ── GET /rider/notifications ── */
 router.get("/notifications", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const notifs = await db.select().from(notificationsTable)
     .where(eq(notificationsTable.userId, riderId))
     .orderBy(desc(notificationsTable.createdAt))
     .limit(30);
   sendSuccess(res, { notifications: notifs, unread: notifs.filter((n: Record<string, unknown>) => !n.isRead).length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /rider/notifications/read-all ── */
 router.patch("/notifications/read-all", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   await db.update(notificationsTable).set({ isRead: true }).where(eq(notificationsTable.userId, riderId));
   sendSuccess(res);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /rider/notifications/:id/read ── */
@@ -2268,6 +2356,7 @@ router.patch("/notifications/:id/read", async (req, res) => {
 
 /* ── GET /rider/wallet/min-balance — Returns min balance config ── */
 router.get("/wallet/min-balance", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const s = await getCachedSettings();
   const minBalance = parseFloat(s["rider_min_balance"] ?? "0");
@@ -2281,10 +2370,14 @@ router.get("/wallet/min-balance", async (req, res) => {
     isBelowMin: minBalance > 0 && currentBalance < minBalance,
     shortfall: minBalance > 0 ? Math.max(0, minBalance - currentBalance) : 0,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/wallet/deposit — Submit a manual deposit request ── */
 router.post("/wallet/deposit", async (req, res) => {
+  try {
   const parsed = depositSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid input"); return; }
   const riderId = req.riderId!;
@@ -2332,6 +2425,9 @@ router.post("/wallet/deposit", async (req, res) => {
   }).catch(e => logger.error("deposit notif insert failed:", e));
 
   sendSuccess(res, { txId, amount: amt });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const spoofHitStore = new Map<string, number>();
@@ -2354,6 +2450,7 @@ const locationRateLimiter = rateLimit({
 
 /* ── PATCH /rider/location — GPS heartbeat: rider sends periodic location updates ── */
 router.patch("/location", locationRateLimiter, gpsAntiSpoofMiddleware, async (req, res) => {
+  try {
   const parsed = locationSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid location data"); return; }
   const riderId = req.riderId!;
@@ -2617,6 +2714,9 @@ router.patch("/location", locationRateLimiter, gpsAntiSpoofMiddleware, async (re
   } else {
     sendSuccess(res, { updatedAt });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /rider/location/batch — Replay queued offline GPS pings ── */
@@ -2633,6 +2733,7 @@ const batchLocationSchema = z.object({
 });
 
 router.post("/location/batch", async (req, res) => {
+  try {
   const parsed = batchLocationSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid input"); return; }
   const riderId = req.riderId!;
@@ -2850,16 +2951,23 @@ router.post("/location/batch", async (req, res) => {
     batchResponse["spoofWarnings"] = batchSpoofWarnings;
   }
   sendSuccess(res, batchResponse);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /rider/wallet/deposits — Deposit history ── */
 router.get("/wallet/deposits", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const deposits = await db.select().from(walletTransactionsTable)
     .where(and(eq(walletTransactionsTable.userId, riderId), eq(walletTransactionsTable.type, "deposit")))
     .orderBy(desc(walletTransactionsTable.createdAt))
     .limit(20);
   sendSuccess(res, { deposits: deposits.map(d => ({ ...d, amount: safeNum(d.amount) })) });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Ignore penalty helper ── */
@@ -2943,6 +3051,7 @@ async function handleIgnorePenalty(riderId: string): Promise<{ dailyIgnores: num
 
 /* ── POST /rider/rides/:id/ignore — Rider ignores a ride request ── */
 router.post("/rides/:id/ignore", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const rideId = req.params["id"]!;
 
@@ -2958,10 +3067,14 @@ router.post("/rides/:id/ignore", async (req, res) => {
     rideId,
     ignorePenalty: penalty,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /rider/ignore-stats — Rider's ignore stats for today ── */
 router.get("/ignore-stats", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const s = await getCachedSettings();
   const limit = parseInt(s["rider_ignore_limit_daily"] ?? "5", 10);
@@ -2982,10 +3095,14 @@ router.get("/ignore-stats", async (req, res) => {
     penaltyAmount: penaltyAmt,
     remaining: Math.max(0, limit - (countRow?.c ?? 0)),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── GET /rider/penalty-history — Rider's penalty history ── */
 router.get("/penalty-history", async (req, res) => {
+  try {
   const riderId = req.riderId!;
   const penalties = await db.select().from(riderPenaltiesTable)
     .where(eq(riderPenaltiesTable.riderId, riderId))
@@ -2998,6 +3115,9 @@ router.get("/penalty-history", async (req, res) => {
       createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
     })),
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const sosSchema = z.object({
@@ -3008,6 +3128,7 @@ const sosSchema = z.object({
 
 /* ── POST /rider/sos — Rider SOS alert ── */
 router.post("/sos", async (req, res) => {
+  try {
   const settings = await getCachedSettings();
   if ((settings["feature_sos"] ?? "on") !== "on") {
     sendError(res, "SOS feature is currently disabled", 503); return;
@@ -3076,6 +3197,9 @@ router.post("/sos", async (req, res) => {
   });
 
   sendSuccess(res, { alertId, sentAt: now.toISOString() });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 const osrmQuerySchema = z.object({
@@ -3087,6 +3211,7 @@ const osrmQuerySchema = z.object({
 
 /* ── GET /rider/osrm-route — Fetch turn-by-turn directions from OSRM ── */
 router.get("/osrm-route", async (req, res) => {
+  try {
   const parsed = osrmQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     sendValidationError(res, parsed.error.issues[0]?.message || "fromLat, fromLng, toLat, toLng required (valid coordinates)"); return;
@@ -3161,6 +3286,9 @@ router.get("/osrm-route", async (req, res) => {
     logger.warn("[rider/osrm-route] Unexpected error:", msg, "— using Haversine fallback");
     if (!res.headersSent) haversineFallback();
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── Rider AI Assistant ────────────────────────────────────────────────────────
@@ -3174,6 +3302,7 @@ const aiChatSchema = z.object({
 });
 
 router.post("/ai-chat", verifyUserJwt, async (req: Request, res: Response) => {
+  try {
   const parse = aiChatSchema.safeParse(req.body);
   if (!parse.success) { sendError(res, "Invalid request", 400); return; }
   const { message, history = [] } = parse.data;
@@ -3219,6 +3348,9 @@ router.post("/ai-chat", verifyUserJwt, async (req: Request, res: Response) => {
   } catch (err) {
     logger.error({ err }, "rider ai-chat error");
     sendError(res, "Could not get AI response", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

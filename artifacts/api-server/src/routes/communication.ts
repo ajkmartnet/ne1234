@@ -1049,6 +1049,7 @@ router.get("/calls/history", async (req: any, res) => {
 
 /* ── POST /communication/block — Block a user ── */
 router.post("/block", async (req: any, res: any) => {
+  try {
   const userId = (req.user as { id: string }).id;
   const { blockedUserId } = req.body as { blockedUserId?: string };
   if (!blockedUserId || typeof blockedUserId !== "string") {
@@ -1074,10 +1075,14 @@ router.post("/block", async (req: any, res: any) => {
     logger.error({ err: e }, "[comm] block failed");
     res.status(500).json({ error: "Failed to block user" });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── POST /communication/report — Report a user ── */
 router.post("/report", async (req: any, res: any) => {
+  try {
   const userId = (req.user as { id: string }).id;
   const { reportedUserId, reason, messageId } = req.body as { reportedUserId?: string; reason?: string; messageId?: string };
   if (!reportedUserId || !reason) {
@@ -1097,6 +1102,9 @@ router.post("/report", async (req: any, res: any) => {
   } catch (e: unknown) {
     logger.error({ err: e }, "[comm] report failed");
     res.status(500).json({ error: "Failed to report user" });
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

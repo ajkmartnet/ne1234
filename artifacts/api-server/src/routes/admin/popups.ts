@@ -80,6 +80,7 @@ router.get("/popups/templates", async (_req, res) => {
 });
 
 router.post("/popups/ai-generate", async (req, res) => {
+  try {
   const parsed = aiGenerateSchema.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error.errors.map(e => e.message).join("; "));
@@ -149,6 +150,9 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
     logger.error({ err }, "[admin/popups/ai-generate] error");
     const fallback = generateFallbackPopup(goal, tone);
     sendSuccess(res, { ...fallback, source: "template_fallback" });
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

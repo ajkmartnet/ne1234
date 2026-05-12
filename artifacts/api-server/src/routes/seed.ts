@@ -205,6 +205,7 @@ const DEMO_BANNERS = [
 ];
 
 router.post("/products", devSeedAuth, async (req, res) => {
+  try {
   await ensureSystemVendor();
   const existingMart = await db.select().from(productsTable).where(eq(productsTable.type, "mart")).limit(1);
   const existingFood = await db.select().from(productsTable).where(eq(productsTable.type, "food")).limit(1);
@@ -383,6 +384,9 @@ router.post("/products", devSeedAuth, async (req, res) => {
     seeded: { mart: seededMart, food: seededFood, banners: seededBanners, deals: seededDeals, paymentSettings: seededPayments },
     message: `Seeded: ${seededMart} mart, ${seededFood} food, ${seededBanners} banners, ${seededDeals} deals, ${seededPayments} payment settings`,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 // ─── RIDE SERVICE TYPES ───────────────────────────────────────────────────────
@@ -1029,6 +1033,7 @@ async function seedWeatherConfig(): Promise<{ inserted: boolean }> {
 
 // ─── FULL SEED ENDPOINT ───────────────────────────────────────────────────────
 router.post("/full", devSeedAuth, async (req, res) => {
+  try {
   /* Defense-in-depth: block production even if the router was somehow mounted */
   if (process.env.NODE_ENV === "production") {
     logger.warn("[SECURITY] Seed endpoint reached in production — this should not happen", { ip: req.ip });
@@ -1121,6 +1126,9 @@ router.post("/full", devSeedAuth, async (req, res) => {
   } catch (err) {
     logger.error("[seed:full]", err);
     res.status(500).json({ success: false, error: String(err) });
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

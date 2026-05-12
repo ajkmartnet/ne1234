@@ -30,6 +30,7 @@ const messageSchema = z.object({
 });
 
 router.get("/messages", requireRole("customer"), async (req, res) => {
+  try {
   const userId = req.customerId!;
   try {
     const msgs = await db
@@ -49,9 +50,13 @@ router.get("/messages", requireRole("customer"), async (req, res) => {
   } catch {
     return sendSuccess(res, { messages: [] });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/messages", requireRole("customer"), validateBody(messageSchema), async (req, res) => {
+  try {
   const userId = req.customerId!;
   const { message } = req.body as z.infer<typeof messageSchema>;
   const io = getIO();
@@ -97,6 +102,9 @@ router.post("/messages", requireRole("customer"), validateBody(messageSchema), a
   } catch (err) {
     logger.error("support-chat insert failed", err);
     return sendError(res, "Failed to save message", 500);
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

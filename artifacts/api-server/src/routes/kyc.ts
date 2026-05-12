@@ -105,6 +105,7 @@ const router: IRouter = Router();
 
 /* ─── Customer: GET /api/kyc/status ─── */
 router.get("/status", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
   const [record] = await db
     .select()
@@ -143,6 +144,9 @@ router.get("/status", customerAuth, async (req, res) => {
       reviewedAt: record.reviewedAt?.toISOString() ?? null,
     },
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─── Customer: POST /api/kyc/submit ─── */
@@ -159,6 +163,7 @@ router.post(
     { name: "idPhoto", maxCount: 1 },
   ]),
   async (req, res) => {
+    try {
     const userId = req.customerId!;
 
     const { allowed, reason } = await canSubmitKyc(userId);
@@ -302,11 +307,15 @@ router.post(
       logger.error({ err }, "KYC submit error");
       res.status(500).json({ error: "Failed to submit KYC. Please try again." });
     }
+    } catch {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
   }
 );
 
 /* ─── Customer: POST /api/kyc/submit-base64 — JSON base64 photo upload ─── */
 router.post("/submit-base64", customerAuth, async (req, res) => {
+  try {
   const userId = req.customerId!;
 
   const { allowed, reason } = await canSubmitKyc(userId);
@@ -468,10 +477,14 @@ router.post("/submit-base64", customerAuth, async (req, res) => {
     logger.error({ err }, "KYC submit-base64 error");
     res.status(500).json({ error: "Failed to submit KYC. Please try again." });
   }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─── Admin: GET /api/kyc/admin/list ─── */
 router.get("/admin/list", adminAuth, async (req, res) => {
+  try {
   const { status, q, userId, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
@@ -530,10 +543,14 @@ router.get("/admin/list", adminAuth, async (req, res) => {
     .offset(offset);
 
   res.json({ records });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─── Admin: GET /api/kyc/admin/:id ─── */
 router.get("/admin/:id", adminAuth, async (req, res) => {
+  try {
   const [record] = await db
     .select()
     .from(kycVerificationsTable)
@@ -583,10 +600,14 @@ router.get("/admin/:id", adminAuth, async (req, res) => {
     user: user ?? null,
     riderProfile,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ─── Admin: PATCH /api/kyc/admin/:id — Review KYC ─── */
 router.patch("/admin/:id", adminAuth, async (req, res) => {
+  try {
   const { status, rejectionReason } = req.body;
   if (!["approved", "rejected", "resubmit"].includes(status)) {
     res.status(400).json({ error: "Invalid status" }); return;
@@ -655,6 +676,9 @@ router.patch("/admin/:id", adminAuth, async (req, res) => {
   } catch (err) {
     logger.error({ err }, "KYC review error");
     res.status(500).json({ error: "Failed to update KYC status" });
+  }
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

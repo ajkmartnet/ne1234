@@ -17,6 +17,7 @@ const addToWishlistSchema = z.object({
 });
 
 router.post("/", validateBody(addToWishlistSchema), async (req, res) => {
+  try {
   const userId = req.customerId!;
   const { productId } = req.body;
 
@@ -49,9 +50,13 @@ router.post("/", validateBody(addToWishlistSchema), async (req, res) => {
   }).returning();
 
   sendCreated(res, { id: entry!.id });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.delete("/:productId", async (req, res) => {
+  try {
   const userId = req.customerId!;
   const productId = req.params["productId"]!;
 
@@ -66,9 +71,13 @@ router.delete("/:productId", async (req, res) => {
   }
 
   sendSuccess(res, null);
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/", async (req, res) => {
+  try {
   const userId = req.customerId!;
 
   const items = await db
@@ -121,9 +130,13 @@ router.get("/", async (req, res) => {
     .filter(Boolean);
 
   sendSuccess(res, { items: enriched, total: enriched.length });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/check/:productId", async (req, res) => {
+  try {
   const userId = req.customerId!;
   const productId = req.params["productId"]!;
 
@@ -134,6 +147,9 @@ router.get("/check/:productId", async (req, res) => {
     .limit(1);
 
   sendSuccess(res, { inWishlist: existing.length > 0 });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

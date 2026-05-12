@@ -19,6 +19,7 @@ const router: IRouter = Router();
 
 /* ── POST /sos — Customer or rider triggers SOS alert ─────────────────── */
 router.post("/", customerAuth, async (req, res) => {
+  try {
   const settings = await getCachedSettings();
   if ((settings["feature_sos"] ?? "on") !== "on") {
     sendError(res, "SOS feature is currently disabled", 503); return;
@@ -64,6 +65,9 @@ router.post("/", customerAuth, async (req, res) => {
   } catch { /* non-critical */ }
 
   sendSuccess(res, { alertId }, "SOS alert sent. Help is on the way.");
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 function getAdminFromReq(req: Request): { adminId: string; adminName: string } {
@@ -118,6 +122,7 @@ const ALLOWED_SOS_STATUSES = new Set(["pending", "acknowledged", "resolved"]);
 
 /* ── GET /sos/alerts — Admin: list SOS alerts with optional ?status= filter ── */
 router.get("/alerts", adminAuth, async (req, res) => {
+  try {
   const admin = getAdminFromReq(req);
 
   const page   = Math.max(1, parseInt(String(req.query["page"]  || "1"),  10));
@@ -156,10 +161,14 @@ router.get("/alerts", adminAuth, async (req, res) => {
     hasMore:     offset + alerts.length < totalRows,
     activeCount: allSos.length,
   });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /sos/alerts/:id/acknowledge ── */
 router.patch("/alerts/:id/acknowledge", adminAuth, async (req, res) => {
+  try {
   const admin = getAdminFromReq(req);
 
   const alertId = req.params["id"];
@@ -184,10 +193,14 @@ router.patch("/alerts/:id/acknowledge", adminAuth, async (req, res) => {
 
   try { emitSosAcknowledged(fullPayload); } catch { /* non-critical */ }
   sendSuccess(res, { alert: fullPayload });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 /* ── PATCH /sos/alerts/:id/resolve ── */
 router.patch("/alerts/:id/resolve", adminAuth, async (req, res) => {
+  try {
   const admin = getAdminFromReq(req);
 
   const alertId = req.params["id"];
@@ -210,6 +223,9 @@ router.patch("/alerts/:id/resolve", adminAuth, async (req, res) => {
 
   try { emitSosResolved(fullPayload); } catch { /* non-critical */ }
   sendSuccess(res, { alert: fullPayload });
+  } catch {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

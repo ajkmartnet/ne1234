@@ -101,24 +101,51 @@ args = "pnpm --filter @workspace/admin run dev"
 waitForPort = 3000
 
 [[ports]]
-localPort = 5000
-externalPort = 80
-
-[[ports]]
 localPort = 3000
 externalPort = 3000
 
 [[ports]]
 localPort = 3001
-externalPort = 3001
+externalPort = 4200
 
 [[ports]]
 localPort = 3002
+externalPort = 3003
+
+[[ports]]
+localPort = 3003
 externalPort = 3002
+
+[[ports]]
+localPort = 3004
+externalPort = 8008
+
+[[ports]]
+localPort = 3005
+
+[[ports]]
+localPort = 4200
+externalPort = 5000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
 
 [[ports]]
 localPort = 20716
 externalPort = 8000
+
+[[ports]]
+localPort = 20717
+externalPort = 3001
+
+[[ports]]
+localPort = 23744
+externalPort = 3000
+
+[[ports]]
+localPort = 23745
+externalPort = 6800
 
   [agent]
 expertMode = true
@@ -155,3 +182,7 @@ VENDOR_JWT_SECRET = "7d16756f6c44a958b95cfe2d8747599cfef2648eae91eb8049339689080
 RIDER_JWT_SECRET = "4702772f63a217933bb7a323356db541f909e3e4a3c84d860d8525fc6668586e2fbec0a4f0efbc4a4f8094fb43dc94da4dadb4d3952130b95e36992f76e208e4"
 ERROR_REPORT_HMAC_SECRET = "9cbb600a34f0b33f88e4fd6a1e271f8dead0f010b20ed09e8c3b0f73f27aa917"
 ADMIN_SEED_PASSWORD = "Admin@123"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000

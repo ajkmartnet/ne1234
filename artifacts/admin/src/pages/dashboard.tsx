@@ -1,7 +1,7 @@
 import { useCallback, useState, useId, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader, StatCard } from "@/components/shared";
-import { Users, ShoppingBag, Car, Pill, Box, Settings, TrendingUp, ArrowRight, Wallet, Download, Trophy, Star, AlertTriangle, DollarSign, LayoutDashboard, Loader2, X, Zap, UserCheck, Search, Radio, Bell, BellOff, Database } from "lucide-react";
+import { Users, ShoppingBag, Car, Pill, Box, Settings, TrendingUp, ArrowRight, Wallet, Download, Trophy, Star, AlertTriangle, DollarSign, LayoutDashboard, Loader2, X, Zap, UserCheck, Search, Radio, Bell, BellOff, Database, PackageSearch } from "lucide-react";
 import { ActivityFeed } from "@/components/ui/ActivityFeed";
 import { Link } from "wouter";
 import { useStats, useRevenueTrend, useLeaderboard, useRides, useRiders, useAdminReassignRide, useBroadcast, usePlatformSettings, useApiHealth } from "@/hooks/use-admin";
@@ -354,6 +354,15 @@ export default function Dashboard() {
   const [bcTarget, setBcTarget] = useState("all");
   const broadcastMut = useBroadcast();
 
+  const [pendingProductsCount, setPendingProductsCount] = useState<number | null>(null);
+  useEffect(() => {
+    adminFetch("/pending-counts")
+      .then((d: { pendingProducts?: number }) => {
+        if (typeof d.pendingProducts === "number") setPendingProductsCount(d.pendingProducts);
+      })
+      .catch(() => {});
+  }, []);
+
   const { data: ridesData } = useRides();
   const { data: ridersData } = useRiders();
   const reassignMut = useAdminReassignRide();
@@ -632,7 +641,7 @@ export default function Dashboard() {
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">Jump directly to common tasks</p>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-0 divide-x divide-y divide-border/30">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-0 divide-x divide-y divide-border/30">
           {/* Assign Rider — dispatches a custom event so any part of the app can trigger this */}
           <button
             type="button"
@@ -668,6 +677,26 @@ export default function Dashboard() {
               </div>
             </div>
           </button>
+
+          {/* Product Approvals — highlighted when there are pending submissions */}
+          <Link href="/products?approvalStatus=pending">
+            <div className={`flex items-center gap-3 p-4 cursor-pointer transition-colors group min-h-[72px] relative ${pendingProductsCount && pendingProductsCount > 0 ? "hover:bg-violet-50 bg-violet-50/50" : "hover:bg-violet-50"}`}>
+              {pendingProductsCount !== null && pendingProductsCount > 0 && (
+                <span className="absolute top-2 right-2 h-5 min-w-5 px-1 rounded-full bg-violet-600 text-white text-[10px] font-black flex items-center justify-center leading-none">
+                  {pendingProductsCount > 99 ? "99+" : pendingProductsCount}
+                </span>
+              )}
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm group-hover:shadow transition-shadow shrink-0 ${pendingProductsCount && pendingProductsCount > 0 ? "bg-violet-100 border border-violet-200" : "bg-white border border-border/50"}`}>
+                <PackageSearch className={`w-4 h-4 ${pendingProductsCount && pendingProductsCount > 0 ? "text-violet-600" : "text-violet-500"}`} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground leading-tight truncate">Product Approvals</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {pendingProductsCount === null ? "Loading…" : pendingProductsCount === 0 ? "All reviewed" : `${pendingProductsCount} awaiting review`}
+                </p>
+              </div>
+            </div>
+          </Link>
 
           {[
             {

@@ -149,7 +149,7 @@ isValidation = true
 
 [[ports]]
 localPort = 3000
-externalPort = 80
+externalPort = 8080
 
 [[ports]]
 localPort = 3001

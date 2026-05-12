@@ -314,6 +314,91 @@ export function createServer() {
     },
   }));
 
+  /* ── First-run setup gate ────────────────────────────────────────────────
+     When DATABASE_URL (or JWT_SECRET) is missing, every HTTP request gets
+     a friendly HTML setup page instead of cryptic errors. This helps new
+     contributors find the Secrets panel quickly without hunting through logs.
+     The gate is skipped once the required vars are present.                */
+  if (!process.env.DATABASE_URL || !process.env.JWT_SECRET) {
+    const missing: string[] = [];
+    if (!process.env.DATABASE_URL) missing.push("DATABASE_URL");
+    if (!process.env.JWT_SECRET)   missing.push("JWT_SECRET");
+
+    const missingRows = missing
+      .map(k => `<tr><td class="var">${k}</td><td class="desc">${
+        k === "DATABASE_URL"
+          ? "PostgreSQL connection string — create a free Replit PostgreSQL database or paste your own URL"
+          : "JWT signing secret — generate with: <code>node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"</code>"
+      }</td></tr>`)
+      .join("\n");
+
+    const setupHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AJKMart — Setup Required</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{background:#1a1f2e;border:1px solid #2d3748;border-radius:16px;max-width:680px;width:100%;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+    .badge{display:inline-flex;align-items:center;gap:8px;background:#7c3aed22;border:1px solid #7c3aed55;color:#a78bfa;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;margin-bottom:24px}
+    h1{font-size:26px;font-weight:700;margin-bottom:8px;color:#f1f5f9}
+    .sub{color:#94a3b8;font-size:15px;margin-bottom:32px;line-height:1.6}
+    h2{font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse;margin-bottom:32px;font-size:14px}
+    td{padding:12px 14px;border-bottom:1px solid #2d3748;vertical-align:top;line-height:1.6}
+    td.var{font-family:monospace;font-size:13px;color:#f472b6;white-space:nowrap;width:200px;background:#1e2535;border-radius:4px 0 0 4px}
+    td.desc{color:#cbd5e1}
+    code{background:#0f1117;padding:2px 6px;border-radius:4px;font-size:12px;color:#86efac}
+    .steps{counter-reset:step;list-style:none;display:flex;flex-direction:column;gap:14px;margin-bottom:32px}
+    .steps li{display:flex;gap:14px;align-items:flex-start;font-size:14px;color:#cbd5e1;line-height:1.6}
+    .steps li::before{counter-increment:step;content:counter(step);background:#7c3aed;color:#fff;border-radius:50%;min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;margin-top:1px}
+    .steps li strong{color:#e2e8f0}
+    .tip{background:#0f2e1a;border:1px solid #166534;border-radius:10px;padding:16px 20px;font-size:13px;color:#86efac;line-height:1.6}
+    .tip strong{display:block;margin-bottom:4px;font-size:14px}
+    a{color:#818cf8;text-decoration:none}
+    a:hover{text-decoration:underline}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">⚙️ Setup Required</div>
+    <h1>AJKMart needs a few secrets</h1>
+    <p class="sub">The following required environment variables are missing. Add them in the <strong>Replit Secrets panel</strong> (🔒 padlock icon in the left sidebar), then restart the workflow.</p>
+
+    <h2>Missing Variables</h2>
+    <table>${missingRows}</table>
+
+    <h2>How to fix it</h2>
+    <ol class="steps">
+      <li><span>Click the <strong>🔒 padlock icon</strong> in the Replit left sidebar to open the Secrets panel.</span></li>
+      <li><span>Click <strong>"New secret"</strong> and add each missing variable above with its value.</span></li>
+      <li><span>For <code>DATABASE_URL</code>: click <strong>"Add PostgreSQL database"</strong> in the Secrets panel — Replit creates it automatically and fills the secret for you.</span></li>
+      <li><span>Once all secrets are saved, click the <strong>▶ Run / Restart</strong> button (or restart the <em>API Server</em> workflow) to reload the server.</span></li>
+    </ol>
+
+    <div class="tip">
+      <strong>💡 Generate JWT_SECRET</strong>
+      Run this in the Replit Shell to get a secure random value:<br/>
+      <code>node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"</code>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    app.use((_req: express.Request, res: express.Response) => {
+      res.setHeader("Cache-Control", "no-store");
+      res.status(503).send(setupHtml);
+    });
+
+    logger.warn(
+      { missing },
+      "[setup-gate] Serving setup page — add missing secrets in Replit Secrets panel, then restart."
+    );
+    return app;
+  }
+
   /* ── Response-time collection for p95 metrics ───────────────────────────
      Hooks into the response `finish` event (after headers are flushed) to
      record each request's duration into the rolling window used by the

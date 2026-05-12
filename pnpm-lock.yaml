@@ -347,6 +347,9 @@ importers:
       '@workspace/i18n':
         specifier: workspace:*
         version: link:../../lib/i18n
+      '@workspace/logger':
+        specifier: workspace:*
+        version: link:../../lib/logger
       '@workspace/service-constants':
         specifier: workspace:*
         version: link:../../lib/service-constants
@@ -561,6 +564,9 @@ importers:
       '@workspace/i18n':
         specifier: workspace:*
         version: link:../../lib/i18n
+      '@workspace/logger':
+        specifier: workspace:*
+        version: link:../../lib/logger
       '@workspace/service-constants':
         specifier: workspace:*
         version: link:../../lib/service-constants
@@ -1034,6 +1040,9 @@ importers:
       '@workspace/i18n':
         specifier: workspace:*
         version: link:../../lib/i18n
+      '@workspace/logger':
+        specifier: workspace:*
+        version: link:../../lib/logger
       '@workspace/ui':
         specifier: workspace:*
         version: link:../../lib/ui
@@ -1299,6 +1308,9 @@ importers:
       '@workspace/i18n':
         specifier: workspace:*
         version: link:../../lib/i18n
+      '@workspace/logger':
+        specifier: workspace:*
+        version: link:../../lib/logger
       '@workspace/ui':
         specifier: workspace:*
         version: link:../../lib/ui
@@ -1394,6 +1406,9 @@ importers:
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../api-zod
+      '@workspace/logger':
+        specifier: workspace:*
+        version: link:../logger
 
   lib/api-spec:
     devDependencies:
@@ -1403,6 +1418,9 @@ importers:
 
   lib/api-zod:
     dependencies:
+      '@workspace/logger':
+        specifier: workspace:*
+        version: link:../logger
       '@workspace/service-constants':
         specifier: workspace:*
         version: link:../service-constants
@@ -1427,6 +1445,9 @@ importers:
 
   lib/db:
     dependencies:
+      '@workspace/logger':
+        specifier: workspace:*
+        version: link:../logger
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.1(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(pg@8.20.0)
@@ -1457,6 +1478,9 @@ importers:
       '@google/genai':
         specifier: ^1.44.0
         version: 1.52.0
+      '@workspace/logger':
+        specifier: workspace:*
+        version: link:../logger
       p-limit:
         specifier: ^7.3.0
         version: 7.3.0
@@ -1467,6 +1491,8 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.3.5
+
+  lib/logger: {}
 
   lib/phone-utils: {}
 

@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { withErrorBoundary } from "@/utils/withErrorBoundary";
 import { LinearGradient } from "expo-linear-gradient";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Wallet]");
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -991,7 +993,7 @@ function DepositModal({ onClose, onSuccess, onFrozen, token, minTopup, maxTopup 
       })
       .catch((storageErr) => {
         /* AsyncStorage failed — use in-memory set; warn but do not block */
-        if (__DEV__) console.warn("[Wallet] AsyncStorage read failed, using in-memory fallback:", storageErr instanceof Error ? storageErr.message : String(storageErr));
+        log.warn("AsyncStorage read failed, using in-memory fallback:", storageErr instanceof Error ? storageErr.message : String(storageErr));
         showToast("Storage warning: duplicate-submission guard using session memory only.", "warning");
       });
   }, []);
@@ -1095,7 +1097,7 @@ function DepositModal({ onClose, onSuccess, onFrozen, token, minTopup, maxTopup 
           return AsyncStorage.setItem(SUBMITTED_TX_KEY, JSON.stringify(merged));
         })
         .catch((storageErr) => {
-          if (__DEV__) console.warn("[Wallet] AsyncStorage write failed, in-memory fallback active:", storageErr instanceof Error ? storageErr.message : String(storageErr));
+          log.warn("AsyncStorage write failed, in-memory fallback active:", storageErr instanceof Error ? storageErr.message : String(storageErr));
           /* Non-blocking: show a brief warning so user knows the duplicate-submission guard
              is session-only (in-memory set already holds the TxID). */
           showToast("Note: Duplicate-submission guard is active only for this session (storage unavailable).", "warning");
@@ -1573,7 +1575,7 @@ function WalletScreenInner() {
             setWalletFrozen(false);
           }
         })
-        .catch((err) => { if (__DEV__) console.warn("[Wallet] Frozen-status check failed:", err instanceof Error ? err.message : String(err)); });
+        .catch((err) => { log.warn("Frozen-status check failed:", err instanceof Error ? err.message : String(err)); });
     }
   }, [token]);
 
@@ -1586,7 +1588,7 @@ function WalletScreenInner() {
           if (d.error === "wallet_frozen") { setWalletFrozen(true); return; }
         } else { setWalletFrozen(false); }
       } catch (err) {
-        if (__DEV__) console.warn("[Wallet] Status check failed:", err instanceof Error ? err.message : String(err));
+        log.warn("Status check failed:", err instanceof Error ? err.message : String(err));
       }
     }
     const res = await refetch();
@@ -1602,7 +1604,7 @@ function WalletScreenInner() {
         .then(r => r.json())
         .then(j => unwrapApiResponse<{ count?: number; total?: number }>(j))
         .then(d => setPendingTopups({ count: d.count || 0, total: d.total || 0 }))
-        .catch((err) => { if (__DEV__) console.warn("[Wallet] Pending topups fetch failed:", err instanceof Error ? err.message : String(err)); });
+        .catch((err) => { log.warn("Pending topups fetch failed:", err instanceof Error ? err.message : String(err)); });
     }
   }, [token]);
 
@@ -1702,7 +1704,7 @@ function WalletScreenInner() {
         body: JSON.stringify(resolveBody),
       });
       if (!res.ok) {
-        if (__DEV__) console.warn("[Wallet] Receiver lookup returned HTTP error:", res.status);
+        log.warn("Receiver lookup returned HTTP error:", res.status);
         setSendNetworkError(true);
         setSendLoading(false);
         return;
@@ -1715,7 +1717,7 @@ function WalletScreenInner() {
       }
       setSendReceiverName(data.name || "");
     } catch (err) {
-      if (__DEV__) console.warn("[Wallet] Receiver lookup failed (network):", err instanceof Error ? err.message : String(err));
+      log.warn("Receiver lookup failed (network):", err instanceof Error ? err.message : String(err));
       setSendNetworkError(true);
       setSendLoading(false);
       return;

@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Parcel]");
 import * as Location from "expo-location";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSmartBack } from "@/hooks/useSmartBack";
@@ -149,7 +151,7 @@ function ParcelScreenInner() {
 
   useEffect(() => {
     if (!hasPrefill) return;
-    AsyncStorage.removeItem(PARCEL_DRAFT_KEY).catch((err: unknown) => { console.error("[Parcel] removeItem failed:", err); });
+    AsyncStorage.removeItem(PARCEL_DRAFT_KEY).catch((err: unknown) => { log.error("removeItem failed:", err); });
     if (pPickup) setPickupAddress(pPickup);
     if (pDrop) setDropAddress(pDrop);
     if (pType) setParcelType(pType);
@@ -203,17 +205,17 @@ function ParcelScreenInner() {
               if (geoData?.formattedAddress) address = geoData.formattedAddress;
             }
           } catch (geoErr) {
-            if (__DEV__) console.warn("[Parcel] Reverse geocode failed:", geoErr instanceof Error ? geoErr.message : String(geoErr));
+            log.warn("Reverse geocode failed:", geoErr instanceof Error ? geoErr.message : String(geoErr));
           }
           if (cancelled) return;
           setPickupAddress(address);
         } catch (locErr) {
-          console.error("[Parcel] GPS auto-fill failed:", locErr instanceof Error ? locErr.message : String(locErr));
+          log.error("GPS auto-fill failed:", locErr instanceof Error ? locErr.message : String(locErr));
           showToast("Could not detect your location. Please enter pickup address manually.", "error");
         }
       })
       .catch((err: unknown) => {
-        console.error("[Parcel] Location init effect error:", err instanceof Error ? err.message : String(err));
+        log.error("Location init effect error:", err instanceof Error ? err.message : String(err));
       });
     return () => { cancelled = true; };
   }, []);
@@ -222,7 +224,7 @@ function ParcelScreenInner() {
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (confirmed) {
-      AsyncStorage.removeItem(PARCEL_DRAFT_KEY).catch((err) => { if (__DEV__) console.warn("[Parcel] Failed to clear draft:", err instanceof Error ? err.message : String(err)); });
+      AsyncStorage.removeItem(PARCEL_DRAFT_KEY).catch((err) => { log.warn("Failed to clear draft:", err instanceof Error ? err.message : String(err)); });
       return;
     }
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
@@ -231,7 +233,7 @@ function ParcelScreenInner() {
         senderName, senderPhone, pickupAddress,
         receiverName, receiverPhone, dropAddress,
         parcelType, weight, description, step,
-      })).catch((err) => { if (__DEV__) console.warn("[Parcel] Failed to save draft:", err instanceof Error ? err.message : String(err)); });
+      })).catch((err) => { log.warn("Failed to save draft:", err instanceof Error ? err.message : String(err)); });
     }, 500);
     return () => { if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current); };
   }, [senderName, senderPhone, pickupAddress, receiverName, receiverPhone, dropAddress, parcelType, weight, description, step, confirmed]);
@@ -251,7 +253,7 @@ function ParcelScreenInner() {
         }
       })
       .catch((err) => {
-        if (__DEV__) console.warn("[Parcel] Payment methods fetch failed:", err instanceof Error ? err.message : String(err));
+        log.warn("Payment methods fetch failed:", err instanceof Error ? err.message : String(err));
         setPayMethodsError(true);
       });
   }, []);
@@ -335,10 +337,10 @@ function ParcelScreenInner() {
           const geoRes = await fetch(`${GEOCODE_BASE}/maps/geocode?address=${encodeURIComponent(pickupAddress)}`);
           const geo = await geoRes.json();
           if (geo?.lat && geo?.lng) { finalPickupLat = geo.lat; finalPickupLng = geo.lng; }
-          else { pickupGeoFailed = true; if (__DEV__) console.warn("[Parcel] Pickup geocode returned no coords"); }
+          else { pickupGeoFailed = true; log.warn("Pickup geocode returned no coords"); }
         } catch (err) {
           pickupGeoFailed = true;
-          if (__DEV__) console.warn("[Parcel] Pickup geocode failed:", err instanceof Error ? err.message : String(err));
+          log.warn("Pickup geocode failed:", err instanceof Error ? err.message : String(err));
         }
       }
       if (finalDropLat === undefined || finalDropLng === undefined) {
@@ -346,10 +348,10 @@ function ParcelScreenInner() {
           const geoRes = await fetch(`${GEOCODE_BASE}/maps/geocode?address=${encodeURIComponent(dropAddress)}`);
           const geo = await geoRes.json();
           if (geo?.lat && geo?.lng) { finalDropLat = geo.lat; finalDropLng = geo.lng; }
-          else { dropGeoFailed = true; if (__DEV__) console.warn("[Parcel] Drop geocode returned no coords"); }
+          else { dropGeoFailed = true; log.warn("Drop geocode returned no coords"); }
         } catch (err) {
           dropGeoFailed = true;
-          if (__DEV__) console.warn("[Parcel] Drop geocode failed:", err instanceof Error ? err.message : String(err));
+          log.warn("Drop geocode failed:", err instanceof Error ? err.message : String(err));
         }
       }
       /* If geocoding failed and we still have no coordinates, show a specific error

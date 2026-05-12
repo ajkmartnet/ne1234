@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[van-tracking]");
 import {
   TouchableOpacity, StyleSheet, Text, View, Platform,
 } from "react-native";
@@ -196,7 +198,7 @@ export default function VanTrackingScreen() {
           }
         });
       } catch (err) {
-        console.warn("[van-tracking] Socket connection failed:", err);
+        log.warn("Socket connection failed:", err);
       }
     })();
 

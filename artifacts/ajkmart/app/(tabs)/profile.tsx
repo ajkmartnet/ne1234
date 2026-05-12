@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { withErrorBoundary } from "@/utils/withErrorBoundary";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Profile]");
 import { LinearGradient } from "expo-linear-gradient";
 import * as StoreReview from "expo-store-review";
 import { router, useLocalSearchParams } from "expo-router";
@@ -502,7 +504,7 @@ function ProfileScreenInner() {
         setStatsError(false);
         break;
       } catch (err) {
-        if (__DEV__) console.warn(`[Profile] fetchAll attempt ${attempt} failed:`, err instanceof Error ? err.message : String(err));
+        log.warn(`fetchAll attempt ${attempt} failed:`, err instanceof Error ? err.message : String(err));
         if (attempt < maxAttempts) {
           await new Promise<void>((res) => setTimeout(res, 1500 * attempt));
         } else {

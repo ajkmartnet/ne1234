@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Mart]");
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSmartBack } from "@/hooks/useSmartBack";
@@ -62,8 +64,8 @@ function MartRecentlyViewed() {
   const [items, setItems] = React.useState<RecentItem[]>([]);
   React.useEffect(() => {
     AsyncStorage.getItem(RECENTLY_VIEWED_KEY)
-      .then(raw => { if (raw) { try { setItems(JSON.parse(raw)); } catch (parseErr) { if (__DEV__) console.warn("[Mart] Failed to parse recently viewed:", parseErr instanceof Error ? parseErr.message : String(parseErr)); } } })
-      .catch((err) => { if (__DEV__) console.warn("[Mart] Failed to load recently viewed:", err instanceof Error ? err.message : String(err)); });
+      .then(raw => { if (raw) { try { setItems(JSON.parse(raw)); } catch (parseErr) { log.warn("Failed to parse recently viewed:", parseErr instanceof Error ? parseErr.message : String(parseErr)); } } })
+      .catch((err) => { log.warn("Failed to load recently viewed:", err instanceof Error ? err.message : String(err)); });
   }, []);
   if (items.length === 0) return null;
   return (
@@ -71,7 +73,7 @@ function MartRecentlyViewed() {
       <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 10 }}>
         <Text style={{ flex: 1, fontFamily: Font.bold, fontSize: 14, color: C.text }}>Recently Viewed</Text>
         <TouchableOpacity activeOpacity={0.7}
-          onPress={() => { AsyncStorage.removeItem(RECENTLY_VIEWED_KEY).catch((err) => { console.warn("[Mart] Failed to clear recently viewed:", err); }); setItems([]); }}
+          onPress={() => { AsyncStorage.removeItem(RECENTLY_VIEWED_KEY).catch((err) => { log.warn("Failed to clear recently viewed:", err); }); setItems([]); }}
           style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
         >
           <Ionicons name="close-circle-outline" size={13} color={C.textMuted} />

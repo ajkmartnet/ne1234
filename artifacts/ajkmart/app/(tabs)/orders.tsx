@@ -3,6 +3,8 @@ import { withErrorBoundary } from "@/utils/withErrorBoundary";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, type RelativePathString } from "expo-router";
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Orders]");
 import type { Socket } from "socket.io-client";
 import {
   ActivityIndicator,
@@ -1212,7 +1214,7 @@ function OrdersScreenInner() {
         return;
       }
     } catch (err) {
-      if (__DEV__) console.warn("[Orders] Reorder live-price fetch failed:", err instanceof Error ? err.message : String(err));
+      log.warn("Reorder live-price fetch failed:", err instanceof Error ? err.message : String(err));
     }
     let count = 0;
     for (const item of validItems) {
@@ -1233,17 +1235,17 @@ function OrdersScreenInner() {
       .then(raw => {
         let ids: string[] = [];
         try { ids = raw ? JSON.parse(raw) : []; } catch (parseErr) {
-          console.warn("[Orders] Failed to parse review_prompted_ids:", parseErr);
+          log.warn("Failed to parse review_prompted_ids:", parseErr);
         }
         if (!ids.includes(orderId)) {
           ids = [...ids, orderId];
           AsyncStorage.setItem("review_prompted_ids", JSON.stringify(ids)).catch((err) => {
-            console.warn("[Orders] Failed to save review prompted ids:", err);
+            log.warn("Failed to save review prompted ids:", err);
           });
         }
       })
       .catch((err) => {
-        console.warn("[Orders] Failed to read review prompted ids:", err);
+        log.warn("Failed to read review prompted ids:", err);
       });
   }, []);
 
@@ -1356,7 +1358,7 @@ function OrdersScreenInner() {
       const serverDate = res.headers.get("Date");
       if (serverDate) setServerNow(new Date(serverDate).getTime());
     } catch (err) {
-      if (__DEV__) console.warn("[Orders] Server time sync failed:", err instanceof Error ? err.message : String(err));
+      log.warn("Server time sync failed:", err instanceof Error ? err.message : String(err));
     }
   }, []);
 
@@ -1406,7 +1408,7 @@ function OrdersScreenInner() {
       setRidesData(d);
       setRidesError(false);
     } catch (err) {
-      if (__DEV__) console.warn("[Orders] Rides fetch failed:", err instanceof Error ? err.message : String(err));
+      log.warn("Rides fetch failed:", err instanceof Error ? err.message : String(err));
       setRidesError(true);
     } finally {
       setRidesLoading(false);
@@ -1426,7 +1428,7 @@ function OrdersScreenInner() {
       setPharmData(d);
       setPharmError(false);
     } catch (err) {
-      if (__DEV__) console.warn("[Orders] Pharmacy fetch failed:", err instanceof Error ? err.message : String(err));
+      log.warn("Pharmacy fetch failed:", err instanceof Error ? err.message : String(err));
       setPharmError(true);
     } finally {
       setPharmLoading(false);
@@ -1446,7 +1448,7 @@ function OrdersScreenInner() {
       setParcelData(d);
       setParcelError(false);
     } catch (err) {
-      if (__DEV__) console.warn("[Orders] Parcel fetch failed:", err instanceof Error ? err.message : String(err));
+      log.warn("Parcel fetch failed:", err instanceof Error ? err.message : String(err));
       setParcelError(true);
     } finally {
       setParcelLoading(false);
@@ -1527,7 +1529,7 @@ function OrdersScreenInner() {
       .then(raw => {
         let persistedIds: string[] = [];
         try { persistedIds = raw ? JSON.parse(raw) : []; } catch (parseErr) {
-          console.warn("[Orders] Failed to parse review_prompted_ids for auto-prompt:", parseErr);
+          log.warn("Failed to parse review_prompted_ids for auto-prompt:", parseErr);
         }
         const toPrompt = deliveredOrders.find(o =>
           !persistedIds.includes(o.id) &&
@@ -1538,13 +1540,13 @@ function OrdersScreenInner() {
           autoPromptedIdsRef.current.add(toPrompt.id);
           const nextIds = [...persistedIds, toPrompt.id];
           AsyncStorage.setItem("review_prompted_ids", JSON.stringify(nextIds)).catch((err) => {
-            console.warn("[Orders] Failed to persist auto-prompted review ids:", err);
+            log.warn("Failed to persist auto-prompted review ids:", err);
           });
           setTimeout(() => { setReviewTarget(toPrompt); }, 800);
         }
       })
       .catch((err) => {
-        console.warn("[Orders] Failed to read review prompted ids for auto-prompt:", err);
+        log.warn("Failed to read review prompted ids for auto-prompt:", err);
       });
   }, [deliveredOrderIds, config.features.reviews]);
 

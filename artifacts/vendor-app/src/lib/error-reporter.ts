@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { getVendorApiBase } from "./envValidation";
 
 const SOURCE_APP = "vendor";

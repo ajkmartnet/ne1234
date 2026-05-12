@@ -17,6 +17,8 @@
  *   - VITE_FIREBASE_MESSAGING_SENDER_ID
  *   - VITE_FIREBASE_APP_ID
  */
+import { createLogger } from "@/lib/logger";
+const _envLog = createLogger("[rider envValidation]");
 
 export interface RiderEnv {
   apiBaseUrl: string | undefined;
@@ -93,11 +95,8 @@ function _buildRiderEnv(): RiderEnv {
 
   const mode = typeof env["MODE"] === "string" ? (env["MODE"] as string) : "production";
 
-  if (import.meta.env.DEV && warnings.length > 0) {
-    console.warn("[rider envValidation] Environment issues detected:");
-    for (const w of warnings) {
-      console.warn(`  • ${w}`);
-    }
+  if (warnings.length > 0) {
+    _envLog.warn("Environment issues detected:", warnings.join("; "));
   }
 
   return { apiBaseUrl, apiProxyTarget, isCapacitor, firebase, baseUrl, mode, warnings };

@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Cart]");
 import { Alert } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import { useCurrency } from "@/context/PlatformConfigContext";
@@ -252,7 +254,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed)) setItems(parsed);
         } catch (parseErr) {
-          if (__DEV__) console.warn("[Cart] Failed to parse stored cart — clearing:", parseErr instanceof Error ? parseErr.message : String(parseErr));
+          log.warn("Failed to parse stored cart — clearing:", parseErr instanceof Error ? parseErr.message : String(parseErr));
           AsyncStorage.removeItem("@ajkmart_cart");
         }
         setHasLoaded(true);
@@ -349,7 +351,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           const SS = await import("expo-secure-store");
           storedToken = await SS.getItemAsync("ajkmart_token");
         } catch (ssErr) {
-          if (__DEV__) console.warn("[Cart] SecureStore token read failed:", ssErr instanceof Error ? ssErr.message : String(ssErr));
+          log.warn("SecureStore token read failed:", ssErr instanceof Error ? ssErr.message : String(ssErr));
         }
       }
       if (!storedToken) storedToken = await AsyncStorage.getItem("@ajkmart_token");
@@ -540,7 +542,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (fetchErr) {
-      if (__DEV__) console.warn("[Cart] HTTP fallback order fetch failed:", fetchErr instanceof Error ? fetchErr.message : String(fetchErr));
+      log.warn("HTTP fallback order fetch failed:", fetchErr instanceof Error ? fetchErr.message : String(fetchErr));
     }
     return false;
   };

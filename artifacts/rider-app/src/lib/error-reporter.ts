@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { getApiBase, api } from "./api";
 
 const SOURCE_APP = "rider";

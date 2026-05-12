@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import Head from "expo-router/head";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[OrderDetail]");
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import { useSmartBack } from "@/hooks/useSmartBack";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -261,13 +263,13 @@ export default function OrderDetailScreen() {
           }
         } else {
           if (mountedRef.current) {
-            console.warn("[Orders] Tracking poll returned non-OK status:", res.status);
+            log.warn("Tracking poll returned non-OK status:", res.status);
             setTrackFailed(true);
           }
         }
       } catch (err) {
         if (mountedRef.current) {
-          console.warn("[Orders] Tracking poll threw:", err instanceof Error ? err.message : String(err));
+          log.warn("Tracking poll threw:", err instanceof Error ? err.message : String(err));
           setTrackFailed(true);
         }
       }
@@ -423,7 +425,7 @@ export default function OrderDetailScreen() {
           }
         }
       } catch (err) {
-        if (__DEV__) console.warn("[OrderDetail] Payment status fetch failed:", err instanceof Error ? err.message : String(err));
+        log.warn("Payment status fetch failed:", err instanceof Error ? err.message : String(err));
       }
     })();
   }, [orderId, token, order?.type]);
@@ -445,7 +447,7 @@ export default function OrderDetailScreen() {
               }
             }
           } catch (err) {
-            if (__DEV__) console.warn("[OrderDetail] AppState payment status fetch failed:", err instanceof Error ? err.message : String(err));
+            log.warn("AppState payment status fetch failed:", err instanceof Error ? err.message : String(err));
           }
         })();
       }

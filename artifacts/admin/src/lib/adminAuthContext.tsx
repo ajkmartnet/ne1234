@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[adminAuthContext]");
 
 export interface AdminUser {
   id: string;
@@ -202,7 +204,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
         return data.accessToken;
       } catch (err) {
-        console.error('Token refresh failed:', err);
+        log.error('Token refresh failed:', err);
         throw err;
       } finally {
         refreshPromiseRef.current = null;
@@ -385,7 +387,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
       setState({ ...INITIAL_STATE, isLoading: false });
     } catch (err) {
-      console.error('Logout error:', err);
+      log.error('Logout error:', err);
       // Clear state anyway
       setState({ ...INITIAL_STATE, isLoading: false });
     }

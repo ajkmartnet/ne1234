@@ -3,7 +3,8 @@ import { useMutation } from "@tanstack/react-query";
 import { formatCurrency as _sharedFcW2 } from "@workspace/api-zod";
 import { useAuth } from "../../lib/auth";
 import { api, apiFetch } from "../../lib/api";
-import { riderIsDev } from "../../lib/envValidation";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[WithdrawModal]");
 import { checkSufficientBalance, checkDailyLimits } from "../../lib/wallet/validation";
 import { usePlatformConfig } from "../../lib/useConfig";
 import { useLanguage } from "../../lib/useLanguage";
@@ -98,7 +99,7 @@ export default function WithdrawModal({
         setMethods(enabled);
       }
     }).catch((err: Error) => {
-      if (riderIsDev) console.warn("[WithdrawModal] Failed to load payment methods:", err.message);
+      log.warn("Failed to load payment methods:", err.message);
       setMethodsError(true);
     }).finally(() => setLoadingMethods(false));
   }, []);

@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[RideBookingForm]");
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -336,7 +338,7 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
       setPickup(prefillPickup);
       resolveLocation(
         { placeId: "", mainText: prefillPickup, secondaryText: "", description: prefillPickup },
-        (msg) => { if (__DEV__) console.warn("[RideBookingForm] prefill pickup resolve failed:", msg); },
+        (msg) => { log.warn("prefill pickup resolve failed:", msg); },
       ).then((loc) => {
         if (loc) setPickupObj(loc);
       });
@@ -345,7 +347,7 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
       setDrop(prefillDrop);
       resolveLocation(
         { placeId: "", mainText: prefillDrop, secondaryText: "", description: prefillDrop },
-        (msg) => { if (__DEV__) console.warn("[RideBookingForm] prefill drop resolve failed:", msg); },
+        (msg) => { log.warn("prefill drop resolve failed:", msg); },
       ).then((loc) => {
         if (loc) setDropObj(loc);
       });
@@ -368,7 +370,7 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
         setPickup(address);
         setPickupObj({ lat, lng, address });
       } catch (err) {
-        if (__DEV__) console.warn("[RideBookingForm] GPS auto-fill failed:", err instanceof Error ? err.message : String(err));
+        log.warn("GPS auto-fill failed:", err instanceof Error ? err.message : String(err));
       }
     })();
     return () => { cancelled = true; };
@@ -427,7 +429,7 @@ export function RideBookingForm({ onBooked, prefillPickup, prefillDrop, prefillT
         if (data?.routes?.length) setSchoolRoutes(data.routes);
       })
       .catch(() => {
-        if (__DEV__) console.warn("[RideBookingForm] School routes fetch failed");
+        log.warn("School routes fetch failed");
       });
   }, [rideType]);
 

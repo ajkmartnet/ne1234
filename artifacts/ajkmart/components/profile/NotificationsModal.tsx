@@ -3,6 +3,8 @@ import {
   ActivityIndicator, Modal, RefreshControl, ScrollView,
   Text, TouchableOpacity, View,
 } from "react-native";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[NotificationsModal]");
 import { Ionicons } from "@expo/vector-icons";
 import { router, type Href } from "expo-router";
 import { useToast } from "@/context/ToastContext";
@@ -31,7 +33,7 @@ export function NotificationsModal({ visible, userId, token, onClose }: {
       const d = unwrapApiResponse<{ notifications?: Notification[] }>(await r.json());
       setNotifs(d.notifications ?? []);
     } catch (err) {
-      if (__DEV__) console.warn("[Profile] Notifications load failed:", err instanceof Error ? err.message : String(err));
+      log.warn("Notifications load failed:", err instanceof Error ? err.message : String(err));
       showToast("Could not load notifications — tap retry to try again", "error");
     }
     setLoading(false);

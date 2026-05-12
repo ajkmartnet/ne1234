@@ -1,5 +1,7 @@
 import { adminFetch, getAdminAccessToken } from "./adminFetcher";
 import { applyAdminTimingOverrides, type AdminTimingConfig } from "./adminTiming";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[platformConfig]");
 
 export const PLATFORM_DEFAULTS = {
   currencySymbol: "Rs.",
@@ -65,6 +67,6 @@ export const loadPlatformConfig = async () => {
     // Falling back to defaults is intentional, but the failure should be
     // observable. Without this log, broken /platform-settings responses
     // (auth errors, network failures, schema drift) are invisible.
-    console.error("[platformConfig] loadPlatformConfig failed; using defaults:", err);
+    log.error("loadPlatformConfig failed; using defaults:", err);
   }
 };

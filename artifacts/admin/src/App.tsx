@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[App]");
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -131,7 +133,7 @@ queryClient.getQueryCache().subscribe(event => {
     // Note: Auth state is managed by adminAuthContext (in-memory only)
     // The fetcher will handle 401 with auto-refresh + redirect
     if (is401) {
-      console.warn("[App] Received 401 from query - auth will be handled by fetcher");
+      log.warn("Received 401 from query - auth will be handled by fetcher");
     }
   }
 });
@@ -462,15 +464,15 @@ function IntegrationsInit() {
         }
       })
       .catch((err) => {
-        console.error("[App] Platform config fetch failed:", err);
+        log.error("Platform config fetch failed:", err);
       });
 
     /* Register admin push when authenticated */
     if (state.accessToken && !state.isLoading) {
       if (typeof Notification !== "undefined" && Notification.requestPermission) {
         Notification.requestPermission()
-          .then(perm => { if (perm === "granted") registerPush().catch((err: unknown) => { console.error("[App] Push registration failed:", err); }); })
-          .catch((err: unknown) => { console.error("[App] Notification permission request failed:", err); });
+          .then(perm => { if (perm === "granted") registerPush().catch((err: unknown) => { log.error("Push registration failed:", err); }); })
+          .catch((err: unknown) => { log.error("Notification permission request failed:", err); });
       }
       setSentryUser(state.user?.id || "admin");
       identifyUser(state.user?.id || "admin");

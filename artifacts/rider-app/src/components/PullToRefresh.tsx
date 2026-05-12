@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
-import { riderIsDev } from "../lib/envValidation";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[PullToRefresh]");
 
 interface PullToRefreshProps {
   onRefresh: () => Promise<void>;
@@ -59,8 +60,8 @@ export function PullToRefresh({ onRefresh, children, accentColor = "#10B981", cl
       setLastRefreshFailed(true);
       if (onRefreshError) {
         try { onRefreshError(err); } catch {}
-      } else if (riderIsDev) {
-        console.warn("[PullToRefresh] onRefresh failed:", err);
+      } else {
+        log.warn("onRefresh failed:", err);
       }
     } finally {
       setRefreshing(false);

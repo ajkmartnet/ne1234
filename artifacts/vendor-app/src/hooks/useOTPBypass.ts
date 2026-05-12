@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[useOTPBypass]");
 
 export interface AuthConfig {
   auth_mode: string;
@@ -74,7 +76,7 @@ export const useOTPBypass = (phone?: string) => {
           localStorage.setItem(cacheTimeKey, Date.now().toString());
         }
       } catch (error) {
-        console.error("[useOTPBypass] Failed to fetch:", error);
+        log.error("Failed to fetch:", error);
         if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
           const cacheTime = localStorage.getItem(cacheTimeKey);
           if (cacheTime && Date.now() - parseInt(cacheTime, 10) < 5 * 60 * 1000) {

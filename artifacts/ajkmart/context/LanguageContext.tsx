@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useCallback, useState, useRef } from "react";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Language]");
 import { I18nManager } from "react-native";
 import type { Language } from "@workspace/i18n";
 import { LANGUAGE_OPTIONS } from "@workspace/i18n";
@@ -34,7 +36,7 @@ async function fetchPlatformDefaultLanguage(): Promise<Language | null> {
     const data = unwrapApiResponse<{ language?: { defaultLanguage?: string } }>(await res.json());
     const lang = data?.language?.defaultLanguage;
     if (lang && VALID_LANGS.has(lang)) return lang as Language;
-  } catch (err) { if (__DEV__) console.warn("[Language] Platform default language fetch failed:", err instanceof Error ? err.message : String(err)); }
+  } catch (err) { log.warn("Platform default language fetch failed:", err instanceof Error ? err.message : String(err)); }
   return null;
 }
 
@@ -47,7 +49,7 @@ async function fetchUserLanguage(token: string): Promise<Language | null> {
     const data = unwrapApiResponse<{ language?: string }>(await res.json());
     const lang = data?.language;
     if (lang && VALID_LANGS.has(lang)) return lang as Language;
-  } catch (err) { if (__DEV__) console.warn("[Language] User language fetch failed:", err instanceof Error ? err.message : String(err)); }
+  } catch (err) { log.warn("User language fetch failed:", err instanceof Error ? err.message : String(err)); }
   return null;
 }
 
@@ -81,7 +83,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
             applyRTL(platformLang);
           }
         }
-      } catch (err) { if (__DEV__) console.warn("[Language] Bootstrap language load failed:", err instanceof Error ? err.message : String(err)); }
+      } catch (err) { log.warn("Bootstrap language load failed:", err instanceof Error ? err.message : String(err)); }
       setLoading(false);
     })();
   }, []);
@@ -102,7 +104,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     applyRTL(lang);
     try {
       await AsyncStorage.setItem(LANG_STORAGE_KEY, lang);
-    } catch (err) { if (__DEV__) console.warn("[Language] Failed to persist language preference:", err instanceof Error ? err.message : String(err)); }
+    } catch (err) { log.warn("Failed to persist language preference:", err instanceof Error ? err.message : String(err)); }
     // Load Noto Nastaliq Urdu fonts the moment user switches to Urdu so
     // all text is rendered in the correct script without needing a restart.
     if (lang === "ur" || lang === "en_ur") {
@@ -112,7 +114,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     if (token) {
       try {
         await putUserLanguage(token, lang);
-      } catch (err) { if (__DEV__) console.warn("[Language] Failed to sync language to server:", err instanceof Error ? err.message : String(err)); }
+      } catch (err) { log.warn("Failed to sync language to server:", err instanceof Error ? err.message : String(err)); }
     }
   }, []);
 
@@ -134,7 +136,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         const langToSave = (currentLang && VALID_LANGS.has(currentLang)) ? currentLang : language;
         await putUserLanguage(token, langToSave as string);
       }
-    } catch (err) { if (__DEV__) console.warn("[Language] syncToServer failed:", err instanceof Error ? err.message : String(err)); }
+    } catch (err) { log.warn("syncToServer failed:", err instanceof Error ? err.message : String(err)); }
   }, [language]);
 
   return (

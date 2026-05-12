@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[RideTracker]");
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -140,7 +142,7 @@ export function RideTracker({
   useEffect(() => {
     if (__DEV__ && !expoDomain && !warnedNoDomainRef.current) {
       warnedNoDomainRef.current = true;
-      console.warn("[RideTracker] EXPO_PUBLIC_DOMAIN is undefined — SOS and cancel requests will use API_BASE fallback. Set EXPO_PUBLIC_DOMAIN in your environment.");
+      log.warn("EXPO_PUBLIC_DOMAIN is undefined — SOS and cancel requests will use API_BASE fallback. Set EXPO_PUBLIC_DOMAIN in your environment.");
     }
   }, [expoDomain]);
 

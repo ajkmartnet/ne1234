@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { formatCurrency as _sharedFcD } from "@workspace/api-zod";
 import { api, apiFetch } from "../../lib/api";
-import { riderIsDev } from "../../lib/envValidation";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[DepositModal]");
 import { checkSufficientBalance } from "../../lib/wallet/validation";
 import {
   X, ArrowLeft, Landmark, Smartphone, ChevronRight,
@@ -48,7 +49,7 @@ export default function DepositModal({
         setMethods(depositable);
       }
     }).catch((err: Error) => {
-      if (riderIsDev) console.warn("[DepositModal] Failed to load payment methods:", err.message);
+      log.warn("Failed to load payment methods:", err.message);
       setMethodsError(true);
     }).finally(() => setLoadingMethods(false));
   }, []);

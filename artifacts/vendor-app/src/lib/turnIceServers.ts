@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[WebRTC]");
+
 let _warned = false;
 
 export function getTurnIceServers(): RTCIceServer[] {
@@ -11,8 +14,8 @@ export function getTurnIceServers(): RTCIceServer[] {
 
   if (!_warned) {
     _warned = true;
-    console.warn(
-      "[WebRTC] TURN relay not configured — calls may fail on restricted networks.\n" +
+    log.warn(
+      "TURN relay not configured — calls may fail on restricted networks.\n" +
       "Set VITE_TURN_SERVER_URL, VITE_TURN_USERNAME, and VITE_TURN_CREDENTIAL in your environment to enable TURN support."
     );
   }

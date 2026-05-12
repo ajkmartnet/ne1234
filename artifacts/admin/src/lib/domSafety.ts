@@ -4,6 +4,8 @@
  * value it overrides so cleanup restores the original instead of
  * forcing it to "" and clobbering whatever the host page set.
  */
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[domSafety]");
 
 /**
  * Lock document.body scroll while a modal/drawer is open. Returns a
@@ -16,14 +18,14 @@ export function lockBodyScroll(): () => void {
   try {
     document.body.style.overflow = "hidden";
   } catch (err) {
-    if (import.meta.env.DEV) console.warn("[domSafety] lockBodyScroll failed:", err);
+    log.warn("lockBodyScroll failed:", err);
     return () => {};
   }
   return () => {
     try {
       document.body.style.overflow = previous;
     } catch (err) {
-      if (import.meta.env.DEV) console.warn("[domSafety] restoreBodyScroll failed:", err);
+      log.warn("restoreBodyScroll failed:", err);
     }
   };
 }

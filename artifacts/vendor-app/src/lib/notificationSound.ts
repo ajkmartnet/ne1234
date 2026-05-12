@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[audio]");
+
 let audioCtx: AudioContext | null = null;
 let unlocked = false;
 const activeNodes: Array<{ osc: OscillatorNode; gain: GainNode }> = [];
@@ -77,9 +80,7 @@ export function playOrderSound() {
     const ctx = getCtx();
     if (!ctx) { vibrateFallback(); return; }
     if (ctx.state === "suspended") {
-      if (import.meta.env.DEV) {
-        console.warn("[audio] Playback blocked — AudioContext still suspended. The vendor must interact with the page first to unlock audio.");
-      }
+      log.warn("Playback blocked — AudioContext still suspended. The vendor must interact with the page first to unlock audio.");
       vibrateFallback();
       return;
     }

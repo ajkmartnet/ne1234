@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[useOTPBypass]");
 
 export interface AuthConfig {
   auth_mode: string;
@@ -86,7 +88,7 @@ export const useOTPBypass = () => {
         await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(config));
         await AsyncStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
       } catch (error) {
-        console.error("[useOTPBypass] Failed to fetch config:", error);
+        log.error("Failed to fetch config:", error);
 
         try {
           const cacheTime = await AsyncStorage.getItem(CACHE_TIME_KEY);
@@ -102,7 +104,7 @@ export const useOTPBypass = () => {
             }
           }
         } catch (cacheError) {
-          console.error("[useOTPBypass] Failed to read cache:", cacheError);
+          log.error("Failed to read cache:", cacheError);
         }
       } finally {
         setLoading(false);

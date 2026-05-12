@@ -2,7 +2,8 @@ import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import App from "./App";
 import "./index.css";
-import { initErrorReporter } from "./lib/error-reporter";
+import { initErrorReporter, reportError } from "./lib/error-reporter";
+import { registerErrorHandler } from "@workspace/logger";
 import { patchLeafletDefaultIcon } from "./lib/leafletIconFix";
 import { checkApiHealth } from "./lib/checkApiHealth";
 import { auditRiderEnv } from "./lib/envValidation";
@@ -11,6 +12,7 @@ import { auditRiderEnv } from "./lib/envValidation";
 auditRiderEnv();
 
 initErrorReporter();
+registerErrorHandler(reportError);
 
 /* Apply the Leaflet default-marker patch once at app boot so every map
    instance (Active trip, MiniMap, dashboard) renders proper marker icons

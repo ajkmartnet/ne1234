@@ -12,6 +12,8 @@
  */
 
 import { fetchAdmin, fetchAdminAbsolute, fetchAdminAbsoluteResponse, getAdminAccessToken, setupAdminFetcherHandlers } from './adminFetcher.js';
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[api]");
 export { fetchAdminAbsoluteResponse };
 
 export { getAdminAccessToken } from './adminFetcher.js';
@@ -107,7 +109,7 @@ export const uploadAdminImage = async (file: File): Promise<string> => {
           });
         }
       } catch (err) {
-        console.error('Token refresh failed for upload:', err);
+        log.error('Token refresh failed for upload:', err);
         window.location.href = `${import.meta.env.BASE_URL || '/'}login`;
       }
     }
@@ -121,7 +123,7 @@ export const uploadAdminImage = async (file: File): Promise<string> => {
     const data = json.data !== undefined ? json.data : json;
     return data.url as string;
   } catch (err) {
-    console.error('Image upload failed:', err);
+    log.error('Image upload failed:', err);
     throw err;
   }
 };
@@ -171,7 +173,7 @@ export const uploadAdminImageWithProgress = async (
       await tokenRefresher();
       result = await send();
     } catch (err) {
-      console.error('Token refresh failed for upload:', err);
+      log.error('Token refresh failed for upload:', err);
       throw err;
     }
   }
@@ -202,7 +204,7 @@ export const fetcher = async (endpoint: string, options: RequestInit = {}) => {
     const result = await fetchAdmin(endpoint, options);
     return result.data !== undefined ? result.data : result;
   } catch (err) {
-    console.error('API error:', err);
+    log.error('API error:', err);
     throw err;
   }
 };
@@ -219,7 +221,7 @@ export const fetcherWithMeta = async (
     const result = await fetchAdmin(endpoint, options);
     return result;
   } catch (err) {
-    console.error('API error:', err);
+    log.error('API error:', err);
     throw err;
   }
 };
@@ -239,7 +241,7 @@ export const apiAbsoluteFetch = async (path: string, options: RequestInit = {}) 
     const result = await fetchAdminAbsolute(path, options);
     return result?.data !== undefined ? result.data : result;
   } catch (err) {
-    console.error('API error:', err);
+    log.error('API error:', err);
     throw err;
   }
 };

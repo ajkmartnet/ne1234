@@ -1,6 +1,8 @@
 import { io, type Socket } from "socket.io-client";
 import { api } from "./api";
 import { markOrderSeen, wasOrderSeenRecently } from "./notificationSound";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[vendor-socket]");
 
 export interface VendorNewOrderEvent {
   id: string;
@@ -50,7 +52,7 @@ export function connectVendorSocket(vendorId: string): void {
   });
 
   _socket.on("connect", () => {
-    if (import.meta.env.DEV) console.log("[vendor-socket] connected, joined vendor:", vendorId);
+    log.debug("connected, joined vendor:", vendorId);
   });
 
   _socket.on("order:new", (order: VendorNewOrderEvent) => {
@@ -69,11 +71,11 @@ export function connectVendorSocket(vendorId: string): void {
   });
 
   _socket.on("connect_error", (err) => {
-    if (import.meta.env.DEV) console.warn("[vendor-socket] connect_error:", err.message);
+    log.warn("connect_error:", err.message);
   });
 
   _socket.on("disconnect", (reason) => {
-    if (import.meta.env.DEV) console.log("[vendor-socket] disconnected:", reason);
+    log.debug("disconnected:", reason);
   });
 }
 

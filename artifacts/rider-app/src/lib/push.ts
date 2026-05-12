@@ -19,7 +19,9 @@
 import { z } from "zod";
 import { Capacitor } from "@capacitor/core";
 import { api, getApiBase } from "./api";
-import { riderEnv, riderIsDev } from "./envValidation";
+import { riderEnv } from "./envValidation";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[push]");
 
 const PushPayloadSchema = z.object({
   type: z.string().optional(),
@@ -52,7 +54,7 @@ type PushPayload = z.infer<typeof PushPayloadSchema>;
 function validatePushPayload(raw: unknown): PushPayload | null {
   const result = PushPayloadSchema.safeParse(raw);
   if (!result.success) {
-    if (riderIsDev) console.warn("[push] Malformed payload dropped:", raw);
+    log.warn("Malformed payload dropped:", raw);
     return null;
   }
   return result.data;
@@ -114,7 +116,7 @@ async function registerFcmPush(
 
     const permResult = await PushNotifications.requestPermissions();
     if (permResult.receive !== "granted") {
-      if (riderIsDev) console.warn("[push] FCM permission denied");
+      log.warn("FCM permission denied");
       return;
     }
 
@@ -134,7 +136,7 @@ async function registerFcmPush(
         body: JSON.stringify({ type: "fcm", token, role: "rider" }),
       });
       if (!res.ok) {
-        if (riderIsDev) console.warn("[push] FCM token registration failed:", res.status, res.statusText);
+        log.warn("FCM token registration failed:", res.status, res.statusText);
       }
     };
 
@@ -205,7 +207,7 @@ async function registerFcmPush(
 
     return { remove: () => cleanups.forEach((h) => h.remove()) };
   } catch (e) {
-    if (riderIsDev) console.warn("[push] FCM registration failed:", e);
+    log.warn("FCM registration failed:", e);
   }
 }
 
@@ -246,7 +248,7 @@ async function registerVapidPush(): Promise<void> {
       }),
     });
   } catch (e) {
-    if (riderIsDev) console.warn("[push] VAPID registration failed:", e);
+    log.warn("VAPID registration failed:", e);
   }
 }
 

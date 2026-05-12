@@ -16,6 +16,8 @@
  * Any additional VITE_* keys added in future will be picked up
  * automatically by the dynamic sweep below.
  */
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[admin envValidation]");
 
 export interface AdminEnv {
   baseUrl: string;
@@ -90,12 +92,9 @@ export function auditAdminEnv(): AdminEnv {
     }
   }
 
-  /* ── Emit warnings in dev only ──────────────────────────────────── */
-  if (import.meta.env.DEV && warnings.length > 0) {
-    console.warn("[admin envValidation] Environment issues detected:");
-    for (const w of warnings) {
-      console.warn(`  • ${w}`);
-    }
+  /* ── Emit warnings ──────────────────────────────────────────────── */
+  if (warnings.length > 0) {
+    log.warn("Environment issues detected:", warnings.join("; "));
   }
 
   return { baseUrl, mode, apiBaseUrl, warnings };

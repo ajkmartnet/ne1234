@@ -1,6 +1,8 @@
 import { format } from "date-fns";
 import { getCurrencySymbol } from "./platformConfig";
 import { escapeHtml } from "./escapeHtml";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[format]");
 
 export const formatCurrency = (amount: number | null | undefined) => {
   const safe = typeof amount === "number" && isFinite(amount) ? amount : 0;
@@ -29,7 +31,7 @@ export const formatDate = (dateString: string) => {
   try {
     return format(new Date(dateString), "MMM d, yyyy h:mm a");
   } catch (err) {
-    console.warn("[format] formatDate failed for input:", dateString, err);
+    log.warn("formatDate failed for input:", dateString, err);
     return dateString;
   }
 };
@@ -54,14 +56,14 @@ export const formatDateLocale = (
 ) => {
   const d = new Date(dateString);
   if (Number.isNaN(d.getTime())) {
-    console.warn("[format] formatDateLocale received non-parseable input:", dateString);
+    log.warn("formatDateLocale received non-parseable input:", dateString);
     return dateString;
   }
   try {
     return new Intl.DateTimeFormat(locale, options).format(d);
   } catch (err) {
-    console.warn(
-      "[format] formatDateLocale Intl.DateTimeFormat failed",
+    log.warn(
+      "formatDateLocale Intl.DateTimeFormat failed",
       { locale, options, dateString },
       err,
     );

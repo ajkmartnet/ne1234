@@ -1,4 +1,6 @@
 import { Feather } from "@expo/vector-icons";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[ErrorFallback]");
 import { reloadAppAsync } from "expo";
 import React, { useState } from "react";
 import {
@@ -38,7 +40,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
     try {
       await reloadAppAsync();
     } catch (restartError) {
-      if (__DEV__) console.error("Failed to restart app:", restartError);
+      log.error("Failed to restart app:", restartError);
       resetError();
     }
   };

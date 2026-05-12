@@ -3,6 +3,8 @@ import {
   ActivityIndicator, Modal, ScrollView,
   Text, TextInput, TouchableOpacity, View,
 } from "react-native";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[AddressesModal]");
 import { Ionicons } from "@expo/vector-icons";
 import { useToast } from "@/context/ToastContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
@@ -40,7 +42,7 @@ export function AddressesModal({ visible, userId, token, onClose }: { visible: b
     setLoading(true);
     try { const r = await fetch(`${API}/addresses`, { headers: authHdrs }); const d = unwrapApiResponse<{ addresses?: Address[] }>(await r.json()); setList(d.addresses ?? []); }
     catch (err) {
-      if (__DEV__) console.warn("[Profile] Addresses load failed:", err instanceof Error ? err.message : String(err));
+      log.warn("Addresses load failed:", err instanceof Error ? err.message : String(err));
       showToast("Could not load addresses — tap to refresh", "error");
     }
     setLoading(false);

@@ -3,6 +3,8 @@
  * No-op on native platforms.
  */
 import { Platform } from "react-native";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[SW]");
 
 export function registerServiceWorker() {
   if (Platform.OS !== "web") return;
@@ -15,7 +17,7 @@ export function registerServiceWorker() {
         // Service worker registered successfully
       })
       .catch((err) => {
-        if (__DEV__) console.warn("[SW] Registration failed:", err);
+        log.warn("Registration failed:", err);
       });
   });
 }

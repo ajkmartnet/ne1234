@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { formatCurrency as _sharedFcR } from "@workspace/api-zod";
 import { api, apiFetch } from "../../lib/api";
-import { riderIsDev } from "../../lib/envValidation";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[RemittanceModal]");
 import { useAuth } from "../../lib/auth";
 import { checkSufficientBalance, checkPromoStackable, validatePromo, type PromoCode } from "../../lib/wallet/validation";
 import {
@@ -49,7 +50,7 @@ export default function RemittanceModal({ netOwed, codCollected, onClose, onSucc
         setMethods(ms);
       }
     }).catch((err: Error) => {
-      if (riderIsDev) console.warn("[RemittanceModal] Failed to load payment methods:", err.message);
+      log.warn("Failed to load payment methods:", err.message);
       setMethodsError(true);
     }).finally(() => setLoadingMethods(false));
   }, []);

@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[sanitizeMarkerHtml]");
+
 const ALLOWED_TAGS = new Set([
   "div", "span", "img",
   "svg", "g", "circle", "rect", "path", "line", "polyline",
@@ -55,7 +58,7 @@ export function sanitizeMarkerHtml(raw: string): string {
     sanitizeNode(root);
     return root.innerHTML;
   } catch (err) {
-    console.error("[sanitizeMarkerHtml] parse failed:", err);
+    log.error("parse failed:", err);
     return "";
   }
 }

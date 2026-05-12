@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[CommandPalette]");
 import { useQuery } from "@tanstack/react-query";
 import { adminFetch, fetchAdminAbsolute } from "@/lib/adminFetcher";
 import { useToast } from "@/hooks/use-toast";
@@ -177,7 +179,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         toast({ title: "Command info", description: result.description ?? "Command not executed" });
       }
     } catch (err) {
-      console.error("[CommandPalette] command execution failed:", err);
+      log.error("command execution failed:", err);
       const message = err instanceof Error ? err.message : "Command could not be executed.";
       toast({ title: "Command failed", description: message, variant: "destructive" });
     } finally {

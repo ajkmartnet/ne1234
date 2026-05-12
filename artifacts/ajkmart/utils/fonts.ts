@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 import * as Font from "expo-font";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[fonts]");
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -48,7 +50,7 @@ export async function loadCoreFonts(): Promise<void> {
   try {
     await Font.loadAsync(CORE_FONTS);
   } catch {
-    if (__DEV__) console.warn("[fonts] Core font load failed — using system fallback");
+    log.warn("Core font load failed — using system fallback");
   }
 }
 

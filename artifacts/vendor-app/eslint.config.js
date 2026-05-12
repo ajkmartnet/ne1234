@@ -18,11 +18,10 @@ export default tseslint.config(
       reportUnusedDisableDirectives: true,
     },
     rules: {
-      // Block console.log and console.debug — these can leak debug output in production.
-      // console.error and console.warn are permitted for error reporting.
-      // Build-time stripping (esbuild.drop) is the production safety net;
-      // this rule is the developer-facing gate that makes violations visible in CI.
-      "no-console": ["error", { allow: ["error", "warn"] }],
+      // All console.* calls are banned — use @workspace/logger instead.
+      // error-reporter.ts files carry /* eslint-disable no-console */ because
+      // they monkeypatch console.error and must call the real console internally.
+      "no-console": "error",
 
       // Enforce correct hook dependency arrays to prevent stale closure bugs.
       "react-hooks/exhaustive-deps": "warn",

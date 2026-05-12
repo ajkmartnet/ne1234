@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { adminFetch } from "@/lib/adminFetcher";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[flash-deals]");
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Zap, Plus, Pencil, Trash2, Save,
@@ -58,7 +60,7 @@ function useServerOffset(): number {
         const rtt = Date.now() - start;
         setOffset(serverTime - (Date.now() - rtt / 2));
       })
-      .catch(() => { console.warn("flash-deals: server time fetch failed, using local clock"); });
+      .catch(() => { log.warn("server time fetch failed, using local clock"); });
   }, []);
   return offset;
 }

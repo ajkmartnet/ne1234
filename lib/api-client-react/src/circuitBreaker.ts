@@ -1,3 +1,6 @@
+import { createLogger } from "@workspace/logger";
+const log = createLogger("[circuit-breaker]");
+
 /**
  * Lightweight per-endpoint circuit breaker.
  *
@@ -117,8 +120,8 @@ export function createCircuitBreaker(config: CircuitBreakerConfig = {}) {
       if (rec.failures >= failureThreshold || rec.state === "half_open") {
         rec.state = "open";
         rec.openedAt = Date.now();
-        console.warn(
-          `[circuit-breaker] OPEN — "${endpoint}" failed ${rec.failures}× consecutively. ` +
+        log.warn(
+          `OPEN — "${endpoint}" failed ${rec.failures}× consecutively. ` +
           `Cooling down for ${cooldownMs / 1000}s.`
         );
       }

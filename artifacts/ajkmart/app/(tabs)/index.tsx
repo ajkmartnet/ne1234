@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getRecentItems, clearRecentItems } from "@/utils/recentlyViewed";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Home]");
 import { API_BASE } from "@/utils/api";
 import { Ionicons } from "@expo/vector-icons";
 import { router, type RelativePathString } from "expo-router";
@@ -433,7 +435,7 @@ export default function HomeScreen() {
   const isGuest = !user?.id;
 
   const handleHomeRefresh = useCallback(async () => {
-    try { await refreshConfig(); } catch (err) { if (__DEV__) console.warn("[Home] Config refresh failed:", err instanceof Error ? err.message : String(err)); }
+    try { await refreshConfig(); } catch (err) { log.warn("Config refresh failed:", err instanceof Error ? err.message : String(err)); }
     queryClient.invalidateQueries({ queryKey: ["dynamic-banners"] });
     queryClient.invalidateQueries({ queryKey: ["flash-deals"] });
     queryClient.invalidateQueries({ queryKey: ["trending-products"] });

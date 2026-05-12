@@ -3,6 +3,8 @@ import { AppState } from "react-native";
 import { getRide as getRideApi, type Ride } from "@workspace/api-client-react";
 import { API_BASE } from "@/utils/api";
 import { useNetworkQuality, type NetworkTier } from "@/hooks/useNetworkQuality";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[useRideStatus]");
 
 type RideStatusHookResult = {
   ride: Ride | null;
@@ -189,7 +191,7 @@ export function useRideStatus(rideId: string): RideStatusHookResult {
               return;
             }
           } catch (parseErr) {
-            console.warn("[useRideStatus] Skipping malformed SSE message:", line, parseErr);
+            log.warn("Skipping malformed SSE message:", line, parseErr);
           }
         }
       }

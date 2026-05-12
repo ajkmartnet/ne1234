@@ -10,6 +10,9 @@
  * to localStorage on web so tests and dev flows work without Capacitor).
  */
 
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[biometric]");
+
 const BIOMETRIC_ENABLED_KEY = "ajkmart_vendor_biometric_enabled";
 const BIOMETRIC_TOKEN_KEY   = "ajkmart_vendor_biometric_token";
 
@@ -20,7 +23,7 @@ async function prefSet(key: string, value: string): Promise<void> {
     const { Preferences } = await import("@capacitor/preferences");
     await Preferences.set({ key, value });
   } catch (err) {
-    console.warn("[capacitor/preferences] biometric prefSet failed:", err);
+    log.warn("biometric prefSet failed:", err);
     try { localStorage.setItem(key, value); } catch {}
   }
 }
@@ -31,7 +34,7 @@ async function prefGet(key: string): Promise<string> {
     const { value } = await Preferences.get({ key });
     return value ?? "";
   } catch (err) {
-    console.warn("[capacitor/preferences] biometric prefGet failed:", err);
+    log.warn("biometric prefGet failed:", err);
     try { return localStorage.getItem(key) ?? ""; } catch { return ""; }
   }
 }
@@ -41,7 +44,7 @@ async function prefRemove(key: string): Promise<void> {
     const { Preferences } = await import("@capacitor/preferences");
     await Preferences.remove({ key });
   } catch (err) {
-    console.warn("[capacitor/preferences] biometric prefRemove failed:", err);
+    log.warn("biometric prefRemove failed:", err);
     try { localStorage.removeItem(key); } catch {}
   }
 }

@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { getAdminAccessToken, adminAbsoluteFetch } from "@/lib/adminFetcher";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[rides]");
 import { PageHeader, StatCard } from "@/components/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { io } from "socket.io-client";
@@ -732,7 +734,7 @@ function DispatchMonitor() {
     });
 
     socket.on("connect_error", (err) => {
-      console.warn("[dispatch-monitor] WebSocket connect_error:", err?.message ?? err);
+      log.warn("dispatch-monitor WebSocket connect_error:", err?.message ?? err);
     });
 
     return () => { socket.disconnect(); };
@@ -1527,7 +1529,7 @@ export default function Rides() {
       queryClient.invalidateQueries({ queryKey: ["admin-rides-enriched"] });
     });
     socket.on("connect_error", (err) => {
-      console.warn("[rides] WebSocket connect_error:", err?.message ?? err);
+      log.warn("WebSocket connect_error:", err?.message ?? err);
     });
     return () => { socket.disconnect(); };
   }, [queryClient]);

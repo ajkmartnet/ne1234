@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAbortableEffect, isAbortError } from "@/lib/useAbortableEffect";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[Maps]");
 import {
   MapPin, CheckCircle2, XCircle, Loader2, RefreshCw, ChevronDown, ChevronRight,
   Zap, Globe, BarChart3, Settings, Trash2, Info, ExternalLink, AlertTriangle,
@@ -231,7 +233,7 @@ export function MapsMgmtSection({ localValues, dirtyKeys, handleChange, handleTo
       setUsageData(data);
     } catch (err) {
       if (isAbortError(err)) return;
-      console.error("[Maps] Usage data load failed:", err);
+      log.error("Usage data load failed:", err);
     } finally {
       if (!signal?.aborted) setUsageLoading(false);
     }
@@ -244,7 +246,7 @@ export function MapsMgmtSection({ localValues, dirtyKeys, handleChange, handleTo
       setMapConfig(data?.data ?? data);
     } catch (err) {
       if (isAbortError(err)) return;
-      console.error("[Maps] Config load failed:", err);
+      log.error("Config load failed:", err);
     }
   }, []);
 

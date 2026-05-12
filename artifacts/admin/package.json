@@ -113,6 +113,7 @@
     "vitest": "^4.0.18",
     "wouter": "^3.3.5",
     "zod": "catalog:",
-    "@workspace/api-zod": "workspace:*"
+    "@workspace/api-zod": "workspace:*",
+    "@workspace/logger": "workspace:*"
   }
 }

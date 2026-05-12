@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { Platform } from "react-native";
 import { API_BASE } from "./api";
 

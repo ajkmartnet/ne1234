@@ -3,6 +3,8 @@ import type { Language } from "@workspace/i18n";
 import { DEFAULT_LANGUAGE, LANGUAGE_OPTIONS, isRTL } from "@workspace/i18n";
 import { adminFetch, getAdminAccessToken } from "./adminFetcher";
 import { safeLocalGet, safeLocalSet } from "./safeStorage";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[useLanguage]");
 
 const VALID_LANGS = new Set<string>(LANGUAGE_OPTIONS.map(o => o.value));
 const STORAGE_KEY = "ajkmart_admin_language";
@@ -56,7 +58,7 @@ export function useLanguage() {
           return;
         }
       } catch (err) {
-        console.error("[useLanguage] /me/language fetch failed:", err);
+        log.error("/me/language fetch failed:", err);
       }
 
       const local = getSavedLanguage();
@@ -74,7 +76,7 @@ export function useLanguage() {
           applyRTL(platformLang as Language);
         }
       } catch (err) {
-        console.error("[useLanguage] /platform-settings fetch failed:", err);
+        log.error("/platform-settings fetch failed:", err);
       }
 
       setInitialised(true);
@@ -91,7 +93,7 @@ export function useLanguage() {
     try {
       await adminFetch("/me/language", { method: "PUT", body: JSON.stringify({ language: lang }) });
     } catch (err) {
-      console.error("[useLanguage] /me/language PUT failed:", err);
+      log.error("/me/language PUT failed:", err);
     }
     setLoading(false);
   }, []);

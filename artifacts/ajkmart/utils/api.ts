@@ -1,7 +1,10 @@
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[API]");
+
 const domain = process.env.EXPO_PUBLIC_DOMAIN;
-if (!domain && __DEV__) {
-  console.error(
-    "[API] FATAL: EXPO_PUBLIC_DOMAIN is not set. All API calls will fail. " +
+if (!domain) {
+  log.error(
+    "FATAL: EXPO_PUBLIC_DOMAIN is not set. All API calls will fail. " +
     "Set this environment variable to your Replit dev domain before building."
   );
 }

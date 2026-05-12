@@ -1,4 +1,6 @@
 import { type ZodType, type ZodIssue, type ZodError } from "zod";
+import { createLogger } from "@workspace/logger";
+const log = createLogger("[api-zod]");
 
 /**
  * Thrown in strict mode (development) when a backend response does not match
@@ -80,7 +82,7 @@ export function validateApiResponse<T>(
 
   if (strict) throw err;
 
-  console.warn(err.message);
+  log.warn(err.message);
   return data as T;
 }
 

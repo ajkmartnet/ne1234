@@ -1,6 +1,8 @@
 import { formatCurrency as _sharedFc } from "@workspace/api-zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[Active]");
 import {
   AlertTriangle, Camera, MapPin, Phone, Package, ShoppingCart,
   UtensilsCrossed, Bike, Car, User, CheckCircle, X, RefreshCw,
@@ -15,7 +17,6 @@ import "leaflet/dist/leaflet.css";
    covers every map (Active trip, MiniMap, dashboard widgets) before any
    Leaflet instance is constructed. No per-page call is needed here. */
 import { api, apiFetch } from "../lib/api";
-import { riderIsDev } from "../lib/envValidation";
 import { logRideEvent } from "../lib/rideUtils";
 import { useState, useRef, useEffect, Component, type ReactNode, type ErrorInfo } from "react";
 import { usePlatformConfig } from "../lib/useConfig";
@@ -29,7 +30,7 @@ import { enqueueAction } from "../lib/offline/queueManager";
 class MapErrorBoundary extends Component<{ children: ReactNode; fallbackMsg?: string }, { hasError: boolean }> {
   state = { hasError: false };
   static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(_: Error, info: ErrorInfo) { if (riderIsDev) console.error("MapErrorBoundary caught:", _, info); }
+  componentDidCatch(_: Error, info: ErrorInfo) { log.error("MapErrorBoundary caught:", _, info); }
   render() {
     if (this.state.hasError) {
       return (
@@ -65,7 +66,7 @@ function useRiderTileConfig() {
         }
       })
       .catch((e: unknown) => {
-        console.error("[RiderMap] Map config fetch failed — falling back to OSM:", e);
+        log.error("Map config fetch failed — falling back to OSM:", e);
         setTileConfigError(true);
       });
   }, []);
@@ -872,7 +873,7 @@ export default function Active() {
     Promise.allSettled(statusUpdates.map(item => item.run())).then(results => {
       results.forEach((result, i) => {
         if (result.status === "rejected") {
-          console.error(`[RiderActive] Status update ${i} failed:`, result.reason);
+          log.error(`Status update ${i} failed:`, result.reason);
         }
       });
       const failed = statusUpdates.filter((_, i) => results[i]?.status === "rejected");

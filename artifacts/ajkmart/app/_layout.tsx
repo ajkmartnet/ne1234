@@ -18,6 +18,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { reportError as reportErrorToBackend, initErrorReporter } from "@/utils/error-reporter";
+import { registerErrorHandler, createLogger } from "@/utils/logger";
+const log = createLogger("[AJKMart]");
 import { PwaInstallBanner } from "@/components/PwaInstallBanner";
 import { registerServiceWorker } from "@/utils/register-service-worker";
 import { initSentry, setSentryUser } from "@/utils/sentry";
@@ -78,7 +80,7 @@ if (Platform.OS === "web" && typeof window !== "undefined") {
       (msg.includes("timeout") && msg.toLowerCase().includes("route"));
     if (isRouterTimeout) {
       event.preventDefault();
-      if (__DEV__) console.warn("[AJKMart] Suppressed Expo Router startup timeout:", msg);
+      log.warn("Suppressed Expo Router startup timeout:", msg);
     }
   });
 }
@@ -142,7 +144,7 @@ function AuthGuard() {
 
   const safeReplace = (path: Href) => {
     if (redirectCountRef.current >= AUTH_REDIRECT_CAP) {
-      console.error("[AuthGuard] Redirect loop detected — cap hit navigating to", path, ". Routing to /auth as safe fallback.");
+      log.error("AuthGuard redirect loop detected — cap hit navigating to", path, ". Routing to /auth as safe fallback.");
       router.replace("/auth" as Href);
       return;
     }
@@ -254,7 +256,7 @@ function ImpersonationHandler() {
           headers: { Authorization: `Bearer ${impersonateToken}` },
         });
         if (!profileRes.ok) {
-          if (__DEV__) console.warn("[ImpersonationHandler] Profile fetch failed:", profileRes.status);
+          log.warn("ImpersonationHandler: Profile fetch failed:", profileRes.status);
           return;
         }
         const profileData = await profileRes.json();
@@ -264,7 +266,7 @@ function ImpersonationHandler() {
           router.replace("/(tabs)");
         }
       } catch (err: any) {
-        if (__DEV__) console.warn("[ImpersonationHandler] Error:", err?.message || err);
+        log.warn("ImpersonationHandler Error:", err?.message || err);
       }
     };
 
@@ -321,7 +323,7 @@ function MagicLinkHandler() {
           }
         }
       } catch (err: any) {
-        if (__DEV__) console.warn("MagicLinkHandler error:", err.message || err);
+        log.warn("MagicLinkHandler error:", err.message || err);
       }
     };
 
@@ -422,7 +424,7 @@ function DeepLinkHandler() {
           try {
             router.push(targetPath as any);
           } catch {
-            if (__DEV__) console.warn("[DeepLink] Could not navigate to:", targetPath);
+            log.warn("DeepLink: Could not navigate to:", targetPath);
           }
         }, 500);
       } catch {
@@ -461,7 +463,7 @@ function PushNotificationHandler() {
           router.push("/mart");
         }
       } catch {
-        if (__DEV__) console.warn("[PushNotificationHandler] Navigation failed");
+        log.warn("PushNotificationHandler: Navigation failed");
       }
     };
 
@@ -707,7 +709,7 @@ function RootLayoutNav() {
   const _min = typeof minAppVersion === "string" ? minAppVersion.trim() : "";
   let forceUpdate = false;
   if (!_cur || !_min || !STRICT_SEMVER_RE.test(_cur) || !STRICT_SEMVER_RE.test(_min)) {
-    console.warn("[ForceUpdate] Skipping force-update check — invalid or missing version data", {
+    log.warn("ForceUpdate: Skipping force-update check — invalid or missing version data", {
       installedVersion: _cur || "(empty)",
       minAppVersion: _min || "(empty)",
     });
@@ -748,6 +750,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     initErrorReporter();
+    registerErrorHandler(reportErrorToBackend);
     setOnApiError((url, status, message) => {
       reportErrorToBackend({
         errorType: "api_error",

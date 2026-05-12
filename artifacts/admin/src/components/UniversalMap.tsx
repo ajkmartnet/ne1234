@@ -3,6 +3,10 @@
  * OpenStreetMap/Google (react-leaflet) based on the `provider` prop.
  *
  * The Mapbox implementation is lazily loaded so the mapbox-gl bundle
+ */
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[UniversalMap]");
+/**
  * (~700 KB) is only fetched when the admin has actually configured a
  * Mapbox provider.  This keeps the initial page load fast for the
  * default OSM configuration.
@@ -396,7 +400,7 @@ function GoogleMap({ token = "", center, zoom = 12, markers = [], polylines = []
     }).catch((err) => {
       // Loader failure (invalid API key, network error, billing disabled).
       // Logged so admins can diagnose why the Google map didn't render.
-      console.error("[UniversalMap] Google Maps loader failed:", err);
+      log.error("Google Maps loader failed:", err);
     });
 
     return () => { cancelled = true; };

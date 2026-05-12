@@ -3,6 +3,8 @@
  * No-op on native platforms — native push is handled via expo-notifications.
  */
 import { Platform } from "react-native";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Push]");
 
 const API_DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? "";
 
@@ -52,7 +54,7 @@ export async function registerPush(authToken: string): Promise<void> {
     });
 
   } catch (e) {
-    if (__DEV__) console.warn("[Push] Registration failed:", e);
+    log.warn("Registration failed:", e);
   }
 }
 

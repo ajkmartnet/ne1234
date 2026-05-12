@@ -2,6 +2,8 @@ import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/rea
 import { adminFetch, adminAbsoluteFetch } from "@/lib/adminFetcher";
 import { useToast } from "@/hooks/use-toast";
 import { useErrorHandler } from "@/hooks/useErrorHandler";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[admin]");
 
 const REFETCH_INTERVAL = 30_000;
 const RIDES_REFETCH_INTERVAL = 5_000;
@@ -296,7 +298,7 @@ export const useUpdateRide = () => {
       queryClient.invalidateQueries({ queryKey: ["admin-rides-enriched"] });
       handleUpdateRideError(error);
       toast({ title: "Failed to update ride", description: error.message, variant: "destructive" });
-      if (import.meta.env.DEV) console.error("[admin] update ride status failed:", error.message || error);
+      log.error("update ride status failed:", error.message || error);
     },
   });
 };
@@ -1304,7 +1306,7 @@ export const useAdminCancelRide = () => {
     onError: (error: unknown) => {
       qc.invalidateQueries({ queryKey: ["admin-rides-enriched"] });
       handleCancelRideError(error);
-      if (import.meta.env.DEV) console.error("[admin] cancel ride failed:", error);
+      log.error("cancel ride failed:", error);
     },
   });
 };
@@ -1325,7 +1327,7 @@ export const useAdminRefundRide = () => {
     onError: (error: unknown) => {
       qc.invalidateQueries({ queryKey: ["admin-rides-enriched"] });
       handleRefundRideError(error);
-      if (import.meta.env.DEV) console.error("[admin] refund ride failed:", error);
+      log.error("refund ride failed:", error);
     },
   });
 };
@@ -1346,7 +1348,7 @@ export const useAdminReassignRide = () => {
     onError: (error: unknown) => {
       qc.invalidateQueries({ queryKey: ["admin-rides-enriched"] });
       handleReassignRideError(error);
-      if (import.meta.env.DEV) console.error("[admin] reassign ride failed:", error);
+      log.error("reassign ride failed:", error);
     },
   });
 };

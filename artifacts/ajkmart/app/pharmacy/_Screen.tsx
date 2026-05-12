@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Pharmacy]");
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system";
@@ -167,7 +169,7 @@ function PharmacyScreenInner() {
         });
       }
     } catch {
-      if (__DEV__) console.warn("[Pharmacy] Could not parse cartItems param");
+      log.warn("Could not parse cartItems param");
     }
   }, [cartItemsParam]);
 
@@ -192,7 +194,7 @@ function PharmacyScreenInner() {
     fetch(`${API_BASE}/addresses`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
       .then(j => { const data = unwrapApiResponse<{ addresses?: any[] }>(j); if (data?.addresses) setSavedAddresses(data.addresses); })
-      .catch((err) => { if (__DEV__) console.warn("[Pharmacy] Saved addresses fetch failed:", err instanceof Error ? err.message : String(err)); });
+      .catch((err) => { log.warn("Saved addresses fetch failed:", err instanceof Error ? err.message : String(err)); });
   }, [token]);
 
   const pickPrescriptionPhoto = () => {
@@ -214,7 +216,7 @@ function PharmacyScreenInner() {
         if ((info as { size: number }).size > MAX_PRESCRIPTION_SIZE) return "too_large";
       }
     } catch {
-      if (__DEV__) console.warn("[Pharmacy] Could not check file size — proceeding anyway");
+      log.warn("Could not check file size — proceeding anyway");
     }
     return "ok";
   };
@@ -383,7 +385,7 @@ function PharmacyScreenInner() {
     const base64 = await FileSystem.readAsStringAsync(compressed.uri, { encoding: "base64" as const });
     const domain = process.env.EXPO_PUBLIC_DOMAIN;
     if (!domain) {
-      console.error("[Pharmacy] EXPO_PUBLIC_DOMAIN is not set — prescription upload will fail. Check your environment configuration.");
+      log.error("EXPO_PUBLIC_DOMAIN is not set — prescription upload will fail. Check your environment configuration.");
       throw new Error("EXPO_PUBLIC_DOMAIN is not configured — cannot upload prescription.");
     }
     const res = await fetch(`https://${domain}/api/uploads/prescription`, {
@@ -396,7 +398,7 @@ function PharmacyScreenInner() {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      if (__DEV__) console.warn("[prescription upload] failed:", res.status, err);
+      log.warn("prescription upload failed:", res.status, err);
       throw new Error(`Upload failed: ${res.status}`);
     }
   };

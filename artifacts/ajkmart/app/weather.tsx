@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Weather]");
 import { router } from "expo-router";
 import { useSmartBack } from "@/hooks/useSmartBack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -116,7 +118,7 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
       return [r.city || r.subregion, r.region].filter(Boolean).join(", ") || "Current Location";
     }
   } catch (err) {
-    if (__DEV__) console.warn("[Weather] Reverse geocode failed:", err instanceof Error ? err.message : String(err));
+    log.warn("Reverse geocode failed:", err instanceof Error ? err.message : String(err));
   }
   return "Current Location";
 }
@@ -174,7 +176,7 @@ export default function WeatherDetailScreen() {
             locName = await reverseGeocode(lat, lng);
             isGps = true;
           } catch {
-            const saved = await AsyncStorage.getItem(SAVED_CITY_KEY).catch((err) => { console.warn("[Weather] AsyncStorage read failed for saved city:", err); return null; });
+            const saved = await AsyncStorage.getItem(SAVED_CITY_KEY).catch((err) => { log.warn("AsyncStorage read failed for saved city (gps fallback):", err); return null; });
             if (saved) {
               const parsed = JSON.parse(saved);
               lat = parsed.lat;
@@ -188,7 +190,7 @@ export default function WeatherDetailScreen() {
             }
           }
         } else {
-          const saved = await AsyncStorage.getItem(SAVED_CITY_KEY).catch((err) => { console.warn("[Weather] AsyncStorage read failed for saved city:", err); return null; });
+          const saved = await AsyncStorage.getItem(SAVED_CITY_KEY).catch((err) => { log.warn("AsyncStorage read failed for saved city (no-gps):", err); return null; });
           if (saved) {
             const parsed = JSON.parse(saved);
             lat = parsed.lat;
@@ -204,7 +206,7 @@ export default function WeatherDetailScreen() {
       }
 
       const cacheKey = `forecast_cache_${Math.round(lat * 10)}_${Math.round(lng * 10)}`;
-      const cached = await AsyncStorage.getItem(cacheKey).catch((err) => { console.warn("[Weather] AsyncStorage read failed for forecast cache:", err); return null; });
+      const cached = await AsyncStorage.getItem(cacheKey).catch((err) => { log.warn("AsyncStorage read failed for forecast cache:", err); return null; });
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
@@ -214,14 +216,14 @@ export default function WeatherDetailScreen() {
             return;
           }
         } catch (parseErr) {
-          if (__DEV__) console.warn("[Weather] Failed to parse forecast cache:", parseErr instanceof Error ? parseErr.message : String(parseErr));
+          log.warn("Failed to parse forecast cache:", parseErr instanceof Error ? parseErr.message : String(parseErr));
         }
       }
 
       const result = await fetchForecast(lat, lng);
       const fullData = { ...result, locationName: locName, isGps, _ts: Date.now() };
       AsyncStorage.setItem(cacheKey, JSON.stringify(fullData)).catch((err) => {
-        console.warn("[Weather] Failed to cache forecast data:", err);
+        log.warn("Failed to cache forecast data:", err);
       });
       setForecast(fullData);
     } catch (e) {
@@ -232,12 +234,12 @@ export default function WeatherDetailScreen() {
 
   useEffect(() => {
     (async () => {
-      const saved = await AsyncStorage.getItem(SAVED_CITY_KEY).catch((err) => { console.warn("[Weather] AsyncStorage read failed for saved city:", err); return null; });
+      const saved = await AsyncStorage.getItem(SAVED_CITY_KEY).catch((err) => { log.warn("AsyncStorage read failed for saved city:", err); return null; });
       if (saved) {
         try {
           setSavedCity(JSON.parse(saved));
         } catch (parseErr) {
-          if (__DEV__) console.warn("[Weather] Failed to parse saved city:", parseErr instanceof Error ? parseErr.message : String(parseErr));
+          log.warn("Failed to parse saved city:", parseErr instanceof Error ? parseErr.message : String(parseErr));
         }
       }
       loadWeather();
@@ -268,7 +270,7 @@ export default function WeatherDetailScreen() {
 
   const handleSelectCity = useCallback(async (city: { lat: number; lng: number; name: string }) => {
     await AsyncStorage.setItem(SAVED_CITY_KEY, JSON.stringify(city)).catch((err) => {
-      console.warn("[Weather] Failed to save selected city:", err);
+      log.warn("Failed to save selected city:", err);
     });
     setSavedCity(city);
     setShowCityInput(false);
@@ -287,7 +289,7 @@ export default function WeatherDetailScreen() {
   const VALID_IONICON_WEATHER = new Set(["sunny", "partly-sunny", "cloudy", "cloud", "rainy", "snow", "thunderstorm"]);
   const safeWmoIcon = (icon: string): keyof typeof Ionicons.glyphMap => {
     if (VALID_IONICON_WEATHER.has(icon)) return icon as keyof typeof Ionicons.glyphMap;
-    if (__DEV__) console.warn("[Weather] Invalid WMO icon name:", icon);
+    log.warn("Invalid WMO icon name:", icon);
     return "cloud-outline";
   };
   const wmo = forecast ? (WMO_ICONS[forecast.current.code] ?? WMO_ICONS[0]!) : WMO_ICONS[0]!;

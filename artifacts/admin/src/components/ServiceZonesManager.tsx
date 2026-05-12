@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMapEvents } from "react-leaflet";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[ServiceZonesManager]");
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { Plus, Trash2, Pencil, CheckCircle2, XCircle, Loader2, MapPin, Info, Car, ShoppingBag, Package } from "lucide-react";
@@ -115,7 +117,7 @@ export function ServiceZonesManager() {
       }
       setMode("list");
     } catch (err) {
-      console.error("[ServiceZonesManager] Zone save failed:", err);
+      log.error("Zone save failed:", err);
       toast({ title: "Save failed", variant: "destructive" });
     }
   }
@@ -126,7 +128,7 @@ export function ServiceZonesManager() {
       await del.mutateAsync(id);
       toast({ title: "Zone deleted" });
     } catch (err) {
-      console.error("[ServiceZonesManager] Zone delete failed:", err);
+      log.error("Zone delete failed:", err);
       toast({ title: "Delete failed", variant: "destructive" });
     } finally {
       setDeleting(null);

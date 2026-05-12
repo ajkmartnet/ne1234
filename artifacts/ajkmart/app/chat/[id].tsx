@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Chat]");
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   ActivityIndicator,
@@ -140,7 +142,7 @@ export default function ChatDetailScreen() {
         setMessages(msgs);
         await apiFetch(`/conversations/${id}/read-all`, { method: "PATCH" });
       } catch (err) {
-        console.warn("[Chat] Failed to load messages:", err instanceof Error ? err.message : String(err));
+        log.warn("Failed to load messages:", err instanceof Error ? err.message : String(err));
       }
       setLoading(false);
     };
@@ -192,7 +194,7 @@ export default function ChatDetailScreen() {
         }
         socket.emit("comm:call:answer", { callId: data.callId, targetUserId: data.callerId, sdp: pcRef.current?.localDescription });
       } catch (err) {
-        console.warn("[Chat] WebRTC offer handling failed:", err instanceof Error ? err.message : String(err));
+        log.warn("WebRTC offer handling failed:", err instanceof Error ? err.message : String(err));
         showToast("Call connection failed. Please try again.", "error");
       }
     });
@@ -202,7 +204,7 @@ export default function ChatDetailScreen() {
       try {
         await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
       } catch (err) {
-        console.warn("[Chat] WebRTC answer handling failed:", err instanceof Error ? err.message : String(err));
+        log.warn("WebRTC answer handling failed:", err instanceof Error ? err.message : String(err));
       }
     });
 
@@ -211,7 +213,7 @@ export default function ChatDetailScreen() {
       try {
         await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
       } catch (err) {
-        console.warn("[Chat] ICE candidate handling failed:", err instanceof Error ? err.message : String(err));
+        log.warn("ICE candidate handling failed:", err instanceof Error ? err.message : String(err));
       }
     });
 

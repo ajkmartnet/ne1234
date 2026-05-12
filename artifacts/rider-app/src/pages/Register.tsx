@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { api, isApiError } from "../lib/api";
-import { riderIsDev } from "../lib/envValidation";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[Register]");
 import { usePlatformConfig, getRiderAuthConfig, buildPhoneValidator } from "../lib/useConfig";
 import { useLanguage } from "../lib/useLanguage";
 import { tDual, type TranslationKey } from "@workspace/i18n";
@@ -433,7 +434,7 @@ export default function Register() {
               profile = await api.getMe() as AuthUser;
             } catch (getMeErr: unknown) {
               /* getMe failed after OTP verify — treat as pending to avoid partial login state */
-              if (riderIsDev) console.warn("[Register] getMe failed after OTP verify:", getMeErr instanceof Error ? getMeErr.message : getMeErr);
+              log.warn("getMe failed after OTP verify:", getMeErr instanceof Error ? getMeErr.message : getMeErr);
               setCompleted(true);
               return;
             }

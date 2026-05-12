@@ -4,11 +4,18 @@ import App from "./App";
 import "./index.css";
 import { loadPlatformConfig } from "./lib/platformConfig";
 import { checkApiHealth } from "./lib/checkApiHealth";
+import { initErrorReporter, reportError } from "./lib/error-reporter";
+import { registerErrorHandler } from "@workspace/logger";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[main]");
+
+initErrorReporter();
+registerErrorHandler(reportError);
 
 if (import.meta.env.DEV) {
   const apiTarget = import.meta.env.VITE_API_PROXY_TARGET || import.meta.env.VITE_API_BASE_URL;
   if (!apiTarget) {
-    console.warn("[AJKMart Admin] VITE_API_PROXY_TARGET is not set — API proxy may point to wrong host. Fix: add VITE_API_PROXY_TARGET as a Replit Secret or in your .env file, then restart.");
+    log.warn("VITE_API_PROXY_TARGET is not set — API proxy may point to wrong host. Fix: add VITE_API_PROXY_TARGET as a Replit Secret or in your .env file, then restart.");
   }
 
   window.addEventListener("unhandledrejection", (event) => {

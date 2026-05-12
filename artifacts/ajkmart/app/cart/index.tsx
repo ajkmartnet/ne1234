@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { withErrorBoundary } from "@/utils/withErrorBoundary";
 import { router, useLocalSearchParams } from "expo-router";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Cart]");
 import { useSmartBack } from "@/hooks/useSmartBack";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
@@ -125,7 +127,7 @@ function GpsSlotRow({ selected, onSelect, onClose }: {
           if (parts.length > 0) streetAddr = parts.join(", ");
         }
       } catch (geoErr) {
-        if (__DEV__) console.warn("[GpsSlotRow] Reverse geocode failed:", geoErr instanceof Error ? geoErr.message : String(geoErr));
+        log.warn("Reverse geocode failed:", geoErr instanceof Error ? geoErr.message : String(geoErr));
       }
       if (cancelRef.current.cancelled) return;
       const addr: SavedAddress = {
@@ -141,7 +143,7 @@ function GpsSlotRow({ selected, onSelect, onClose }: {
       setGpsAddr(addr);
       return addr;
     } catch (err) {
-      if (__DEV__) console.warn("[GpsSlotRow] GPS fetch failed:", err instanceof Error ? err.message : String(err));
+      log.warn("GPS fetch failed:", err instanceof Error ? err.message : String(err));
       return null;
     } finally {
       if (!cancelRef.current.cancelled) setLoading(false);
@@ -513,7 +515,7 @@ function CartScreenInner() {
         setAvailableOffers(codedOffers.slice(0, 3));
       })
       .catch((err) => {
-        if (__DEV__) console.warn("[Cart] Failed to fetch available offers:", err instanceof Error ? err.message : String(err));
+        log.warn("Failed to fetch available offers:", err instanceof Error ? err.message : String(err));
       });
     return () => ctrl.abort();
   }, [token, promoApplied, total]);
@@ -546,7 +548,7 @@ function CartScreenInner() {
         }
       })
       .catch((err) => {
-        if (__DEV__) console.warn("[Cart] Auto-apply offers fetch failed:", err instanceof Error ? err.message : String(err));
+        log.warn("Auto-apply offers fetch failed:", err instanceof Error ? err.message : String(err));
       });
     return () => ctrl.abort();
   }, [token, promoApplied, autoApplyDismissed, total, cartType]);
@@ -614,7 +616,7 @@ function CartScreenInner() {
         }
       })
       .catch((err) => {
-        if (__DEV__) console.warn("[Cart] Failed to refresh platform config:", err instanceof Error ? err.message : String(err));
+        log.warn("Failed to refresh platform config:", err instanceof Error ? err.message : String(err));
       });
   }, []);
 
@@ -679,7 +681,7 @@ function CartScreenInner() {
             if (parts.length > 0) streetAddr = parts.join(", ");
           }
         } catch (geoErr) {
-          if (__DEV__) console.warn("[Cart] Reverse geocode failed — using raw coordinates:", geoErr instanceof Error ? geoErr.message : String(geoErr));
+          log.warn("Reverse geocode failed — using raw coordinates:", geoErr instanceof Error ? geoErr.message : String(geoErr));
         }
         if (!cancelled) {
           const gpsAddr: SavedAddress = {
@@ -730,7 +732,7 @@ function CartScreenInner() {
         });
       })
       .catch((err) => {
-        if (__DEV__) console.warn("[Cart] Failed to load addresses:", err instanceof Error ? err.message : String(err));
+        log.warn("Failed to load addresses:", err instanceof Error ? err.message : String(err));
         showToast("Could not load saved addresses. Please add one manually.", "error");
       })
       .finally(() => setAddrLoading(false));
@@ -935,7 +937,7 @@ function CartScreenInner() {
       const rawServerTotal = order?.total;
       const parsed = rawServerTotal != null ? parseFloat(String(rawServerTotal)) : NaN;
       const serverDeducted = !isNaN(parsed) && parsed > 0 ? parsed : grandTotal;
-      if (isNaN(parsed) && __DEV__) console.warn("[Cart] wallet deduction: server total missing/invalid, using grandTotal fallback");
+      if (isNaN(parsed)) log.warn("wallet deduction: server total missing/invalid, using grandTotal fallback");
       updateUser({ walletBalance: String(Number(user?.walletBalance ?? 0) - serverDeducted) });
     }
 
@@ -953,7 +955,7 @@ function CartScreenInner() {
           }),
         });
       } catch (locErr) {
-        if (__DEV__) console.warn("[location] order placement update failed:", locErr);
+        log.warn("order placement update failed:", locErr);
       }
     })();
 
@@ -971,7 +973,7 @@ function CartScreenInner() {
       clearCartOnAck();
     }
     } catch (error) {
-      console.error("[Cart] Order placement failed:", error);
+      log.error("Order placement failed:", error);
       setPendingAck(false);
       showToast(
         typeof error === 'object' && error && 'message' in error 
@@ -1096,7 +1098,7 @@ function CartScreenInner() {
           }
         }
       } catch (eligErr) {
-        if (__DEV__) console.warn("[Cart] Delivery eligibility pre-check failed — proceeding to checkout:", eligErr instanceof Error ? eligErr.message : String(eligErr));
+        log.warn("Delivery eligibility pre-check failed — proceeding to checkout:", eligErr instanceof Error ? eligErr.message : String(eligErr));
       }
     }
 
@@ -1243,7 +1245,7 @@ function CartScreenInner() {
           result.gpsAccuracy = pos.coords.accuracy ?? null;
         }
       } catch (gpsErr) {
-        if (__DEV__) console.warn("[Cart] GPS capture failed — order placed without GPS metadata:", gpsErr instanceof Error ? gpsErr.message : String(gpsErr));
+        log.warn("GPS capture failed — order placed without GPS metadata:", gpsErr instanceof Error ? gpsErr.message : String(gpsErr));
       }
     }
     if (selectedAddr?.latitude != null && selectedAddr?.longitude != null) {

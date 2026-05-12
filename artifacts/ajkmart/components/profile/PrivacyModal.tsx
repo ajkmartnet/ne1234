@@ -3,6 +3,8 @@ import {
   ActivityIndicator, Alert, Image, Linking, Modal,
   ScrollView, Switch, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[PrivacyModal]");
 import { Ionicons } from "@expo/vector-icons";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -93,7 +95,7 @@ export function PrivacyModal({ visible, userId, token, onClose }: { visible: boo
       const res = await fetch(`${API}/settings`, { method: "PUT", headers: { "Content-Type": "application/json", ...authHdrs }, body: JSON.stringify(upd) });
       if (!res.ok) throw new Error("Server rejected setting update");
     } catch (err) {
-      if (__DEV__) console.warn("[Profile] Setting update failed, reverting:", err instanceof Error ? err.message : String(err));
+      log.warn("Setting update failed, reverting:", err instanceof Error ? err.message : String(err));
       cfgRef.current = snapshot;
       setCfg(snapshot);
       showToast("Setting could not be saved — changes reverted", "error");

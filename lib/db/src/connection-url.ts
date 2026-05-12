@@ -1,3 +1,6 @@
+import { createLogger } from "@workspace/logger";
+const log = createLogger("[db]");
+
 const NEON_BACKUP =
   "postgresql://neondb_owner:npg_8CZnNQxSivM4@ep-withered-pond-aod3mqmg-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 
@@ -6,7 +9,7 @@ export const usingFallback = !process.env.DATABASE_URL;
 const databaseUrl = process.env.DATABASE_URL || NEON_BACKUP;
 
 if (usingFallback) {
-  console.warn(
+  log.warn(
     "⚠️  Warning: DATABASE_URL secret missing! Using permanent Neon fallback. " +
     "Add DATABASE_URL in the Replit Secrets panel to silence this warning.",
   );

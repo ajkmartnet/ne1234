@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@tanstack/react-query": "catalog:",
-    "@workspace/api-zod": "workspace:*"
+    "@workspace/api-zod": "workspace:*",
+    "@workspace/logger": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18"

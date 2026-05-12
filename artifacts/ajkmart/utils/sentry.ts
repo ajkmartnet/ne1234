@@ -3,6 +3,8 @@
  * For native mobile, use @sentry/react-native with the expo plugin.
  */
 import { Platform } from "react-native";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Sentry]");
 
 let _initialized = false;
 
@@ -38,7 +40,7 @@ export async function initSentry(
           tracesSampleRate: 0.1,
         });
       } catch (e) {
-        if (__DEV__) console.warn("[Sentry] init error:", e);
+        log.warn("init error:", e);
       }
       resolve();
     };

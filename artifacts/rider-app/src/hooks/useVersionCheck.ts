@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[version-check]");
 
 const STORAGE_KEY      = "ajk_rider_server_epoch";
 const VERSION_KEY      = "ajk_rider_app_version";
@@ -56,14 +58,14 @@ export function useVersionCheck() {
         const storedVersion = localStorage.getItem(VERSION_KEY);
         if (storedVersion === null) {
           localStorage.setItem(VERSION_KEY, appVersion);
-          console.debug(`[version-check] initial appVersion stored: ${appVersion}`);
+          log.debug(`initial appVersion stored: ${appVersion}`);
         } else if (storedVersion !== appVersion) {
           const storedMajor  = parseMajor(storedVersion);
           const currentMajor = parseMajor(appVersion);
-          console.debug(`[version-check] version changed ${storedVersion} → ${appVersion} (major: ${storedMajor} → ${currentMajor})`);
+          log.debug(`version changed ${storedVersion} → ${appVersion} (major: ${storedMajor} → ${currentMajor})`);
           localStorage.setItem(VERSION_KEY, appVersion);
           if (currentMajor > storedMajor) {
-            console.debug("[version-check] major version bump — scheduling reload");
+            log.debug("major version bump — scheduling reload");
             reloadScheduled.current = true;
             clearInterval(timer);
             hardReload();
@@ -80,7 +82,7 @@ export function useVersionCheck() {
         return;
       }
       if (Number(storedEpoch) !== epoch) {
-        console.debug(`[version-check] serverEpoch changed (${storedEpoch} → ${epoch}) — scheduling reload`);
+        log.debug(`serverEpoch changed (${storedEpoch} → ${epoch}) — scheduling reload`);
         reloadScheduled.current = true;
         clearInterval(timer);
         localStorage.setItem(STORAGE_KEY, String(epoch));

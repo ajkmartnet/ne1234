@@ -17,7 +17,9 @@
  */
 
 import { Capacitor } from "@capacitor/core";
-import { vendorEnv, vendorIsDev } from "./envValidation";
+import { vendorEnv } from "./envValidation";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[push]");
 import { api } from "./api";
 
 /* API origin for native Capacitor builds; empty string falls through to
@@ -93,7 +95,7 @@ async function registerFcmPush(
 
     const permResult = await PushNotifications.requestPermissions();
     if (permResult.receive !== "granted") {
-      if (vendorIsDev) console.warn("[push] FCM permission denied");
+      log.warn("FCM permission denied");
       onError?.("permission_denied");
       return;
     }
@@ -109,7 +111,7 @@ async function registerFcmPush(
     const registerTokenWithServer = async (token: string) => {
       const authToken = getAuthToken();
       if (!authToken) {
-        if (vendorIsDev) console.warn("[push] FCM token registration skipped — no auth token yet");
+        log.warn("FCM token registration skipped — no auth token yet");
         return;
       }
       let lastStatus = 0;
@@ -122,14 +124,14 @@ async function registerFcmPush(
           });
           lastStatus = res.status;
           if (res.ok || res.status === 409) return; /* 409 = already registered, both are success */
-          if (vendorIsDev) console.warn(`[push] FCM token registration attempt ${attempt}/${MAX_ATTEMPTS} failed:`, res.status, res.statusText);
+          log.warn(`FCM token registration attempt ${attempt}/${MAX_ATTEMPTS} failed:`, res.status, res.statusText);
           /* 4xx errors are client-side failures — no point retrying */
           if (res.status >= 400 && res.status < 500) {
             onError?.("registration_failed");
             return;
           }
         } catch (fetchErr) {
-          if (vendorIsDev) console.warn(`[push] FCM token registration attempt ${attempt}/${MAX_ATTEMPTS} network error:`, fetchErr);
+          log.warn(`FCM token registration attempt ${attempt}/${MAX_ATTEMPTS} network error:`, fetchErr);
           lastStatus = 0;
         }
         if (attempt < MAX_ATTEMPTS) {
@@ -138,7 +140,7 @@ async function registerFcmPush(
         }
       }
       /* All retries exhausted */
-      if (vendorIsDev) console.error(`[push] FCM token registration failed after ${MAX_ATTEMPTS} attempts. Last status: ${lastStatus}`, { token: token.slice(0, 20) + "…", apiOrigin: API_ORIGIN || "(relative)" });
+      log.error(`FCM token registration failed after ${MAX_ATTEMPTS} attempts. Last status: ${lastStatus}`, { token: token.slice(0, 20) + "…", apiOrigin: API_ORIGIN || "(relative)" });
       if (lastStatus === 0) {
         onError?.("network_error");
       } else {
@@ -209,7 +211,7 @@ async function registerFcmPush(
 
     return { remove: () => cleanups.forEach((h) => h.remove()) };
   } catch (e) {
-    if (vendorIsDev) console.warn("[push] FCM registration failed:", e);
+    log.warn("FCM registration failed:", e);
     onError?.("registration_failed");
   }
 }
@@ -245,7 +247,7 @@ async function registerVapidPush(onError?: PushErrorHandler): Promise<void> {
           }),
         });
         if (!res.ok && res.status !== 409) {
-          if (vendorIsDev) console.warn("[push] VAPID re-registration failed:", res.status);
+          log.warn("VAPID re-registration failed:", res.status);
           if (res.status >= 400 && res.status < 500) {
             /* 4xx: subscription is stale — unsubscribe and force fresh registration */
             await existing.unsubscribe().catch(() => {});
@@ -289,11 +291,11 @@ async function registerVapidPush(onError?: PushErrorHandler): Promise<void> {
       }),
     });
     if (!res.ok && res.status !== 409) {
-      if (vendorIsDev) console.warn("[push] VAPID subscription registration failed:", res.status);
+      log.warn("VAPID subscription registration failed:", res.status);
       onError?.("registration_failed");
     }
   } catch (e: unknown) {
-    if (vendorIsDev) console.warn("[push] VAPID registration failed:", e);
+    log.warn("VAPID registration failed:", e);
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes("permission") || msg.includes("denied") || msg.includes("NotAllowed")) {
       onError?.("permission_denied");

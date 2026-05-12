@@ -1,5 +1,7 @@
 import { getRiderApiBase } from "./envValidation";
 import { createApiFetcher, RefreshError, createCircuitBreaker, CircuitOpenError } from "@workspace/api-client-react";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[api]");
 
 const BASE = getRiderApiBase();
 
@@ -296,7 +298,7 @@ export async function apiFetch(path: string, opts: RequestInit = {}, _returnEnve
   if (res.status >= 500 && _5xxRetries > 0) {
     const attempt  = 4 - _5xxRetries;                  // 1, 2, 3
     const delayMs  = 1000 * Math.pow(2, attempt - 1);  // 1 s, 2 s, 4 s
-    console.debug(`[api] 5xx retry ${attempt}/3 for ${path} (status ${res.status}) — waiting ${delayMs}ms`);
+    log.debug(`5xx retry ${attempt}/3 for ${path} (status ${res.status}) — waiting ${delayMs}ms`);
     await new Promise(r => setTimeout(r, delayMs));
     return apiFetch(path, opts, _returnEnvelope, _5xxRetries - 1);
   }

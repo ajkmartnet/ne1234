@@ -2,7 +2,8 @@ import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import App from "./App";
 import "./index.css";
-import { initErrorReporter } from "./lib/error-reporter";
+import { initErrorReporter, reportError } from "./lib/error-reporter";
+import { registerErrorHandler } from "@workspace/logger";
 import { checkApiHealth } from "./lib/checkApiHealth";
 import { auditVendorEnv } from "./lib/envValidation";
 
@@ -10,6 +11,7 @@ import { auditVendorEnv } from "./lib/envValidation";
 auditVendorEnv();
 
 initErrorReporter();
+registerErrorHandler(reportError);
 
 (async () => {
   const container = document.getElementById("root")!;

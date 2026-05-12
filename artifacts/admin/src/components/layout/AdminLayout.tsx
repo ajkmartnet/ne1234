@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useLocation } from "wouter";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[AdminLayout]");
 import {
   ShoppingBag,
   LogOut,
@@ -133,11 +135,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     adminFetch("/sos/alerts?limit=1")
       .then((data: { activeCount?: number }) => { if (typeof data.activeCount === "number") setSosCount(data.activeCount); })
-      .catch((err) => { console.error("[AdminLayout] SOS badge fetch failed:", err); });
+      .catch((err) => { log.error("SOS badge fetch failed:", err); });
 
     adminFetch("/error-reports/new-count")
       .then((data: { count?: number }) => { if (typeof data.count === "number") setErrorCount(data.count); })
-      .catch((err) => { console.error("[AdminLayout] Error count fetch failed:", err); });
+      .catch((err) => { log.error("Error count fetch failed:", err); });
 
     // Fetch all pending badge counts in one round-trip
     const fetchPendingCounts = () => {
@@ -148,14 +150,14 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           if (typeof data.pendingWithdrawals === "number") setPendingWithdrawalsCount(data.pendingWithdrawals);
           if (typeof data.pendingDeposits === "number") setPendingDepositsCount(data.pendingDeposits);
         })
-        .catch((err) => { console.error("[AdminLayout] Pending counts fetch failed:", err); });
+        .catch((err) => { log.error("Pending counts fetch failed:", err); });
     };
     fetchPendingCounts();
 
     const errorInterval = setInterval(() => {
       adminFetch("/error-reports/new-count")
         .then((data: { count?: number }) => { if (typeof data.count === "number") setErrorCount(data.count); })
-        .catch((err) => { console.error("[AdminLayout] Error count interval fetch failed:", err); });
+        .catch((err) => { log.error("Error count interval fetch failed:", err); });
     }, getAdminTiming().layoutErrorPollIntervalMs);
     const cleanupErrorInterval = () => clearInterval(errorInterval);
 

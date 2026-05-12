@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[push]");
+
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
 export async function registerPush(): Promise<void> {
@@ -27,7 +30,7 @@ export async function registerPush(): Promise<void> {
       body: JSON.stringify({ endpoint: sub.endpoint, p256dh: sub.toJSON().keys?.p256dh, auth: sub.toJSON().keys?.auth, role: "admin" }),
     });
   } catch (e) {
-    if (import.meta.env.DEV) console.warn("[push] registration failed:", e);
+    log.warn("registration failed:", e);
   }
 }
 
@@ -41,7 +44,7 @@ const URL_SAFE_B64 = /^[A-Za-z0-9_\-]+=*$/;
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> | null {
   if (typeof base64String !== "string" || base64String.length === 0) return null;
   if (!URL_SAFE_B64.test(base64String)) {
-    if (import.meta.env.DEV) console.warn("[push] vapid key has invalid characters");
+    log.warn("vapid key has invalid characters");
     return null;
   }
   const padding = "=".repeat((4 - base64String.length % 4) % 4);
@@ -50,7 +53,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> | 
   try {
     rawData = window.atob(base64);
   } catch (err) {
-    if (import.meta.env.DEV) console.warn("[push] vapid key atob failed:", err);
+    log.warn("vapid key atob failed:", err);
     return null;
   }
   const output = new Uint8Array(rawData.length);

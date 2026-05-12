@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[Register]");
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -435,7 +437,7 @@ export default function RegisterScreen() {
         router.replace("/auth");
       }
     } catch (e: unknown) {
-      if (__DEV__) console.warn("Login after registration failed:", e instanceof Error ? e.message : e);
+      log.warn("Login after registration failed:", e instanceof Error ? e.message : e);
       router.replace("/auth");
     }
     setLoading(false);

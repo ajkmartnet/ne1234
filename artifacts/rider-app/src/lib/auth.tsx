@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback, ty
 import { useQueryClient } from "@tanstack/react-query";
 import { api, tokenStoreReady } from "./api";
 import { executeLogoutSequence } from "./logoutSequence";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[auth]");
 
 /* A2: UTF-8 safe JWT decoder (COMPLETED) */
 function decodeJwtExp(tok: string): number | null {
@@ -144,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
            This is a hard error: we cannot safely read the persisted token, so
            we clear any stale in-memory state and surface an auth failure rather
            than silently treating the session as unauthenticated. */
-        console.error("[auth] tokenStoreReady failed — secure storage unavailable:", storeErr);
+        log.error("tokenStoreReady failed — secure storage unavailable:", storeErr);
         api.clearTokens();
         setStorageError(true);
         setLoading(false);

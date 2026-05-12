@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
+import { createLogger } from "@/utils/logger";
+const log = createLogger("[BannerCarousel]");
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions, Platform, Linking, useWindowDimensions } from "react-native";
 import { AdaptiveImage } from "@/components/AdaptiveImage";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,7 +31,7 @@ function safeNavigate(route: string) {
     "/recently-viewed",
   ]);
   if (!route || (!knownRoutes.has(route) && !route.startsWith("/(tabs)") && !route.startsWith("/product/"))) {
-    if (__DEV__) console.warn("[Home] safeNavigate: unknown route blocked:", route);
+    log.warn("safeNavigate: unknown route blocked:", route);
     router.push("/(tabs)" as RelativePathString);
     return;
   }

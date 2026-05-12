@@ -1,5 +1,7 @@
 import React from 'react';
 import { readCsrfFromCookie } from './adminAuthContext.js';
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[adminFetcher]");
 import { safeSessionSet } from './safeStorage';
 import { toast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
@@ -151,7 +153,7 @@ async function ensureToken(context: string): Promise<void> {
   try {
     await refreshToken!();
   } catch (err) {
-    console.error(`Token refresh failed (no token, ${context}):`, err);
+    log.error(`Token refresh failed (no token, ${context}):`, err);
     const loginUrl = `${import.meta.env.BASE_URL || '/'}login`;
     safeSessionSet('admin_session_expired', 'Your session has expired. Please log in again.');
     window.location.href = loginUrl;

@@ -32,6 +32,7 @@ import { startHealthMonitor } from "./services/healthAlertMonitor.js";
 import { checkDbOnStartup, startDbMonitor } from "./services/dbConnectivityMonitor.js";
 import { recordResponseTime } from "./lib/metrics/responseTime.js";
 import { checkSchemaDrift } from "./services/schemaDrift.service.js";
+import { checkMigrationGuard } from "./services/migrationGuard.service.js";
 import router from "./routes/index.js";
 import { globalLimiter } from "./middleware/rate-limit.js";
 import { suspiciousPatternDetector } from "./middleware/suspiciousPatternDetector.js";
@@ -74,6 +75,11 @@ export async function runStartupTasks(): Promise<void> {
   }
 
   await runSqlMigrations();
+  try {
+    await checkMigrationGuard();
+  } catch (err) {
+    logger.error({ err }, "[startup] migration guard check failed (continuing)");
+  }
   try {
     await seedPermissionCatalog();
     await seedDefaultRoles();

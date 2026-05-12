@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
-import { adminFetch, adminAbsoluteFetch } from "@/lib/adminFetcher";
+import { adminFetch, adminAbsoluteFetch, getAdminAccessToken, fetchAdminAbsoluteResponse } from "@/lib/adminFetcher";
 import { useToast } from "@/hooks/use-toast";
 import { useErrorHandler } from "@/hooks/useErrorHandler";
 import { createLogger } from "@/lib/logger";
@@ -230,7 +230,7 @@ export const useUpdateUserSecurity = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; isActive?: boolean; isBanned?: boolean; banReason?: string | null; roles?: string; blockedServices?: string; securityNote?: string | null }) =>
+    mutationFn: ({ id, ...data }: { id: string; isActive?: boolean; isBanned?: boolean; banReason?: string | null; roles?: string; blockedServices?: string; securityNote?: string | null; notify?: boolean }) =>
       adminFetch(`/users/${id}/security`, {
         method: "PATCH",
         body: JSON.stringify(data),
@@ -591,6 +591,50 @@ export const useResetWalletPin = () => {
       toast({
         title: "Failed to reset MPIN",
         description: error?.message || "Unable to reset wallet PIN",
+        variant: "destructive",
+      });
+    },
+  });
+};
+
+export interface ExportUsersInput {
+  ids?: string[];
+  role?: string;
+  status?: string;
+  search?: string;
+  conditionTier?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export const useExportUsers = () => {
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (params: ExportUsersInput) => {
+      const res = await fetchAdminAbsoluteResponse("/api/admin/users/export", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "Export failed");
+        throw new Error(text || `Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const cd = res.headers.get("content-disposition") || "";
+      const match = cd.match(/filename="?([^"]+)"?/);
+      a.download = match?.[1] ?? `users-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Export failed",
+        description: error?.message || "Unable to export users",
         variant: "destructive",
       });
     },

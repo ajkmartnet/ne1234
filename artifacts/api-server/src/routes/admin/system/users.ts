@@ -12,7 +12,7 @@ import {
   vendorProfilesTable,
   riderProfilesTable,
 } from "@workspace/db/schema";
-import { eq, desc, count, sum, and, gte, lte, sql, or, ilike, asc, isNull, isNotNull, avg, ne, type SQL } from "drizzle-orm";
+import { eq, desc, count, sum, and, gte, lte, sql, or, ilike, asc, isNull, isNotNull, avg, ne, inArray, type SQL } from "drizzle-orm";
 import {
   stripUser, generateId, getUserLanguage, t,
   getPlatformSettings, adminAuth, getAdminSecret,
@@ -1265,6 +1265,107 @@ router.post("/users/:id/sessions/revoke", async (req, res) => {
       sendError(res, "An internal error occurred", 500);
     }
   }
+});
+
+/* ── POST /users/export — filter-aware or selection-aware CSV export ── */
+function escapeCSVField(val: string): string {
+  let safe = val;
+  if (/^[=+\-@\t\r]/.test(safe)) safe = "'" + safe;
+  if (safe.includes(",") || safe.includes('"') || safe.includes("\n")) return `"${safe.replace(/"/g, '""')}"`;
+  return safe;
+}
+
+router.post("/users/export", requirePermission("users.view"), async (req, res) => {
+  const adminReq = req as AdminRequest;
+  const { ids, role, status, search, conditionTier, dateFrom, dateTo } = req.body as {
+    ids?: string[];
+    role?: string;
+    status?: string;
+    search?: string;
+    conditionTier?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  };
+
+  let users: (typeof usersTable.$inferSelect)[] = [];
+
+  if (ids && ids.length > 0) {
+    users = await db.select().from(usersTable)
+      .where(and(inArray(usersTable.id, ids), isNull(usersTable.deletedAt)))
+      .orderBy(desc(usersTable.createdAt))
+      .limit(10000);
+  } else {
+    const conditions: SQL[] = [isNull(usersTable.deletedAt) as SQL];
+
+    if (role && role !== "all") {
+      conditions.push(sql`${usersTable.roles} LIKE ${"%" + role + "%"}`);
+    }
+    if (status && status !== "all") {
+      if (status === "banned")   conditions.push(eq(usersTable.isBanned, true));
+      else if (status === "active")  conditions.push(and(eq(usersTable.isActive, true), eq(usersTable.isBanned, false)) as SQL);
+      else if (status === "blocked") conditions.push(and(eq(usersTable.isActive, false), eq(usersTable.isBanned, false)) as SQL);
+    }
+    if (search) {
+      conditions.push(or(
+        ilike(usersTable.name, `%${search}%`),
+        ilike(usersTable.phone, `%${search}%`),
+        ilike(usersTable.email, `%${search}%`),
+      )! as SQL);
+    }
+    if (dateFrom) conditions.push(gte(usersTable.createdAt, new Date(dateFrom)));
+    if (dateTo)   conditions.push(lte(usersTable.createdAt, new Date(dateTo + "T23:59:59")));
+
+    users = await db.select().from(usersTable)
+      .where(and(...conditions))
+      .orderBy(desc(usersTable.createdAt))
+      .limit(10000);
+
+    if (conditionTier && conditionTier !== "all") {
+      const condCounts = await db.select({
+        userId: accountConditionsTable.userId,
+        maxSeverityLabel: sql<string>`(ARRAY['warning','warning','restriction_normal','restriction_strict','suspension','ban'])[1 + MAX(CASE ${accountConditionsTable.severity}::text WHEN 'ban' THEN 5 WHEN 'suspension' THEN 4 WHEN 'restriction_strict' THEN 3 WHEN 'restriction_normal' THEN 2 WHEN 'warning' THEN 1 ELSE 0 END)]`,
+        activeCount: count(),
+      }).from(accountConditionsTable)
+        .where(eq(accountConditionsTable.isActive, true))
+        .groupBy(accountConditionsTable.userId);
+
+      const condMap = new Map(condCounts.map(c => [c.userId, { count: Number(c.activeCount), maxSeverity: c.maxSeverityLabel }]));
+
+      users = users.filter(u => {
+        const cond = condMap.get(u.id);
+        if (conditionTier === "has_conditions") return !!cond && cond.count > 0;
+        if (conditionTier === "clean")          return !cond || cond.count === 0;
+        if (conditionTier === "warnings")       return cond?.maxSeverity === "warning";
+        if (conditionTier === "restrictions")   return cond?.maxSeverity === "restriction_normal" || cond?.maxSeverity === "restriction_strict";
+        if (conditionTier === "suspensions")    return cond?.maxSeverity === "suspension";
+        if (conditionTier === "bans")           return cond?.maxSeverity === "ban";
+        return true;
+      });
+    }
+  }
+
+  const mode = ids?.length ? `selection (${ids.length} IDs)` : "filter";
+  addAuditEntry({ action: "csv_export", ip: getClientIp(req), adminId: adminReq.adminId, details: `Exported ${users.length} users as CSV via ${mode}`, result: "success" });
+
+  const header = "ID,Name,Phone,Email,Roles,City,Active,Banned,Wallet Balance,Created At";
+  const rows = users.map(u => [
+    escapeCSVField(u.id),
+    escapeCSVField(u.name || ""),
+    escapeCSVField(u.phone || ""),
+    escapeCSVField(u.email || ""),
+    escapeCSVField(u.roles || ""),
+    escapeCSVField(u.city || ""),
+    u.isActive ? "Yes" : "No",
+    u.isBanned ? "Yes" : "No",
+    String(u.walletBalance || "0"),
+    escapeCSVField(u.createdAt.toISOString().slice(0, 19)),
+  ].join(","));
+
+  const csv = [header, ...rows].join("\n");
+  const filename = `users-export-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(csv);
 });
 
 export default router;

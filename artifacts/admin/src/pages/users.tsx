@@ -16,7 +16,7 @@ import { tDual, type TranslationKey } from "@workspace/i18n";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { useUsers, useUpdateUser, useUpdateUserSecurity, useDeleteUser, useUserActivity, usePendingUsers, useApproveUser, useRejectUser, useRequestUserCorrection, useBulkBanUsers, useCreateUser, useAdminUserSessions, useRevokeUserSession, useRevokeAllUserSessions, useAdminForcePasswordReset, useAdminKycByUserId, useAdminKycApprove, useAdminKycReject, useWaiveDebt, useAdminResetOtp, useAdminViewOtp, useAdminVerifyContact, useUpdateUserIdentity, useDisable2FA, useResetWalletPin, type CreateUserInput } from "@/hooks/use-admin";
+import { useUsers, useUpdateUser, useUpdateUserSecurity, useDeleteUser, useUserActivity, usePendingUsers, useApproveUser, useRejectUser, useRequestUserCorrection, useBulkBanUsers, useCreateUser, useAdminUserSessions, useRevokeUserSession, useRevokeAllUserSessions, useAdminForcePasswordReset, useAdminKycByUserId, useAdminKycApprove, useAdminKycReject, useWaiveDebt, useAdminResetOtp, useAdminViewOtp, useAdminVerifyContact, useUpdateUserIdentity, useDisable2FA, useResetWalletPin, useExportUsers, type CreateUserInput } from "@/hooks/use-admin";
 import { createUserSchema, type CreateUserFormErrors } from "@/lib/validation";
 import { WalletAdjustModal } from "@/components/WalletAdjustModal";
 import { useAdminAuth } from "@/lib/adminAuthContext";
@@ -1730,6 +1730,9 @@ export default function Users() {
   const [addressUser, setAddressUser]   = useState<any>(null);
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
   const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [bulkConfirmAction, setBulkConfirmAction] = useState<"ban" | "unban" | null>(null);
+  const [bulkReason, setBulkReason] = useState("");
+  const exportUsers = useExportUsers();
 
   useEffect(() => {
     const handler = () => setCreateUserOpen(true);
@@ -1819,14 +1822,42 @@ export default function Users() {
   };
 
   const handleBulkBan = (action: "ban" | "unban") => {
+    setBulkReason("");
+    setBulkConfirmAction(action);
+  };
+
+  const executeBulkBan = () => {
     const ids = Array.from(selectedIds);
-    if (!ids.length) return;
-    bulkBanMutation.mutate({ ids, action }, {
+    if (!ids.length || !bulkConfirmAction) return;
+    bulkBanMutation.mutate({ ids, action: bulkConfirmAction, reason: bulkReason || undefined }, {
       onSuccess: (d: any) => {
-        toast({ title: `${action === "ban" ? "Banned" : "Unbanned"} ${d.affected} user(s)` });
+        toast({ title: `${bulkConfirmAction === "ban" ? "Banned" : "Unbanned"} ${d.affected} user(s)` });
         setSelectedIds(new Set());
+        setBulkConfirmAction(null);
+        setBulkReason("");
       },
       onError: e => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+    });
+  };
+
+  const handleExportSelected = () => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    exportUsers.mutate({ ids }, {
+      onSuccess: () => toast({ title: `Exported ${ids.length} user(s)` }),
+    });
+  };
+
+  const handleExportWithFilters = () => {
+    exportUsers.mutate({
+      role: roleFilter !== "all" ? roleFilter : undefined,
+      status: statusFilter !== "all" ? statusFilter : undefined,
+      search: debouncedSearch || undefined,
+      conditionTier: conditionTier !== "all" ? conditionTier : undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+    }, {
+      onSuccess: () => toast({ title: "Export downloaded" }),
     });
   };
 
@@ -1849,8 +1880,8 @@ export default function Users() {
         actions={
           <div className="flex flex-col items-end gap-1.5">
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => exportUsersCSV(filtered)} className="h-9 rounded-xl gap-2">
-                <Download className="w-4 h-4" /> Export CSV
+              <Button variant="outline" size="sm" onClick={handleExportWithFilters} disabled={exportUsers.isPending} className="h-9 rounded-xl gap-2">
+                {exportUsers.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export with Filters
               </Button>
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="h-9 rounded-xl gap-2">
                 <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} /> Refresh
@@ -2050,17 +2081,23 @@ export default function Users() {
           </div>
           {/* Bulk actions */}
           {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-muted-foreground font-semibold">{selectedIds.size} selected</span>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <span className="text-xs font-bold text-[#1A56DB] bg-[#1A56DB]/10 border border-[#1A56DB]/20 px-2.5 py-1 rounded-full">
+                {selectedIds.size} selected
+              </span>
               <button onClick={() => handleBulkBan("ban")} disabled={bulkBanMutation.isPending}
-                className="px-3 py-1.5 bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold hover:bg-red-200 disabled:opacity-60 transition-colors">
-                Ban All
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold hover:bg-red-200 disabled:opacity-60 transition-colors">
+                <Ban className="w-3 h-3" /> Ban All
               </button>
               <button onClick={() => handleBulkBan("unban")} disabled={bulkBanMutation.isPending}
-                className="px-3 py-1.5 bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold hover:bg-emerald-200 disabled:opacity-60 transition-colors">
-                Unban All
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold hover:bg-emerald-200 disabled:opacity-60 transition-colors">
+                <CheckCircle2 className="w-3 h-3" /> Unban All
               </button>
-              <button onClick={() => setSelectedIds(new Set())} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Deselect</button>
+              <button onClick={handleExportSelected} disabled={exportUsers.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold hover:bg-blue-200 disabled:opacity-60 transition-colors">
+                {exportUsers.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />} Export Selected
+              </button>
+              <button onClick={() => setSelectedIds(new Set())} className="text-xs text-muted-foreground hover:text-foreground transition-colors px-1">Deselect</button>
             </div>
           )}
         </div>
@@ -2385,6 +2422,47 @@ export default function Users() {
           onClose={() => setWalletUser(null)}
         />
       )}
+
+      {/* Bulk Ban/Unban Confirmation Dialog */}
+      <Dialog open={!!bulkConfirmAction} onOpenChange={open => { if (!open) { setBulkConfirmAction(null); setBulkReason(""); } }}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-2 ${bulkConfirmAction === "ban" ? "text-red-600" : "text-emerald-600"}`}>
+              {bulkConfirmAction === "ban" ? <Ban className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+              {bulkConfirmAction === "ban" ? "Ban" : "Unban"} {selectedIds.size} User{selectedIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {bulkConfirmAction === "ban"
+                ? `This will permanently ban ${selectedIds.size} selected user${selectedIds.size !== 1 ? "s" : ""}. They will not be able to log in.`
+                : `This will lift bans for ${selectedIds.size} selected user${selectedIds.size !== 1 ? "s" : ""}.`}
+            </p>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
+                Reason <span className="font-normal normal-case">{bulkConfirmAction === "ban" ? "(recommended)" : "(optional)"}</span>
+              </label>
+              <Input
+                value={bulkReason}
+                onChange={e => setBulkReason(e.target.value)}
+                placeholder={bulkConfirmAction === "ban" ? "e.g. Suspicious activity, fraud..." : "e.g. Appeal approved..."}
+                className="h-10 rounded-xl"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { setBulkConfirmAction(null); setBulkReason(""); }}>Cancel</Button>
+              <Button
+                onClick={executeBulkBan}
+                disabled={bulkBanMutation.isPending}
+                className={`flex-1 rounded-xl gap-2 text-white ${bulkConfirmAction === "ban" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
+              >
+                {bulkBanMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : (bulkConfirmAction === "ban" ? <Ban className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />)}
+                {bulkBanMutation.isPending ? "Processing..." : (bulkConfirmAction === "ban" ? "Confirm Ban" : "Confirm Unban")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <SensitiveActionDialog
         open={!!deleteUser}

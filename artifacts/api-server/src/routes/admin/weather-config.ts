@@ -82,8 +82,8 @@ router.post("/test", async (req, res) => {
       latencyMs,
       message: `Open-Meteo OK — ${city} is currently ${temp}°C (${latencyMs}ms)`,
     });
-  } catch (err: any) {
-    sendValidationError(res, `Weather test failed: ${err?.message ?? err}`);
+  } catch {
+    sendError(res, "Weather provider test failed", 500);
   }
 });
 

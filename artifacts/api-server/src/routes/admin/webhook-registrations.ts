@@ -88,10 +88,16 @@ router.patch("/webhooks/:id/toggle", async (req, res) => {
   }
 });
 
-router.post("/webhooks/:id/test", async (req, res) => {
-  const id = req.params["id"]!;
-  const [webhook] = await db.select().from(webhookRegistrationsTable).where(eq(webhookRegistrationsTable.id, id)).limit(1);
-  if (!webhook) { sendNotFound(res, "Webhook not found"); return; }
+router.post("/webhooks/:id/test", async (req, res, next) => {
+  let webhook: typeof webhookRegistrationsTable.$inferSelect | undefined;
+  try {
+    const id = req.params["id"]!;
+    const [found] = await db.select().from(webhookRegistrationsTable).where(eq(webhookRegistrationsTable.id, id)).limit(1);
+    webhook = found;
+  } catch (err) { next(err); return; }
+  if (!webhook) { sendNotFound(res, "Webhook not found"); return;
+  }
+  const id = webhook.id;
 
   const testPayload = {
     event: "test_ping",

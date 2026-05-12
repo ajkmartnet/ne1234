@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { getIO } from "../../lib/socketio.js";
 import { db } from "@workspace/db";
 import {
@@ -28,11 +28,8 @@ import { reconcileUserFlags } from "./conditions.js";
 
 const router = Router();
 
-function wrapAsync(fn: (req: any, res: any) => Promise<void>): (req: any, res: any) => void {
-  return (req, res) => void fn(req, res).catch((err: unknown) => {
-    logger.error({ err }, "[admin/users] unhandled route error");
-    res.status(500).json({ success: false, error: "An internal server error occurred" });
-  });
+function wrapAsync(fn: (req: Request, res: Response) => Promise<void>): RequestHandler {
+  return (req, res, next) => void fn(req, res).catch(next);
 }
 
 router.post("/users", async (req, res) => {
@@ -68,7 +65,7 @@ router.post("/users", async (req, res) => {
     if (e.message?.includes("duplicate")) {
       sendError(res, "A user with this phone or email already exists", 409);
     } else {
-      sendError(res, e.message, 500);
+      sendError(res, "An internal server error occurred", 500);
     }
   }
 });

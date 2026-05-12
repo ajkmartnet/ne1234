@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { db } from "@workspace/db";
 import {
   usersTable,
@@ -29,11 +29,8 @@ import { getIO } from "../../lib/socketio.js";
 
 const router = Router();
 
-function wrapAsync(fn: (req: any, res: any) => Promise<void>): (req: any, res: any) => void {
-  return (req, res) => void fn(req, res).catch((err: unknown) => {
-    logger.error({ err }, "[admin/orders] unhandled route error");
-    res.status(500).json({ success: false, error: "An internal server error occurred" });
-  });
+function wrapAsync(fn: (req: Request, res: Response) => Promise<void>): RequestHandler {
+  return (req, res, next) => void fn(req, res).catch(next);
 }
 
 router.post("/orders", async (req, res) => {

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable, loyaltyCampaignsTable, loyaltyRewardsTable } from "@workspace/db/schema";
@@ -12,10 +12,8 @@ import { sendSuccess, sendCreated, sendError, sendNotFound, sendValidationError 
 
 const router = Router();
 
-function wrapAsync(fn: (req: any, res: any) => Promise<void>): (req: any, res: any) => void {
-  return (req, res) => void fn(req, res).catch((err: unknown) => {
-    res.status(500).json({ success: false, error: "An internal server error occurred" });
-  });
+function wrapAsync(fn: (req: Request, res: Response) => Promise<void>): RequestHandler {
+  return (req, res, next) => void fn(req, res).catch(next);
 }
 
 type LoyaltyRow = { amount: string; type: string; reference: string | null };

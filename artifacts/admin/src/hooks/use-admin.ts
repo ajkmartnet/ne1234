@@ -26,11 +26,19 @@ export const useAdminLogin = () => {
 
 // Dashboard Stats
 export const useStats = () => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-stats"],
     queryFn: () => adminFetch("/stats"),
     refetchInterval: REFETCH_INTERVAL,
     staleTime: 30_000,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load stats',
+        description: error?.message || 'Unable to fetch admin statistics',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
@@ -46,6 +54,7 @@ export const useUsers = (params?: {
   limit?: number;
 }) => {
   const { conditionTier, status, search, role, dateFrom, dateTo, page = 1, limit = 50 } = params ?? {};
+  const { toast } = useToast();
   const qs = new URLSearchParams();
   if (conditionTier) qs.set("conditionTier", conditionTier);
   if (status && status !== "all") qs.set("status", status);
@@ -60,23 +69,46 @@ export const useUsers = (params?: {
     queryKey: ["admin-users", conditionTier || "", status || "", search || "", role || "", dateFrom || "", dateTo || "", page, limit],
     queryFn: () => adminFetch(`/users${qsStr ? `?${qsStr}` : ""}`),
     refetchInterval: REFETCH_INTERVAL,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load users',
+        description: error?.message || 'Unable to fetch user list',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useSearchRiders = (q: string, onlineOnly = true) => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-search-riders", q, onlineOnly],
     queryFn: () => adminFetch(`/users/search-riders?q=${encodeURIComponent(q)}&limit=20&onlineOnly=${onlineOnly}`),
     enabled: true,
     staleTime: 10_000,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to search riders',
+        description: error?.message || 'Unable to search for riders',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const usePendingUsers = () => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-users-pending"],
     queryFn: () => adminFetch("/users/pending"),
     refetchInterval: 15_000,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load pending users',
+        description: error?.message || 'Unable to fetch pending user approvals',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
@@ -172,6 +204,7 @@ export const useRejectUser = () => {
 
 export const useUpdateUser = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string; role?: string; isActive?: boolean; walletBalance?: string | number }) =>
       adminFetch(`/users/${id}`, {
@@ -182,11 +215,19 @@ export const useUpdateUser = () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["admin-transactions"] });
     },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to update user',
+        description: error?.message || 'Unable to update user information',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useUpdateUserSecurity = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string; isActive?: boolean; isBanned?: boolean; banReason?: string | null; roles?: string; blockedServices?: string; securityNote?: string | null }) =>
       adminFetch(`/users/${id}/security`, {
@@ -196,11 +237,19 @@ export const useUpdateUserSecurity = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"], exact: false });
     },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to update user security',
+        description: error?.message || 'Unable to update user security settings',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useWalletTopup = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ id, amount, description }: { id: string; amount: number; description?: string }) =>
       adminFetch(`/users/${id}/wallet-topup`, {
@@ -212,20 +261,36 @@ export const useWalletTopup = () => {
       queryClient.invalidateQueries({ queryKey: ["admin-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
     },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to topup wallet',
+        description: error?.message || 'Unable to complete wallet topup',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 // Orders
 export const useOrders = () => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-orders"],
     queryFn: () => adminFetch("/orders"),
     refetchInterval: REFETCH_INTERVAL,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load orders',
+        description: error?.message || 'Unable to fetch orders',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useUpdateOrder = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       adminFetch(`/orders/${id}/status`, {
@@ -260,6 +325,11 @@ export const useUpdateOrder = () => {
           queryClient.setQueryData(queryKey, data);
         }
       }
+      toast({
+        title: 'Failed to update order',
+        description: (_err as any)?.message || 'Unable to update order status',
+        variant: 'destructive',
+      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
@@ -272,10 +342,18 @@ export const useUpdateOrder = () => {
 
 // Rides
 export const useRides = () => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-rides"],
     queryFn: () => adminFetch("/rides"),
     refetchInterval: RIDES_REFETCH_INTERVAL,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load rides',
+        description: error?.message || 'Unable to fetch rides',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
@@ -305,15 +383,24 @@ export const useUpdateRide = () => {
 
 // Pharmacy Orders
 export const usePharmacyOrders = () => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-pharmacy"],
     queryFn: () => adminFetch("/pharmacy-enriched"),
     refetchInterval: REFETCH_INTERVAL,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load pharmacy orders',
+        description: error?.message || 'Unable to fetch pharmacy orders',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useUpdatePharmacyOrder = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       adminFetch(`/pharmacy-orders/${id}/status`, {
@@ -324,20 +411,36 @@ export const useUpdatePharmacyOrder = () => {
       queryClient.invalidateQueries({ queryKey: ["admin-pharmacy"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
     },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to update pharmacy order',
+        description: error?.message || 'Unable to update pharmacy order status',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 // Parcel Bookings
 export const useParcelBookings = () => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-parcel"],
     queryFn: () => adminFetch("/parcel-enriched"),
     refetchInterval: REFETCH_INTERVAL,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load parcel bookings',
+        description: error?.message || 'Unable to fetch parcel bookings',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useUpdateParcelBooking = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       adminFetch(`/parcel-bookings/${id}/status`, {
@@ -347,6 +450,13 @@ export const useUpdateParcelBooking = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-parcel"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to update parcel booking',
+        description: error?.message || 'Unable to update parcel booking status',
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -365,6 +475,7 @@ export interface CreateUserInput {
 // Create User
 export const useCreateUser = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: (data: CreateUserInput) =>
       adminFetch("/users", {
@@ -375,17 +486,32 @@ export const useCreateUser = () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
     },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to create user',
+        description: error?.message || 'Unable to create new user',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 // Waive Debt
 export const useWaiveDebt = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: (userId: string) =>
       adminFetch(`/users/${userId}/waive-debt`, { method: "PATCH" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"], exact: false });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to waive debt',
+        description: error?.message || 'Unable to waive user debt',
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -393,26 +519,43 @@ export const useWaiveDebt = () => {
 // Delete User
 export const useDeleteUser = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: (id: string) => adminFetch(`/users/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
     },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to delete user',
+        description: error?.message || 'Unable to delete user',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 // User Activity
 export const useUserActivity = (userId: string | null) => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-user-activity", userId],
     queryFn: () => adminFetch(`/users/${userId}/activity`),
     enabled: !!userId,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load user activity',
+        description: error?.message || 'Unable to fetch user activity',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 // Products
 export const useCategories = () => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
@@ -429,19 +572,35 @@ export const useCategories = () => {
       })) as { id: string; name: string; icon?: string }[];
     },
     staleTime: 5 * 60 * 1000,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load categories',
+        description: error?.message || 'Unable to fetch categories',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useProducts = () => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-products"],
     queryFn: () => adminFetch("/products"),
     refetchInterval: REFETCH_INTERVAL,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load products',
+        description: error?.message || 'Unable to fetch products',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useCreateProduct = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       adminFetch("/products", {
@@ -452,11 +611,19 @@ export const useCreateProduct = () => {
       queryClient.invalidateQueries({ queryKey: ["admin-products"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
     },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to create product',
+        description: error?.message || 'Unable to create product',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useUpdateProduct = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
       adminFetch(`/products/${id}`, {
@@ -464,11 +631,19 @@ export const useUpdateProduct = () => {
         body: JSON.stringify(data),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-products"] }),
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to update product',
+        description: error?.message || 'Unable to update product',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useDeleteProduct = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: (id: string) =>
       adminFetch(`/products/${id}`, {
@@ -478,19 +653,35 @@ export const useDeleteProduct = () => {
       queryClient.invalidateQueries({ queryKey: ["admin-products"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
     },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to delete product',
+        description: error?.message || 'Unable to delete product',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const usePendingProducts = () => {
+  const { toast } = useToast();
   return useQuery({
     queryKey: ["admin-products-pending"],
     queryFn: () => adminFetch("/products/pending"),
     refetchInterval: 30_000,
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to load pending products',
+        description: error?.message || 'Unable to fetch pending products',
+        variant: 'destructive',
+      });
+    },
   });
 };
 
 export const useApproveProduct = () => {
   const qc = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ id, note }: { id: string; note?: string }) =>
       adminFetch(`/products/${id}/approve`, { method: "PATCH", body: JSON.stringify({ note }) }),
@@ -521,6 +712,11 @@ export const useApproveProduct = () => {
     onError: (_err, _vars, context) => {
       if (context?.prevPending) restoreSnapshots(qc, context.prevPending);
       if (context?.prevProducts) restoreSnapshots(qc, context.prevProducts);
+      toast({
+        title: 'Failed to approve product',
+        description: (_err as any)?.message || 'Unable to approve product',
+        variant: 'destructive',
+      });
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["admin-products-pending"] });

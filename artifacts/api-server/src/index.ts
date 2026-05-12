@@ -50,6 +50,7 @@ const DEV_PLACEHOLDER_SECRETS = new Set([
   "0bf96d92374ef22e78a01b29ee69c0356a06e30e3e194c75fa2458704d296412833291a297210a3b6037fc99e5f1c1117b0b8b8c358ff9aa9561c8aa3029b186", // audit-ok
   "e2f5a8b1c4d7e0f3a6b9c2d5e8f1a4b7c0d3e6f9a2b5c8d1e4f7a0b3c6d9e2", // audit-ok
   "f9a2b5c8d1e4f7a0b3c6d9e2f5a8b1c4d7e0f3a6b9c2d5e8f1a4b7c0d3e6f9", // audit-ok
+  "dev-placeholder-jwt-secret",
 ]);
 const JWT_SECRET_VARS = [
   "JWT_SECRET", "ADMIN_JWT_SECRET", "ADMIN_ACCESS_TOKEN_SECRET",
@@ -60,6 +61,8 @@ const JWT_SECRET_VARS = [
 function checkEnv(): void {
   const nodeEnv = process.env.NODE_ENV ?? "";
   const isProduction = ["production", "staging"].includes(nodeEnv);
+  const vaultUnlocked = Boolean(process.env.VAULT_UNLOCKED);
+  const devMockMode = !vaultUnlocked && !isProduction;
   const missing = CRITICAL_VARS.filter((k) => !process.env[k]);
   const empty   = IMPORTANT_VARS.filter((k) => !process.env[k]);
 
@@ -76,6 +79,20 @@ function checkEnv(): void {
         "and update them in the Replit Secrets panel before deploying.",
       );
       process.exit(1);
+    }
+  }
+
+  if (devMockMode) {
+    const substituted = JWT_SECRET_VARS.filter((k) => !process.env[k]);
+    if (substituted.length > 0) {
+      for (const key of substituted) {
+        process.env[key] = "dev-placeholder-jwt-secret";
+      }
+      logger.warn("[DEV MODE] Missing JWT secrets were substituted with deterministic local placeholders:");
+      for (const key of substituted) {
+        logger.warn(`  - ${key}`);
+      }
+      logger.warn("[DEV MODE] This mode is only for local development when the vault password is not provided.");
     }
   }
 

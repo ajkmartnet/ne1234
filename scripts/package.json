@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "seed": "tsx ./src/seed.ts",
+    "encrypt-env": "tsx ./src/encrypt-env.ts",
+    "decrypt-env": "tsx ./src/decrypt-env.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

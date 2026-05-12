@@ -43,19 +43,36 @@ const FETCH_TIMEOUT_MS = 30_000;
  */
 function timeoutSignal(ms: number, externalSignal?: AbortSignal): AbortSignal {
   const controller = new AbortController();
-  const timerId = setTimeout(() => controller.abort(new TimeoutError()), ms);
+  let timerId: ReturnType<typeof setTimeout> | null = null;
 
-  controller.signal.addEventListener('abort', () => clearTimeout(timerId), { once: true });
+  // Set up internal timeout
+  timerId = setTimeout(() => controller.abort(new TimeoutError()), ms);
 
+  // Clean up timer on internal abort
+  const internalAbortListener = () => {
+    if (timerId !== null) clearTimeout(timerId);
+  };
+  controller.signal.addEventListener('abort', internalAbortListener, { once: true });
+
+  // Merge with external signal if provided
   if (externalSignal) {
     if (externalSignal.aborted) {
+      // External signal already aborted, abort immediately
+      if (timerId !== null) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
       controller.abort(externalSignal.reason);
     } else {
-      externalSignal.addEventListener(
-        'abort',
-        () => { clearTimeout(timerId); controller.abort(externalSignal.reason); },
-        { once: true },
-      );
+      // Listen for external signal abort
+      const externalAbortListener = () => {
+        if (timerId !== null) {
+          clearTimeout(timerId);
+          timerId = null;
+        }
+        controller.abort(externalSignal.reason);
+      };
+      externalSignal.addEventListener('abort', externalAbortListener, { once: true });
     }
   }
 

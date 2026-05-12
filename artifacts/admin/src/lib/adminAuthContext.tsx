@@ -94,7 +94,9 @@ const INITIAL_STATE: AuthState = {
  */
 function getJwtExpiry(token: string): number | null {
   try {
-    const payload = token.split('.')[1];
+    const parts = token.split('.');
+    if (parts.length !== 3) return null; // Token must have 3 parts: header.payload.signature
+    const payload = parts[1];
     if (!payload) return null;
     const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
     return typeof decoded.exp === 'number' ? decoded.exp * 1000 : null;
@@ -221,6 +223,8 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       cancelExpiryWarning();
     }
+    
+    return () => cancelExpiryWarning(); // Cleanup on unmount to prevent race conditions
   }, [state.accessToken, scheduleExpiryWarning, cancelExpiryWarning, refreshAccessToken]);
 
   /**
@@ -372,12 +376,13 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     try {
       if (state.accessToken) {
         // Try to notify backend of logout
+        const csrfToken = readCsrfFromCookie() || ''; // Fallback if cookie is cleared or malformed
         await fetch('/api/admin/auth/logout', {
           method: 'POST',
           credentials: 'include',
           headers: {
             'Authorization': `Bearer ${state.accessToken}`,
-            'X-CSRF-Token': readCsrfFromCookie(),
+            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
         }).catch(() => {
@@ -447,8 +452,20 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const updateOwnProfile = useCallback(
     async (input: { username?: string; name?: string }) => {
       const adminId = state.user?.id;
-      if (!adminId) throw new Error('Not authenticated');
-      if (!state.accessToken) throw new Error('Not authenticated');
+      if (!adminId) {
+        setState((prev) => ({
+          ...prev,
+          error: 'Not authenticated',
+        }));
+        throw new Error('Not authenticated');
+      }
+      if (!state.accessToken) {
+        setState((prev) => ({
+          ...prev,
+          error: 'Not authenticated',
+        }));
+        throw new Error('Not authenticated');
+      }
 
       const response = await fetch(`/api/admin/system/admin-accounts/${adminId}`, {
         method: 'PATCH',
@@ -468,6 +485,12 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
       const data = await response.json();
       const updated = data?.account ?? data;
+      
+      // Validate response data is not completely empty
+      if (!updated) {
+        throw new Error('Server returned empty response when updating profile');
+      }
+      
       setState((prev) => ({
         ...prev,
         user: prev.user

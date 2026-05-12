@@ -19,9 +19,22 @@ runButton = "Project"
 
 # --- MAIN WORKFLOW (The Master Switch) ---
 [[workflows.workflow]]
-name = "Project"
-mode = "parallel"
+name = "Setup"
+mode = "sequential"
 author = "user"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/scripts run decrypt-env"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "sequential"
+author = "user"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Setup"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"

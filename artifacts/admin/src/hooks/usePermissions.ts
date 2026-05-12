@@ -94,5 +94,5 @@ export function PermissionGate({
   if (perm) allowed = allowed && has(perm);
   if (anyOf?.length) allowed = allowed && hasAny(anyOf);
   if (allOf?.length) allowed = allowed && hasAll(allOf);
-  return allowed ? (children as React.ReactElement) : (fallback as React.ReactElement);
+  return allowed ? children : fallback; // Remove incorrect type casting that causes runtime errors
 }

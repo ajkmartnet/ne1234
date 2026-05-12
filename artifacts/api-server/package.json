@@ -51,9 +51,6 @@
     "yaml": "^2.8.4",
     "zod": "catalog:"
   },
-  "optionalDependencies": {
-    "better-sqlite3": "^8.4.0"
-  },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
     "@types/compression": "^1.7.5",

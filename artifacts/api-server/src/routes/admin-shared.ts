@@ -2,6 +2,8 @@ import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 import { logger as pinoLogger } from "../lib/logger.js";
 import { verifyAccessToken } from "../utils/admin-jwt.js";
+import { t as i18nT, type TranslationKey as I18nTranslationKey, type Language } from "@workspace/i18n";
+import { getCachedSettings as _getCachedSettings, invalidateSettingsCache as _invalidateSettingsCache } from "../middleware/security.js";
 
 /**
  * Resolve a JWT secret from an environment variable.
@@ -27,13 +29,15 @@ function resolveAdminSecret(envVar: string): string {
   return val;
 }
 import { randomBytes } from "crypto";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { redisClient } from "../lib/redis.js";
 import {
   db,
-  platformSettingsTable,
   adminAccountsTable,
   adminActionAuditLogTable,
+  notificationsTable,
+  rideServiceTypesTable,
+  popularLocationsTable,
 } from "@workspace/db";
 import { generateId as _generateId } from "../lib/id.js";
 
@@ -290,7 +294,7 @@ export function verifyAdminJwt(token: string): AdminPayload | null {
 export async function getAdminSecret(): Promise<string | null> {
   const envSecret = process.env.ADMIN_SECRET;
   try {
-    const settings = await getCachedSettings();
+    const settings = await _getCachedSettings();
     return settings["admin_master_secret"] || envSecret || null;
   } catch {
     return envSecret || null;
@@ -368,40 +372,15 @@ export async function addAuditEntry(params: {
 
 /* ── SETTINGS CACHE ────────────────────────────────────────────────────── */
 
-let settingsCache: Record<string, string> | null = null;
-let cacheTimestamp = 0;
-const CACHE_TTL_MS = 60 * 1000;
-
-export async function getCachedSettings(): Promise<Record<string, string>> {
-  const now = Date.now();
-  if (settingsCache && now - cacheTimestamp < CACHE_TTL_MS) {
-    return settingsCache;
-  }
-  try {
-    const rows = await db.select().from(platformSettingsTable);
-    const map: Record<string, string> = {};
-    for (const r of rows) {
-      if (r.value !== null) map[r.key] = r.value;
-    }
-    settingsCache = map;
-    cacheTimestamp = now;
-    return map;
-  } catch (err) {
-    pinoLogger.error({ err }, "[admin-shared] Settings cache refresh failed");
-    return settingsCache || {};
-  }
-}
-
-export function invalidateSettingsCache(): void {
-  settingsCache = null;
-}
+export const getCachedSettings = _getCachedSettings;
+export const invalidateSettingsCache = _invalidateSettingsCache;
 
 export function invalidatePlatformSettingsCache(): void {
-  settingsCache = null;
+  _invalidateSettingsCache();
 }
 
 export async function getPlatformSettings(): Promise<Record<string, string>> {
-  return getCachedSettings();
+  return _getCachedSettings();
 }
 
 /* ── HELPERS ───────────────────────────────────────────────────────────── */
@@ -475,24 +454,93 @@ export async function getUserLanguage(_userId: string): Promise<string> {
   return "en";
 }
 
-export function t(key: TranslationKey, _lang: string): string {
-  return key;
+export function t(key: TranslationKey, lang: string): string {
+  try {
+    return i18nT(key as I18nTranslationKey, (lang || "en") as Language);
+  } catch {
+    return key;
+  }
 }
 
 export async function sendUserNotification(
   userId: string,
   title: string,
   body: string,
-  _type?: string,
-  _icon?: string,
+  type: string = "system",
+  icon: string = "notifications-outline",
 ): Promise<void> {
-  pinoLogger.info({ userId, title, body }, "[admin-shared] User notification sent");
+  try {
+    await db.insert(notificationsTable).values({
+      id:    _generateId(),
+      userId,
+      title,
+      body,
+      type,
+      icon,
+    });
+  } catch (err) {
+    pinoLogger.error({ err, userId }, "[admin-shared] Failed to insert notification");
+  }
+  try {
+    const { sendPushToUser } = await import("../lib/webpush.js");
+    await sendPushToUser(userId, { title, body, icon });
+  } catch (err) {
+    pinoLogger.warn({ err, userId }, "[admin-shared] Push notification failed");
+  }
 }
 
 /* ── RIDE SERVICES / LOCATIONS SEEDING ─────────────────────────────────── */
 
-export async function ensureDefaultRideServices(): Promise<void> {}
-export async function ensureDefaultLocations(): Promise<void> {}
+let _rideServicesSeedInProgress = false;
+
+export async function ensureDefaultRideServices(): Promise<void> {
+  if (_rideServicesSeedInProgress) return;
+  _rideServicesSeedInProgress = true;
+  try {
+    const [row] = await db.select({ c: count() }).from(rideServiceTypesTable);
+    if ((row?.c ?? 0) > 0) return;
+    await db.insert(rideServiceTypesTable).values(
+      DEFAULT_RIDE_SERVICES.map((s, idx) => ({
+        id:           `svc_${s.id}`,
+        key:          s.id,
+        name:         s.name,
+        icon:         s.icon,
+        baseFare:     s.baseFare,
+        perKm:        s.perKm,
+        minFare:      "50",
+        isEnabled:    true,
+        isCustom:     false,
+        allowBargaining: true,
+        sortOrder:    idx + 1,
+      })),
+    ).onConflictDoNothing();
+  } catch (err) {
+    pinoLogger.error({ err }, "[admin-shared] ensureDefaultRideServices failed");
+  } finally {
+    _rideServicesSeedInProgress = false;
+  }
+}
+
+let _locationsSeedInProgress = false;
+
+export async function ensureDefaultLocations(): Promise<void> {
+  if (_locationsSeedInProgress) return;
+  _locationsSeedInProgress = true;
+  try {
+    const [row] = await db.select({ c: count() }).from(popularLocationsTable);
+    if ((row?.c ?? 0) > 0) return;
+    await db.insert(popularLocationsTable).values([
+      { id: "loc_muzaffarabad", name: "Muzaffarabad", nameUrdu: "مظفرآباد", lat: "34.3557", lng: "73.4711", category: "chowk", icon: "🏙️", sortOrder: 1 },
+      { id: "loc_mirpur",       name: "Mirpur",       nameUrdu: "میرپور",   lat: "33.1478", lng: "73.7517", category: "chowk", icon: "🏙️", sortOrder: 2 },
+      { id: "loc_rawalakot",    name: "Rawalakot",    nameUrdu: "راولاکوٹ", lat: "33.8573", lng: "73.7617", category: "chowk", icon: "🏙️", sortOrder: 3 },
+    ]).onConflictDoNothing();
+  } catch (err) {
+    pinoLogger.error({ err }, "[admin-shared] ensureDefaultLocations failed");
+  } finally {
+    _locationsSeedInProgress = false;
+  }
+}
+
 export function formatSvc(svc: unknown): unknown { return svc; }
 
 /* ── MIGRATION STUBS ────────────────────────────────────────────────────── */

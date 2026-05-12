@@ -675,44 +675,6 @@ export function isTokenExpired(issuedAt: number, sessionDays: number): boolean {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   ADMIN JWT HELPERS — time-limited signed tokens (4-hour TTL)
-   ══════════════════════════════════════════════════════════════ */
-export interface AdminJwtPayload {
-  adminId: string | null;
-  role: string;
-  name: string;
-  iat?: number;
-  exp?: number;
-}
-
-/** Sign an admin JWT — v2 system (ADMIN_ACCESS_TOKEN_SECRET, v2 payload format). */
-export function signAdminJwt(adminId: string | null, role: string, name: string, ttlHrs = ADMIN_TOKEN_TTL_HRS): string {
-  return jwt.sign(
-    { sub: adminId ?? "", role, name, perms: [], pv: 0 },
-    _adminAccessTokenSecret,
-    { algorithm: "HS256", expiresIn: `${ttlHrs}h`, issuer: process.env.JWT_ISSUER ?? "ajkmart-admin" },
-  );
-}
-
-/** Verify an admin JWT — v2 system (ADMIN_ACCESS_TOKEN_SECRET). Maps sub→adminId, perms→permissions. */
-export function verifyAdminJwt(token: string): AdminJwtPayload | null {
-  try {
-    const payload = jwt.verify(token, _adminAccessTokenSecret, { algorithms: ["HS256"] }) as jwt.JwtPayload;
-    const nowSec = Math.floor(Date.now() / 1000);
-    if (typeof payload.iat === "number" && payload.iat > nowSec + 60) return null;
-    return {
-      adminId: (payload["sub"] ?? payload["adminId"]) as string | null,
-      role:    payload["role"] as string,
-      name:    payload["name"] as string,
-      iat:     payload.iat,
-      exp:     payload.exp,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
    SETTINGS CACHE INVALIDATION
    ══════════════════════════════════════════════════════════════ */
 export function invalidateSettingsCache(): void {

@@ -74,3 +74,6 @@ dev.db-wal
 !.replit
 !replit.nix
 !.env.template
+
+# Encrypted vault — safe to commit (AES-256-GCM encrypted, password required to unlock)
+!scripts/.env.enc

@@ -156,6 +156,7 @@ externalPort = 3003
 # --- ENVIRONMENT CONFIG ---
 [agent]
 expertMode = true
+stack = "BEST_EFFORT_FALLBACK"
 
 [userenv.shared]
 VITE_API_PROXY_TARGET = "http://127.0.0.1:5000"

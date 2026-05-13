@@ -17,28 +17,10 @@ guessImports = false     # Isse Replit khud se kachra workflows nahi banayega
 [workflows]
 runButton = "Project"
 
-# --- MAIN WORKFLOW (The Master Switch) ---
-[[workflows.workflow]]
-name = "Setup"
-mode = "sequential"
-author = "user"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/scripts run decrypt-env"
-
 [[workflows.workflow]]
 name = "Project"
 mode = "parallel"
 author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Setup"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "API Server"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
@@ -58,25 +40,7 @@ args = "Customer App"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Setup"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "typecheck"
-
-# --- INDIVIDUAL CLEAN WORKFLOWS ---
-
-[[workflows.workflow]]
-name = "API Server"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/scripts run decrypt-env -- --auto; [ -d node_modules ] || pnpm install; PORT=5000 pnpm --filter @workspace/api-server run dev"
-waitForPort = 5000
+args = "Start application"
 
 [[workflows.workflow]]
 name = "Admin Panel"
@@ -87,7 +51,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/scripts run decrypt-env -- --auto; PORT=3000 BASE_PATH=/admin/ pnpm --filter @workspace/admin run dev"
+args = "PORT=3000 BASE_PATH=/admin/ pnpm --filter @workspace/admin run dev"
 waitForPort = 3000
 
 [[workflows.workflow]]
@@ -99,7 +63,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/scripts run decrypt-env -- --auto; PORT=3001 pnpm --filter @workspace/vendor-app run dev"
+args = "PORT=3001 pnpm --filter @workspace/vendor-app run dev"
 waitForPort = 3001
 
 [[workflows.workflow]]
@@ -111,7 +75,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/scripts run decrypt-env -- --auto; PORT=3002 pnpm --filter @workspace/rider-app run dev"
+args = "PORT=3002 pnpm --filter @workspace/rider-app run dev"
 waitForPort = 3002
 
 [[workflows.workflow]]
@@ -123,45 +87,27 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/scripts run decrypt-env -- --auto; PORT=20716 pnpm --filter @workspace/ajkmart run dev:web"
+args = "CI=1 EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID PORT=20716 pnpm --filter @workspace/ajkmart run dev:web"
 
 [[workflows.workflow]]
-name = "Setup"
+name = "Start application"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/scripts run decrypt-env"
+args = "[ -d node_modules/.bin ] || pnpm install --no-frozen-lockfile; PORT=5000 pnpm --filter @workspace/api-server run dev"
+waitForPort = 5000
 
 [workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
-name = "typecheck"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm typecheck"
-
-[workflows.workflow.metadata]
-isValidation = true
+outputType = "webview"
 
 [[ports]]
 localPort = 3000
-externalPort = 8080
-
-[[ports]]
-localPort = 3001
-externalPort = 3001
+externalPort = 3000
 
 [[ports]]
 localPort = 3002
 externalPort = 3002
-
-[[ports]]
-localPort = 3003
-externalPort = 3003
 
 [[ports]]
 localPort = 3004
@@ -173,15 +119,15 @@ externalPort = 6000
 
 [[ports]]
 localPort = 5000
-externalPort = 5000
-
-[[ports]]
-localPort = 5001
-externalPort = 3000
+externalPort = 80
 
 [[ports]]
 localPort = 20716
 externalPort = 4200
+
+[[ports]]
+localPort = 3001
+externalPort = 3001
 
 # --- ENVIRONMENT CONFIG ---
 [agent]

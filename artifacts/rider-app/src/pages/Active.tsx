@@ -53,8 +53,9 @@ function useRiderTileConfig() {
   const [tileConfigError, setTileConfigError] = useState(false);
   useEffect(() => {
     apiFetch(`/maps/config?app=rider`)
-      .then((d: any) => {
-        const cfg = d?.data ?? d;
+      .then((d: unknown) => {
+        const raw = d as { data?: { provider?: string; token?: string }; provider?: string; token?: string } | null;
+        const cfg = raw?.data ?? raw;
         const prov = cfg?.provider ?? "osm";
         const tok  = cfg?.token ?? "";
         if (prov === "mapbox" && tok) {

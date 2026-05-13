@@ -1,8 +1,22 @@
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
 
+interface ActiveOrder {
+  id: string;
+  deliveryAddress?: string | null;
+}
+
+interface ActiveRide {
+  dropAddress?: string | null;
+}
+
+export interface ActiveData {
+  order?: ActiveOrder | null;
+  ride?: ActiveRide | null;
+}
+
 interface ActiveTaskBannerProps {
-  activeData: any;
+  activeData: ActiveData;
   variant: "green" | "amber";
 }
 
@@ -10,7 +24,7 @@ export function ActiveTaskBanner({ activeData, variant }: ActiveTaskBannerProps)
   const isOrder = !!activeData?.order;
   const title = isOrder ? "Active Delivery in Progress" : "Active Ride in Progress";
   const subtitle = isOrder
-    ? `Order #${activeData.order.id?.slice(-6).toUpperCase()} — ${activeData.order.deliveryAddress || "Customer"}`
+    ? `Order #${activeData.order?.id?.slice(-6).toUpperCase()} — ${activeData.order?.deliveryAddress || "Customer"}`
     : `Ride → ${activeData?.ride?.dropAddress || "Drop location"}`;
 
   if (variant === "green") {

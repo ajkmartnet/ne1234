@@ -12,7 +12,7 @@ env = { "CI" = "true" }
 # --- NIX CONFIG (Strict Mode) ---
 [nix]
 channel = "stable-24_05"
-guessImports = false # Isse Replit khud se kachra workflows nahi banayega
+guessImports = false     # Isse Replit khud se kachra workflows nahi banayega
 
 [workflows]
 runButton = "Project"
@@ -236,3 +236,6 @@ ADMIN_PASSWORD_RESET_TOKEN_TTL_MIN = "60"
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 120000
+[env]
+OPENAI_API_KEY = "${}"
+REPLIT_AI_MODEL = "gpt-4o-mini"

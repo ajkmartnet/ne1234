@@ -7,12 +7,17 @@ import { Maximize2, X, Navigation } from "lucide-react";
 import { buildMapsDeepLink } from "./helpers";
 import { riderEnv } from "../../lib/envValidation";
 
+interface AppOverride {
+  provider: string;
+  token: string;
+}
+
 interface MapsConfigPublic {
   provider: string;
   token: string;
   secondaryProvider?: string;
   secondaryToken?: string;
-  appOverrides?: { rider?: { provider: string; token: string }; [k: string]: any };
+  appOverrides?: { rider?: AppOverride; [key: string]: AppOverride | undefined };
 }
 
 function MiniMapFitter({

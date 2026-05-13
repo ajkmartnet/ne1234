@@ -22,9 +22,10 @@ import {
   PRICING_DEFAULTS,
 } from "./helpers";
 import type { PlatformConfig } from "../../lib/useConfig";
+import type { Ride } from "../../lib/api";
 
 interface RideRequestCardProps {
-  ride: any;
+  ride: Ride;
   userId: string;
   isRestricted: boolean;
   config: PlatformConfig;
@@ -85,16 +86,16 @@ export function RideRequestCard({
   const riderEarningPct = config.finance.riderEarningPct ?? PRICING_DEFAULTS.defaultRiderEarningPct;
   const earnings = effectiveFare != null ? Number(effectiveFare) * (riderEarningPct / 100) : null;
 
-  const svcName = SVC_NAMES[r.type] ?? r.type?.replace(/_/g, " ") ?? "Ride";
-  const rideDistKm = r.distance != null ? parseFloat(r.distance) : null;
+  const svcName = SVC_NAMES[r.type ?? ""] ?? r.type?.replace(/_/g, " ") ?? "Ride";
+  const rideDistKm = r.distance != null ? parseFloat(String(r.distance)) : null;
   const etaMin = rideDistKm != null && rideDistKm > 0
     ? Math.max(1, Math.round((rideDistKm / 30) * 60))
     : null;
 
   /* Map link — prefer drop coords, fall back to pickup, then address */
   const mapsUrl = buildMapsDeepLink(
-    r.dropLat ?? null,
-    r.dropLng ?? null,
+    r.dropLat != null ? parseFloat(String(r.dropLat)) : null,
+    r.dropLng != null ? parseFloat(String(r.dropLng)) : null,
     r.dropAddress ?? r.pickupAddress ?? null,
   );
 
@@ -131,10 +132,10 @@ export function RideRequestCard({
     setShowCounterForm(false);
   };
 
-  const pickupLat = r.pickupLat != null ? parseFloat(r.pickupLat) : null;
-  const pickupLng = r.pickupLng != null ? parseFloat(r.pickupLng) : null;
-  const dropLat = r.dropLat != null ? parseFloat(r.dropLat) : null;
-  const dropLng = r.dropLng != null ? parseFloat(r.dropLng) : null;
+  const pickupLat = r.pickupLat != null ? parseFloat(String(r.pickupLat)) : null;
+  const pickupLng = r.pickupLng != null ? parseFloat(String(r.pickupLng)) : null;
+  const dropLat = r.dropLat != null ? parseFloat(String(r.dropLat)) : null;
+  const dropLng = r.dropLng != null ? parseFloat(String(r.dropLng)) : null;
   const hasValidPickupCoords =
     pickupLat != null && Number.isFinite(pickupLat) &&
     pickupLng != null && Number.isFinite(pickupLng);
@@ -163,7 +164,7 @@ export function RideRequestCard({
           {isBargain ? (
             <MessageSquare size={20} className="text-orange-500" />
           ) : (
-            <RideTypeIcon type={r.type} />
+            <RideTypeIcon type={r.type ?? ""} />
           )}
         </div>
         <div className="flex-1 min-w-0">

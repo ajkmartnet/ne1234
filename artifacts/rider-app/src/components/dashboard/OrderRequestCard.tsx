@@ -6,9 +6,10 @@ import { OrderTypeIcon } from "./Icons";
 import { MiniMap } from "./MiniMap";
 import { formatCurrency, buildMapsDeepLink, ACCEPT_TIMEOUT_SEC, PRICING_DEFAULTS } from "./helpers";
 import type { PlatformConfig } from "../../lib/useConfig";
+import type { Order } from "../../lib/api";
 
 interface OrderRequestCardProps {
-  order: any;
+  order: Order;
   earnings: number;
   currency: string;
   config?: PlatformConfig;
@@ -60,10 +61,10 @@ export function OrderRequestCard({
     : configDeliveryFee;
 
   /* Coordinates — parse safely */
-  const vendorLat = o.vendorLat != null ? parseFloat(o.vendorLat) : null;
-  const vendorLng = o.vendorLng != null ? parseFloat(o.vendorLng) : null;
-  const deliveryLat = o.deliveryLat != null ? parseFloat(o.deliveryLat) : null;
-  const deliveryLng = o.deliveryLng != null ? parseFloat(o.deliveryLng) : null;
+  const vendorLat = o.vendorLat != null ? parseFloat(String(o.vendorLat)) : null;
+  const vendorLng = o.vendorLng != null ? parseFloat(String(o.vendorLng)) : null;
+  const deliveryLat = o.deliveryLat != null ? parseFloat(String(o.deliveryLat)) : null;
+  const deliveryLng = o.deliveryLng != null ? parseFloat(String(o.deliveryLng)) : null;
   const hasValidVendorCoords =
     vendorLat != null && Number.isFinite(vendorLat) &&
     vendorLng != null && Number.isFinite(vendorLng);
@@ -123,10 +124,10 @@ export function OrderRequestCard({
               <p className="text-[9px] text-gray-400">{T("toCollect")}</p>
             </div>
           )}
-          {distanceKm != null && parseFloat(distanceKm) > 0 && (
+          {distanceKm != null && parseFloat(String(distanceKm)) > 0 && (
             <div className="bg-blue-50 rounded-xl px-2.5 py-1 border border-blue-100">
               <p className="text-xs font-bold text-blue-700">
-                {parseFloat(distanceKm).toFixed(1)} km
+                {parseFloat(String(distanceKm)).toFixed(1)} km
               </p>
               <p className="text-[9px] text-blue-400">{T("distance")}</p>
             </div>

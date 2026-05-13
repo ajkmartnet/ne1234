@@ -236,8 +236,8 @@ export default function Home() {
     staleTime: 60000,
   });
 
-  const allOrders: any[] = requestsData?.orders || [];
-  const allRides: any[] = requestsData?.rides || [];
+  const allOrders: Order[] = requestsData?.orders || [];
+  const allRides: Ride[] = requestsData?.rides || [];
   /* Server time from the API envelope — used to offset AcceptCountdown for clock drift */
   const requestsServerTime: string | null = requestsData?._serverTime ?? null;
 
@@ -245,8 +245,8 @@ export default function Home() {
   useEffect(() => {
     if (!requestsData) return;
     const serverIds = new Set<string>([
-      ...allOrders.map((o: any) => o.id),
-      ...allRides.map((r: any) => r.id),
+      ...allOrders.map((o) => o.id),
+      ...allRides.map((r) => r.id),
     ]);
     setDismissed((prev) => {
       /* Keep only IDs that still exist on the server */
@@ -258,7 +258,7 @@ export default function Home() {
   }, [requestsData]);
 
   /* New-request flash — pulse the header text; ring around the card container */
-  const currentIdsSig = [...allOrders.map((o: any) => o.id), ...allRides.map((r: any) => r.id)]
+  const currentIdsSig = [...allOrders.map((o) => o.id), ...allRides.map((r) => r.id)]
     .sort()
     .join(",");
   useEffect(() => {
@@ -377,9 +377,9 @@ export default function Home() {
   const batteryRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (typeof navigator !== "undefined" && "getBattery" in navigator) {
-      (navigator as any)
+      (navigator as unknown as { getBattery: () => Promise<{ level: number; addEventListener: (e: string, cb: () => void) => void }> })
         .getBattery()
-        .then((batt: any) => {
+        .then((batt) => {
           batteryRef.current = Math.round(batt.level * 100);
           batt.addEventListener("levelchange", () => {
             batteryRef.current = Math.round(batt.level * 100);
@@ -546,8 +546,8 @@ export default function Home() {
       setDismissed((prev) => {
         const next = new Set([...prev, id]);
         const serverIds = new Set<string>([
-          ...allOrders.map((o: any) => o.id),
-          ...allRides.map((r: any) => r.id),
+          ...allOrders.map((o) => o.id),
+          ...allRides.map((r) => r.id),
         ]);
         const remainingVisible = [...serverIds].filter((sid) => !next.has(sid));
         if (remainingVisible.length === 0) {
@@ -591,12 +591,12 @@ export default function Home() {
       qc.invalidateQueries({ queryKey: ["rider-active"] });
       showToast("Order accepted! Check Active tab.", "success");
     },
-    onError: (e: any, id) => {
+    onError: (e: Error & { status?: number }, id) => {
       if (e?.status === 409 || /already taken|already accepted/i.test(e?.message || "")) {
         dismiss(id);
-        qc.setQueryData(["rider-requests"], (old: any) => {
+        qc.setQueryData(["rider-requests"], (old: { orders?: { id: string }[]; rides?: { id: string }[] } | undefined) => {
           if (!old) return old;
-          return { ...old, orders: (old.orders || []).filter((o: any) => o.id !== id) };
+          return { ...old, orders: (old.orders || []).filter((o) => o.id !== id) };
         });
         showToast("This order was already accepted by another rider.", "error");
       } else {
@@ -613,12 +613,12 @@ export default function Home() {
 
   const rejectOrderMut = useMutation({
     mutationFn: (id: string) => api.rejectOrder(id),
-    onSuccess: (_: any, id: string) => {
+    onSuccess: (_: unknown, id: string) => {
       dismiss(id);
       qc.invalidateQueries({ queryKey: ["rider-requests"] });
       showToast("Order rejected.", "success");
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       qc.invalidateQueries({ queryKey: ["rider-requests"] });
       showToast(e.message || "Could not reject order", "error");
     },
@@ -626,7 +626,7 @@ export default function Home() {
 
   const acceptRideMut = useMutation({
     mutationFn: (id: string) => api.acceptRide(id),
-    onSuccess: (_: any, id: string) => {
+    onSuccess: (_: unknown, id: string) => {
       stopRequestSoundIfEmpty();
       qc.invalidateQueries({ queryKey: ["rider-active"] });
       logRideEvent(id, "accepted", (msg, isErr) =>
@@ -634,12 +634,12 @@ export default function Home() {
       );
       showToast("Ride accepted! Check Active tab.", "success");
     },
-    onError: (e: any, id) => {
+    onError: (e: Error & { status?: number }, id) => {
       if (e?.status === 409 || /already taken|already accepted/i.test(e?.message || "")) {
         dismiss(id);
-        qc.setQueryData(["rider-requests"], (old: any) => {
+        qc.setQueryData(["rider-requests"], (old: { orders?: { id: string }[]; rides?: { id: string }[] } | undefined) => {
           if (!old) return old;
-          return { ...old, rides: (old.rides || []).filter((r: any) => r.id !== id) };
+          return { ...old, rides: (old.rides || []).filter((r) => r.id !== id) };
         });
         showToast("This ride was already accepted by another rider.", "error");
       } else {
@@ -661,7 +661,7 @@ export default function Home() {
       qc.invalidateQueries({ queryKey: ["rider-requests"] });
       showToast("Counter offer submitted!", "success");
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       qc.invalidateQueries({ queryKey: ["rider-requests"] });
       showToast(e.message || "Counter offer failed", "error");
     },
@@ -669,24 +669,31 @@ export default function Home() {
 
   const rejectOfferMut = useMutation({
     mutationFn: (id: string) => api.rejectOffer(id),
-    onSuccess: (_: any, id: string) => {
+    onSuccess: (_: unknown, id: string) => {
       dismiss(id);
       qc.invalidateQueries({ queryKey: ["rider-requests"] });
       showToast("Ride skipped.", "success");
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       qc.invalidateQueries({ queryKey: ["rider-requests"] });
       showToast(e.message, "error");
     },
   });
 
+  interface IgnorePenaltyData {
+    ignorePenalty?: { penaltyApplied?: number; restricted?: boolean; dailyIgnores?: number };
+    penaltyApplied?: number;
+    restricted?: boolean;
+    dailyIgnores?: number;
+  }
+
   const ignoreRideMut = useMutation({
     mutationFn: (id: string) => api.ignoreRide(id),
-    onSuccess: (data: any, id: string) => {
+    onSuccess: (data: IgnorePenaltyData, id: string) => {
       dismiss(id);
       qc.invalidateQueries({ queryKey: ["rider-requests"] });
       const p = data?.ignorePenalty ?? data;
-      if (p?.penaltyApplied > 0) {
+      if ((p?.penaltyApplied ?? 0) > 0) {
         showToast(
           `Ignored — ${currency} ${p.penaltyApplied} penalty deducted!${p.restricted ? " Account restricted." : ""}`,
           "error",
@@ -695,7 +702,7 @@ export default function Home() {
         showToast(`Ride ignored (${p?.dailyIgnores || "?"} today).`, "success");
       }
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       qc.invalidateQueries({ queryKey: ["rider-requests"] });
       showToast(e.message || "Ignore failed", "error");
     },
@@ -815,11 +822,11 @@ export default function Home() {
     }
     return (
       <div className="bg-white divide-y divide-gray-100">
-        {orders.map((o: any) => (
+        {orders.map((o) => (
           <OrderRequestCard
             key={o.id}
             order={o}
-            earnings={getDeliveryEarn(o.type)}
+            earnings={getDeliveryEarn(o.type ?? "")}
             currency={currency}
             config={config}
             onAccept={(id) => acceptOrderMut.mutate(id)}
@@ -832,7 +839,7 @@ export default function Home() {
             T={T}
           />
         ))}
-        {rides.map((r: any) => (
+        {rides.map((r) => (
           <RideRequestCard
             key={r.id}
             ride={r}

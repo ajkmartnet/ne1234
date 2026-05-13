@@ -93,6 +93,39 @@ const router: IRouter = Router();
 
 const safeNum = (v: unknown, def = 0) => { const n = parseFloat(String(v ?? def)); return isNaN(n) ? def : n; };
 
+/* ── Server-side idempotency deduplication for mutating rider actions ──────
+   Stores responses for X-Idempotency-Key for 5 minutes so retried requests
+   (offline queue replays, network retries) return the same response instead of
+   executing the action a second time.                                        */
+interface IdempotencyEntry { status: number; body: unknown; ts: number }
+const idempotencyCache = new Map<string, IdempotencyEntry>();
+const IDEM_TTL_MS = 5 * 60_000;
+
+function idemCacheKey(req: Request): string | null {
+  const key = req.headers["x-idempotency-key"];
+  if (!key || typeof key !== "string") return null;
+  /* Scope by rider + HTTP method + route path to prevent cross-endpoint/cross-user collisions */
+  const riderId = req.riderId ?? "anon";
+  return `${riderId}:${req.method}:${req.path}:${key}`;
+}
+
+function checkIdempotency(req: Request, res: Response): boolean {
+  const cacheKey = idemCacheKey(req);
+  if (!cacheKey) return false;
+  const now = Date.now();
+  /* Sweep stale entries on each call (amortised cleanup) */
+  idempotencyCache.forEach((v, k) => { if (now - v.ts > IDEM_TTL_MS) idempotencyCache.delete(k); });
+  const existing = idempotencyCache.get(cacheKey);
+  if (existing) { res.status(existing.status).json(existing.body); return true; }
+  return false;
+}
+
+function storeIdempotency(req: Request, status: number, body: unknown): void {
+  const cacheKey = idemCacheKey(req);
+  if (!cacheKey) return;
+  idempotencyCache.set(cacheKey, { status, body, ts: Date.now() });
+}
+
 const onlineSchema = z.object({ isOnline: z.boolean() });
 
 const profileSchema = z.object({
@@ -321,7 +354,7 @@ router.get("/me", async (req, res) => {
     },
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -427,7 +460,7 @@ router.patch("/online", async (req, res) => {
 
   sendSuccess(res, { isOnline: !!isOnline, ...(serviceZoneWarning ? { serviceZoneWarning } : {}) });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -552,7 +585,7 @@ router.patch("/profile", async (req, res) => {
     ...(cnicChanged || drivingLicenseChanged ? { pendingVerification: true } : {}),
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -669,7 +702,7 @@ router.get("/requests", async (req, res) => {
     },
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -699,7 +732,9 @@ router.get("/active", async (req, res) => {
 
   let enrichedOrder = null;
   if (order[0]) {
-    const promises: [Promise<any>, Promise<any>] = [
+    type CustomerRow = { name: string | null; phone: string | null };
+  type VendorRow   = { storeName: string | null; phone: string | null };
+  const promises: [Promise<CustomerRow[]>, Promise<VendorRow[]>] = [
       db.select({ name: usersTable.name, phone: usersTable.phone })
         .from(usersTable).where(eq(usersTable.id, order[0].userId)).limit(1),
       order[0].vendorId
@@ -725,7 +760,7 @@ router.get("/active", async (req, res) => {
 
   sendSuccess(res, { order: enrichedOrder, ride: enrichedRide });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -733,6 +768,7 @@ router.get("/active", async (req, res) => {
    Uses WHERE riderId IS NULL to prevent two riders accepting the same order (race condition) */
 router.post("/orders/:id/accept", async (req, res) => {
   try {
+  if (checkIdempotency(req, res)) return;
   const paramParsed = idParamSchema.safeParse(req.params);
   if (!paramParsed.success) { sendValidationError(res, "Invalid order ID"); return; }
   const riderId   = req.riderId!;
@@ -833,9 +869,11 @@ router.post("/orders/:id/accept", async (req, res) => {
     type: "order", icon: "bicycle-outline",
   }).catch((err: Error) => { logger.error("[rider] background op failed:", err.message); });
 
-  sendSuccess(res, { ...updated, total: safeNum(updated.total) });
+  const responseBody = { ...updated, total: safeNum(updated.total) };
+  storeIdempotency(req, 200, { success: true, data: responseBody });
+  sendSuccess(res, responseBody);
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -863,7 +901,7 @@ router.post("/orders/:id/reject", async (req, res) => {
 
   sendSuccess(res, { orderId, reason });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -1010,13 +1048,14 @@ router.get("/cancel-stats", async (req, res) => {
     cancelRate,
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
 /* ── PATCH /rider/orders/:id/status — Update order status (delivered) ── */
 router.patch("/orders/:id/status", async (req, res) => {
   try {
+  if (checkIdempotency(req, res)) return;
   const parsed = orderStatusSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid status"); return; }
   const riderId = req.riderId!;
@@ -1044,10 +1083,9 @@ router.patch("/orders/:id/status", async (req, res) => {
       title: t("notifRiderChange", riderChangeLang) + " 🔄", body: t("notifRiderChangeBody", riderChangeLang),
       type: "order", icon: "refresh-outline",
     }).catch((err: Error) => { logger.error("[rider] background op failed:", err.message); });
-    sendSuccess(res, {
-      ...cancelled, total: safeNum(cancelled?.total || 0), status: "cancelled_by_rider",
-      cancelPenalty: penalty,
-    }); return;
+    const cancelledBody = { ...cancelled, total: safeNum(cancelled?.total || 0), status: "cancelled_by_rider", cancelPenalty: penalty };
+    storeIdempotency(req, 200, { success: true, data: cancelledBody });
+    sendSuccess(res, cancelledBody); return;
   }
 
   const ORDER_RIDER_TRANSITIONS: Record<string, string[]> = {
@@ -1062,7 +1100,7 @@ router.patch("/orders/:id/status", async (req, res) => {
     sendValidationError(res, `Cannot change order from "${order.status}" to "${status}". Allowed: ${allowedNext.join(", ") || "none"}.`); return;
   }
 
-  const updateData: Record<string, any> = { status, updatedAt: new Date() };
+  const updateData: { status: string; updatedAt: Date; proofPhotoUrl?: string } = { status, updatedAt: new Date() };
   if (status === "delivered" && proofPhoto) {
     updateData.proofPhotoUrl = proofPhoto;
   }
@@ -1231,9 +1269,11 @@ router.patch("/orders/:id/status", async (req, res) => {
     emitWebhookEvent("payment_received", { orderId: updated.id, userId: updated.userId, amount: safeNum(updated.total).toFixed(2), method: updated.paymentMethod ?? "unknown" }).catch(() => {});
   }
 
-  sendSuccess(res, { ...updated, total: safeNum(updated.total) });
+  const orderStatusBody = { ...updated, total: safeNum(updated.total) };
+  storeIdempotency(req, 200, { success: true, data: orderStatusBody });
+  sendSuccess(res, orderStatusBody);
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -1241,6 +1281,7 @@ router.patch("/orders/:id/status", async (req, res) => {
    Uses WHERE riderId IS NULL to prevent two riders accepting same ride (race condition) */
 router.post("/rides/:id/accept", rideAcceptLimiter, async (req, res) => {
   try {
+  if (checkIdempotency(req, res)) return;
   const paramParsed = idParamSchema.safeParse(req.params);
   if (!paramParsed.success) { sendValidationError(res, "Invalid ride ID"); return; }
   const riderId   = req.riderId!;
@@ -1387,9 +1428,11 @@ router.post("/rides/:id/accept", rideAcceptLimiter, async (req, res) => {
   emitRideDispatchUpdate({ rideId: updated.id, action: "accepted", status: "accepted" });
   emitRideUpdate(updated.id);
   const { tripOtp: _omitOtp, ...rideWithoutOtp } = updated;
-  sendSuccess(res, { ...rideWithoutOtp, fare: safeNum(updated.fare), distance: safeNum(updated.distance) });
+  const rideAcceptBody = { ...rideWithoutOtp, fare: safeNum(updated.fare), distance: safeNum(updated.distance) };
+  storeIdempotency(req, 200, { success: true, data: rideAcceptBody });
+  sendSuccess(res, rideAcceptBody);
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -1457,13 +1500,14 @@ router.post("/rides/:id/verify-otp", otpLimiter, async (req, res) => {
   emitRideUpdate(rideId);
   sendSuccess(res, undefined, "OTP verified. You may now start the trip.");
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
 /* ── PATCH /rider/rides/:id/status — Update ride status (completed/cancelled) ── */
 router.patch("/rides/:id/status", rideStatusLimiter, async (req, res) => {
   try {
+  if (checkIdempotency(req, res)) return;
   const parsed = rideStatusSchema.safeParse(req.body);
   if (!parsed.success) { sendValidationError(res, parsed.error.issues[0]?.message || "Invalid status"); return; }
   const riderId = req.riderId!;
@@ -1649,9 +1693,11 @@ router.patch("/rides/:id/status", rideStatusLimiter, async (req, res) => {
 
   emitRideDispatchUpdate({ rideId: updated.id, action: "status-change", status });
   emitRideUpdate(updated.id);
-  sendSuccess(res, { ...updated, fare: safeNum(updated.fare), distance: safeNum(updated.distance) });
+  const rideStatusBody = { ...updated, fare: safeNum(updated.fare), distance: safeNum(updated.distance) };
+  storeIdempotency(req, 200, { success: true, data: rideStatusBody });
+  sendSuccess(res, rideStatusBody);
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -1788,7 +1834,7 @@ router.post("/rides/:id/counter", rideBidLimiter, async (req, res) => {
   emitRideUpdate(rideId);
   sendSuccess(res, { bid: { ...bid, fare: safeNum(bid!.fare) } });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -1807,7 +1853,7 @@ router.post("/rides/:id/reject-offer", async (req, res) => {
 
   sendSuccess(res, undefined, "Ride dismissed");
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -1842,7 +1888,7 @@ router.get("/history", async (req, res) => {
 
   sendSuccess(res, { history: combined, hasMore, limit: limitParam, offset: offsetParam });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -1970,7 +2016,7 @@ router.get("/reviews", async (req, res) => {
 
   sendSuccess(res, { reviews, avgRating, total, starBreakdown });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2043,7 +2089,7 @@ router.get("/earnings", async (req, res) => {
     dailyGoal: personalDailyGoal,
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2150,7 +2196,7 @@ router.get("/wallet/transactions", async (req, res) => {
     limit,
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2211,10 +2257,11 @@ router.post("/wallet/withdraw", async (req, res) => {
 
     sendSuccess(res, { newBalance: parseFloat(result.toFixed(2)), amount: amt, txId });
   } catch (e: unknown) {
-    sendValidationError(res, (e as Error).message);
+    const msg = e instanceof Error ? e.message : "Withdrawal failed";
+    sendValidationError(res, msg);
   }
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2241,21 +2288,27 @@ router.get("/cod-summary", async (req, res) => {
     remittances:   remittances.map(r => ({ ...r, amount: safeNum(r.amount) })),
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
+});
+
+const remitSchema = z.object({
+  amount: z.coerce.number().positive("Amount must be positive"),
+  paymentMethod: z.string().min(1, "Payment method is required"),
+  accountNumber: z.string().optional(),
+  transactionId: z.string().optional(),
+  note: z.string().max(500).optional(),
 });
 
 /* ── POST /rider/cod/remit — submit COD cash remittance ── */
 router.post("/cod/remit", async (req, res) => {
   try {
     const riderId = req.riderId!;
-    const { amount, paymentMethod, accountNumber, transactionId, note } = req.body;
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      res.status(400).json({ error: "Valid amount is required" }); return;
+    const parsed = remitSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendValidationError(res, parsed.error.issues[0]?.message || "Invalid remittance data"); return;
     }
-    if (!paymentMethod) {
-      res.status(400).json({ error: "Payment method is required" }); return;
-    }
+    const { amount, paymentMethod, accountNumber, transactionId, note } = parsed.data;
 
     const txId = generateId();
     const refParts = [paymentMethod];
@@ -2295,12 +2348,13 @@ router.post("/cod/remit", async (req, res) => {
     });
 
     if ("overLimit" in result) {
-      res.status(400).json({ error: `Remittance amount exceeds available owed balance (${result.overLimit})` }); return;
+      sendError(res, `Remittance amount exceeds available owed balance (${result.overLimit})`, 400); return;
     }
 
-    res.json({ success: true, transactionId: txId, message: "Remittance submitted for admin verification" });
-  } catch (e: any) {
-    res.status(500).json({ error: e.message || "Failed to submit remittance" });
+    sendSuccess(res, { transactionId: txId, message: "Remittance submitted for admin verification" });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Failed to submit remittance";
+    sendError(res, msg, 500);
   }
 });
 
@@ -2314,7 +2368,7 @@ router.get("/notifications", async (req, res) => {
     .limit(30);
   sendSuccess(res, { notifications: notifs, unread: notifs.filter((n: Record<string, unknown>) => !n.isRead).length });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2325,7 +2379,7 @@ router.patch("/notifications/read-all", async (req, res) => {
   await db.update(notificationsTable).set({ isRead: true }).where(eq(notificationsTable.userId, riderId));
   sendSuccess(res);
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2371,7 +2425,7 @@ router.get("/wallet/min-balance", async (req, res) => {
     shortfall: minBalance > 0 ? Math.max(0, minBalance - currentBalance) : 0,
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2426,7 +2480,7 @@ router.post("/wallet/deposit", async (req, res) => {
 
   sendSuccess(res, { txId, amount: amt });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2715,7 +2769,7 @@ router.patch("/location", locationRateLimiter, gpsAntiSpoofMiddleware, async (re
     sendSuccess(res, { updatedAt });
   }
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2952,7 +3006,7 @@ router.post("/location/batch", async (req, res) => {
   }
   sendSuccess(res, batchResponse);
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -2966,7 +3020,7 @@ router.get("/wallet/deposits", async (req, res) => {
     .limit(20);
   sendSuccess(res, { deposits: deposits.map(d => ({ ...d, amount: safeNum(d.amount) })) });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -3068,7 +3122,7 @@ router.post("/rides/:id/ignore", async (req, res) => {
     ignorePenalty: penalty,
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -3096,7 +3150,7 @@ router.get("/ignore-stats", async (req, res) => {
     remaining: Math.max(0, limit - (countRow?.c ?? 0)),
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -3116,7 +3170,7 @@ router.get("/penalty-history", async (req, res) => {
     })),
   });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -3198,7 +3252,7 @@ router.post("/sos", async (req, res) => {
 
   sendSuccess(res, { alertId, sentAt: now.toISOString() });
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -3287,7 +3341,7 @@ router.get("/osrm-route", async (req, res) => {
     if (!res.headersSent) haversineFallback();
   }
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 
@@ -3301,7 +3355,7 @@ const aiChatSchema = z.object({
   history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })).max(20).optional(),
 });
 
-router.post("/ai-chat", verifyUserJwt, async (req: Request, res: Response) => {
+router.post("/ai-chat", async (req: Request, res: Response) => {
   try {
   const parse = aiChatSchema.safeParse(req.body);
   if (!parse.success) { sendError(res, "Invalid request", 400); return; }
@@ -3350,7 +3404,7 @@ router.post("/ai-chat", verifyUserJwt, async (req: Request, res: Response) => {
     sendError(res, "Could not get AI response", 500);
   }
   } catch {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    sendError(res, "Internal server error", 500);
   }
 });
 

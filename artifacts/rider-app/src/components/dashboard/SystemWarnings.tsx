@@ -142,6 +142,21 @@ export function FixedBanners({
   );
 }
 
+interface CancelStats {
+  dailyCancels: number;
+  remaining: number;
+  dailyLimit?: number | null;
+  cancelRate?: number | null;
+  penaltyAmount?: number;
+}
+
+interface IgnoreStats {
+  dailyIgnores: number;
+  remaining: number;
+  dailyLimit?: number | null;
+  penaltyAmount?: number;
+}
+
 interface InlineWarningsProps {
   gpsWarning: string | null;
   onDismissGps: () => void;
@@ -149,8 +164,8 @@ interface InlineWarningsProps {
   riderNotice: string;
   riderNoticeDismissed: boolean;
   onDismissRiderNotice: () => void;
-  cancelStatsData: any;
-  ignoreStatsData: any;
+  cancelStatsData: CancelStats | null | undefined;
+  ignoreStatsData: IgnoreStats | null | undefined;
   currency: string;
   minBalance: number;
   walletBalance: number;
@@ -253,8 +268,8 @@ export function InlineWarnings({
                     <p className="text-[10px] text-amber-600 mt-0.5 font-medium">
                       Limit: {cancelStatsData.dailyLimit}/day · {cancelStatsData.remaining}{" "}
                       remaining
-                      {cancelStatsData.penaltyAmount > 0 &&
-                        ` · ${currency} ${Math.round(cancelStatsData.penaltyAmount)} penalty per excess`}
+                      {(cancelStatsData.penaltyAmount ?? 0) > 0 &&
+                        ` · ${currency} ${Math.round(cancelStatsData.penaltyAmount ?? 0)} penalty per excess`}
                     </p>
                   )}
                 </div>
@@ -305,8 +320,8 @@ export function InlineWarnings({
                     <p className="text-[10px] text-amber-600 mt-0.5 font-medium">
                       Limit: {ignoreStatsData.dailyLimit}/day · {ignoreStatsData.remaining}{" "}
                       remaining
-                      {ignoreStatsData.penaltyAmount > 0 &&
-                        ` · ${currency} ${Math.round(ignoreStatsData.penaltyAmount)} penalty per excess`}
+                      {(ignoreStatsData.penaltyAmount ?? 0) > 0 &&
+                        ` · ${currency} ${Math.round(ignoreStatsData.penaltyAmount ?? 0)} penalty per excess`}
                     </p>
                   )}
                 </div>

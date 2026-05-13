@@ -1,5 +1,7 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { createLogger } from "@/lib/logger";
+const log = createLogger("[App]");
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "./lib/auth";
@@ -133,6 +135,9 @@ function AppRoutes() {
           break;
         }
 
+        default:
+          log.warn({ type: (action as { type: string }).type }, "Unknown offline action type in sync queue — skipping");
+          break;
       }
     });
     syncQueue().catch(() => {});

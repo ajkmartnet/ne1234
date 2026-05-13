@@ -198,14 +198,14 @@ const _circuitBreaker = createCircuitBreaker({ failureThreshold: 3, cooldownMs: 
 const [_riderFetcher, _riderRefresh] = createApiFetcher({
   baseUrl: BASE,
   getToken: () => sessionGet() || null,
-  setToken: (token) => {
-    sessionSet(token);
+  setToken: (token: string | null) => {
+    if (token) sessionSet(token);
     sweepLegacyTokens();
     _tokenRefreshCallbacks.forEach(fn => { try { fn(); } catch {} });
   },
   getRefreshToken: localGet,
   setRefreshToken: localSet,
-  onRefreshFailed: (isTransient) => {
+  onRefreshFailed: (isTransient: boolean) => {
     if (!isTransient) triggerLogout("session_expired");
   },
   refreshEndpoint: `${BASE}/auth/refresh`,
@@ -225,8 +225,49 @@ interface ApiEnvelope<T = unknown> {
    from the OpenAPI spec). RiderOrder / RiderRide have all rider-facing fields
    with monetary values typed as string for precision safety. They are re-exported
    here as `Order` / `Ride` so existing consumers (Home.tsx etc.) need no changes. */
-export interface Order { id: string; status: string; total?: string | number; type?: string; createdAt?: string; [key: string]: unknown; }
-export interface Ride  { id: string; status: string; fare?: string | number;  type?: string; createdAt?: string; [key: string]: unknown; }
+export interface Order {
+  id: string;
+  status: string;
+  total?: string | number | null;
+  type?: string | null;
+  createdAt: string;
+  itemCount?: number | null;
+  item_count?: number | null;
+  distanceKm?: string | number | null;
+  distance_km?: string | number | null;
+  deliveryAddress?: string | null;
+  delivery_address?: string | null;
+  vendorStoreName?: string | null;
+  vendor_store_name?: string | null;
+  vendorLat?: string | number | null;
+  vendorLng?: string | number | null;
+  deliveryLat?: string | number | null;
+  deliveryLng?: string | number | null;
+}
+export interface Ride {
+  id: string;
+  status: string;
+  fare?: string | number | null;
+  type?: string | null;
+  createdAt: string;
+  offeredFare?: number | string | null;
+  bargainNote?: string | null;
+  distance?: string | number | null;
+  pickupAddress?: string | null;
+  dropAddress?: string | null;
+  pickupLat?: string | number | null;
+  pickupLng?: string | number | null;
+  dropLat?: string | number | null;
+  dropLng?: string | number | null;
+  riderDistanceKm?: number | null;
+  riderEtaMin?: number | null;
+  dispatchedRiderId?: string | null;
+  vehicleType?: string | null;
+  isParcel?: boolean | null;
+  isPoolRide?: boolean | null;
+  myBid?: { fare: number | string } | null;
+  paymentMethod?: string | null;
+}
 export interface RiderRequestsResponse { orders: Order[]; rides: Ride[]; _serverTime: string | null; }
 
 export async function apiFetch(path: string, opts: RequestInit = {}, _returnEnvelope = false, _5xxRetries = CB_DEFAULT_RETRIES): Promise<any> {
@@ -238,9 +279,9 @@ export async function apiFetch(path: string, opts: RequestInit = {}, _returnEnve
   if (_5xxRetries === CB_DEFAULT_RETRIES) {
     try {
       _circuitBreaker.check(path);
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof CircuitOpenError) {
-        const retryS = Math.ceil(err.retryAfterMs / 1000);
+        const retryS = Math.ceil((err as CircuitOpenError).retryAfterMs / 1000);
         throw Object.assign(
           new Error(`Service temporarily unavailable. Please try again in ${retryS}s.`),
           { status: 503, transient: true, circuitOpen: true }
@@ -268,7 +309,8 @@ export async function apiFetch(path: string, opts: RequestInit = {}, _returnEnve
     res = await _riderFetcher(path, mergedOpts);
   } catch (err: unknown) {
     if (err instanceof RefreshError) {
-      if (err.isTransient) {
+      const refreshErr = err as RefreshError;
+      if (refreshErr.isTransient) {
         /* Transient refresh failure (network/5xx) — keep tokens, surface recoverable error */
         throw Object.assign(
           new Error("Connection issue. Please check your network and try again."),

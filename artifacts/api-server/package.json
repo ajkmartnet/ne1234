@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "{ [ -d ../../node_modules ] && [ ../../node_modules -nt ../../pnpm-lock.yaml ]; } || (cd ../.. && pnpm install --no-frozen-lockfile); NODE_ENV=development node ./scripts/start-with-restart.mjs",
+    "build": "node ./scripts/build.mjs",
     "start": "node dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

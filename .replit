@@ -93,21 +93,17 @@ args = "CI=1 EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID 
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "[ -d node_modules/.bin ] || pnpm install --no-frozen-lockfile; PORT=5000 pnpm --filter @workspace/api-server run dev"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "flock -x /tmp/ajkmart-install.lock pnpm install --no-frozen-lockfile; PORT=5000 pnpm --filter @workspace/api-server run dev"
+waitForPort = 5000
 
 [[ports]]
 localPort = 3000
 externalPort = 3000
-
-[[ports]]
-localPort = 3002
-externalPort = 3002
 
 [[ports]]
 localPort = 3004
@@ -122,12 +118,12 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 20716
-externalPort = 4200
-
-[[ports]]
 localPort = 3001
 externalPort = 3001
+
+[[ports]]
+localPort = 3002
+externalPort = 3002
 
 # --- ENVIRONMENT CONFIG ---
 [agent]

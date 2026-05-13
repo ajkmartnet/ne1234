@@ -1,147 +1,149 @@
 # AJKMart — Setup Guide
 
-This guide covers how to get the project running on a fresh clone, fork, or Codespace checkout.
+One-command setup that works on **Replit**, **GitHub Codespaces**, **Ubuntu/Debian VPS**, and **local Mac/Linux**.
 
 ---
 
-## Overview
-
-AJKMart uses an **encrypted vault** (`scripts/.env.enc`) to store environment secrets safely in source control. The vault is encrypted with AES-256-GCM using a master password that you obtain from the project operator out-of-band.
-
-If you don't have the master password, the API server boots in **dev mode** using a local SQLite database and placeholder JWT secrets — enough to explore the codebase, but with limited features.
-
----
-
-## Option A — Full Setup (with vault password)
-
-### 1. Install dependencies
+## Quick Start (any environment)
 
 ```bash
-pnpm install
+# 1. Clone
+git clone https://github.com/your-org/ajkmart.git
+cd ajkmart
+
+# 2. Run the universal setup script (installs Node 20, pnpm, and all deps)
+bash scripts/setup.sh
+
+# 3. Set required secrets (see section below), then start:
+PORT=5000 pnpm --filter @workspace/api-server run dev
 ```
 
-### 2. Decrypt the vault
+---
+
+## GitHub Codespaces
+
+Open the repo on GitHub → click **Code → Codespaces → Create codespace**.
+
+The `.devcontainer/devcontainer.json` handles everything automatically:
+- Installs Node.js 20 and pnpm 10
+- Runs `bash scripts/setup.sh`
+- Forwards ports 5000, 3000, 3001, 3002, 20716
+
+Set your secrets in **Codespaces → Manage secrets** before creating the codespace.
+
+---
+
+## Replit
+
+1. Import the repo from GitHub (New Repl → Import from GitHub).
+2. Add required secrets in the **Secrets** panel (padlock icon in sidebar).
+3. Press **Run** — the workflows start automatically.
+
+The `.replit` file is committed in the repo, so all workflows are pre-configured.
+
+---
+
+## Ubuntu / Debian VPS
 
 ```bash
-pnpm --filter @workspace/scripts run decrypt-env
+# Clone and run setup
+git clone https://github.com/your-org/ajkmart.git
+cd ajkmart
+bash scripts/setup.sh
+
+# Copy and fill the environment file
+cp .env.example .env
+nano .env   # fill in DATABASE_URL and JWT secrets
+
+# Start in production mode
+pnpm build
+NODE_ENV=production pnpm start
 ```
 
-You will be prompted for the master password (up to 10 attempts). On success:
-- `.env` is written to the monorepo root with all secrets
-- `VAULT_UNLOCKED=1` is appended to the file
-- `pnpm install` runs automatically
-- Database migrations run automatically
-
-> **Where is the master password?**  
-> The password is never stored anywhere. Obtain it from the project operator (team lead, DevOps contact, etc.) through a secure channel such as a password manager share or encrypted message.
-
-### 3. Start the server
-
-On Replit — click **Run** or start the **Project** workflow.  
-On other environments:
-
-```bash
-pnpm --filter @workspace/api-server run dev
-```
+For process management use `pm2` with the included `ecosystem.config.cjs`.
 
 ---
 
-## Option B — Dev Mode (no vault password)
+## Required Environment Variables
 
-If you don't have the master password, the API server automatically enters dev mode when:
-- `VAULT_UNLOCKED` is **not** set, **and**
-- `NODE_ENV` is **not** `production` or `staging`
+> On **Replit**: add these in the Secrets panel (padlock icon).
+> On **VPS / Codespace**: copy `.env.example` to `.env` and fill in the values.
 
-In dev mode:
-- A local **SQLite** database (`dev.db`) is used instead of PostgreSQL
-- JWT secrets are set to deterministic **placeholder values** (safe for local development only)
-- A `[DEV MODE]` banner is printed in the logs at startup
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | **Yes** | PostgreSQL connection string |
+| `JWT_SECRET` | **Yes** | JWT signing key (min 64 chars) |
+| `ADMIN_JWT_SECRET` | **Yes** | Admin JWT signing key |
+| `ADMIN_ACCESS_TOKEN_SECRET` | **Yes** | Admin access token key |
+| `ADMIN_REFRESH_TOKEN_SECRET` | **Yes** | Admin refresh token key |
+| `ADMIN_CSRF_SECRET` | **Yes** | Admin CSRF key |
+| `VENDOR_JWT_SECRET` | **Yes** | Vendor JWT key |
+| `RIDER_JWT_SECRET` | **Yes** | Rider JWT key |
+| `ENCRYPTION_MASTER_KEY` | **Yes** | PII encryption key (min 16 chars) |
+| `GEMINI_API_KEY` | Optional | AI features |
+| `TWILIO_*` | Optional | SMS OTP |
+| `SENDGRID_API_KEY` | Optional | Email |
+| `FIREBASE_*` | Optional | Push notifications |
+| `REDIS_URL` | Optional | Rate limiting (required in production) |
+| `STORAGE_BUCKET_URL` | Optional | S3-compatible file storage |
 
-**Limitations in dev mode:**
-- No SMS / email / push notification delivery
-- No real payment processing
-- No admin panel seeded data
-- Some PostgreSQL-specific features may not work
-
-To exit dev mode, obtain the vault password and run Option A.
-
----
-
-## One-Time Vault Creation (operators only)
-
-If you need to create or re-create the encrypted vault:
-
-1. Copy `.env.template` to `.env` at the monorepo root
-2. Fill in all real values
-3. Run the encryption script:
-
-```bash
-pnpm --filter @workspace/scripts run encrypt-env
-```
-
-4. Enter a strong master password when prompted
-5. Commit the resulting `scripts/.env.enc` to source control
-6. **Never commit `.env` itself** — it is in `.gitignore`
-7. Distribute the master password to team members through a secure channel
-
----
-
-## Lockout Behaviour
-
-The `decrypt-env` script allows **10 attempts** before locking out:
-
-```
-Attempt 1/10 — Enter master password: ❌ Wrong password
-...
-Attempt 10/10 — Enter master password: ❌ Wrong password
-🔒  Too many failed attempts. Setup locked.
-```
-
-**To reset:** simply restart your terminal and run the script again. There is no persistent lockout — the counter resets on each new process.
-
----
-
-## Replit Secrets vs Vault
-
-On Replit, secrets set in the **Secrets panel** (padlock icon) always take precedence over the vault file. The vault is used to fill gaps — if a secret is already in the Replit Secrets panel, the `.env` value is ignored (`dotenv` uses `override: false`).
-
-**Priority order:**
-1. Replit Secrets panel (highest priority)
-2. `.env` file (written by `decrypt-env`)
-3. Dev-mode placeholder values (lowest priority)
-
-Existing Replit users with all secrets already in the Secrets panel do not need to run the decrypt script.
-
----
-
-## Environment Variables Reference
-
-See `.env.template` at the monorepo root for a complete list of all required and optional environment variables with placeholder comments.
-
-Key required variables:
-
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | JWT signing key (64+ hex chars) |
-| `ADMIN_JWT_SECRET` | Admin JWT signing key |
-| `ENCRYPTION_MASTER_KEY` | AES-256-GCM PII encryption key (min 16 chars) |
-
-Generate strong secrets with:
+Generate secure JWT secrets:
 ```bash
 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
 ---
 
-## Workflows (Replit)
+## Why binaries always work (tsx, vite, expo)
 
-| Workflow | Purpose |
-|---|---|
-| **Setup** | Runs `decrypt-env` to unlock the vault |
-| **Project** | Starts all services (API, Admin, Vendor, Rider, Customer) |
-| **API Server** | API server only (port 5000) |
-| **Admin Panel** | Admin dashboard (port 3000) |
-| **Vendor App** | Vendor portal (port 3001) |
-| **Rider App** | Rider PWA (port 3002) |
-| **Customer App** | Customer super-app (port 20716) |
+The `.npmrc` file includes `public-hoist-pattern[]` entries that force pnpm to
+link key CLI tools (`tsx`, `vite`, `expo`, `tsc`, `drizzle-kit`) into the root
+`node_modules/.bin/`. This means they are always in PATH after `pnpm install`,
+regardless of which workspace package owns them — no manual PATH setup needed.
+
+---
+
+## Monorepo Structure
+
+```
+ajkmart/
+├── artifacts/
+│   ├── api-server/     # Node.js/Express backend (port 5000)
+│   ├── admin/          # React + Vite admin panel (port 3000)
+│   ├── vendor-app/     # React + Vite vendor portal (port 3001)
+│   ├── rider-app/      # React + Vite rider PWA (port 3002)
+│   └── ajkmart/        # Expo customer super-app (port 20716)
+├── lib/                # Shared workspace libraries
+├── scripts/            # Build, setup, and utility scripts
+├── .devcontainer/      # GitHub Codespaces config
+├── .github/workflows/  # GitHub Actions CI
+├── .npmrc              # pnpm hoisting config (do not remove)
+└── pnpm-workspace.yaml # Workspace package declarations
+```
+
+---
+
+## Starting Individual Apps
+
+```bash
+# API Server (required by all frontends)
+PORT=5000 pnpm --filter @workspace/api-server run dev
+
+# Admin Panel
+PORT=3000 BASE_PATH=/admin/ pnpm --filter @workspace/admin run dev
+
+# Vendor App
+PORT=3001 pnpm --filter @workspace/vendor-app run dev
+
+# Rider App
+PORT=3002 pnpm --filter @workspace/rider-app run dev
+
+# Customer App (Expo Web)
+PORT=20716 pnpm --filter @workspace/ajkmart run dev:web
+
+# Type-check everything
+pnpm typecheck
+
+# Production build
+pnpm build
+```
